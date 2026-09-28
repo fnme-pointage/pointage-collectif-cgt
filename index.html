@@ -130,13 +130,14 @@
     <section id="admin-results">
       <div class="card">
         <div class="sectiontitle">
-          <h2>Suivi du mois</h2>
-          <span id="adminMonthStats" class="pill"></span>
+          <h2>Suivi annuel</h2>
+          <div class="smallfield"><label for="annualYear">Année</label><select id="annualYear"></select></div>
         </div>
+        <p id="annualStats" class="muted small"></p>
         <div id="summaryTable"></div>
         <div class="actions">
-          <button id="exportSummary" class="secondary">Exporter le récapitulatif CSV</button>
-          <button id="exportRaw" class="secondary">Exporter le détail CSV</button>
+          <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
+          <button id="exportRaw" class="secondary" disabled>Exporter le détail annuel CSV</button>
         </div>
       </div>
     </section>
@@ -211,6 +212,7 @@
 
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[], submission=null;
   let allProfiles=[], adminEntries=[], adminSubmissions=[], editableAdminCodes=[];
+  let annualYear='', annualEntries=[], annualCodes=[], annualSubmissions=[], annualReady=false, annualRequest=0;
 
   const $ = id => document.getElementById(id);
   const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
@@ -313,8 +315,16 @@
     selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
                     (months.find(m=>m.month_key===curMonth())?.month_key || months[0]?.month_key || '');
     renderMonthSelect();
+    if(profile.is_admin) renderAnnualYears();
     if(selectedMonth) await loadMonthData();
   }
+
+  function renderAnnualYears(){
+    const years=[...new Set(months.map(m=>String(m.month_key).slice(0,4)))].sort().reverse();
+    if(!years.includes(annualYear)) annualYear=years.includes(curMonth().slice(0,4))?curMonth().slice(0,4):(years[0]||'');
+    $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
+  }
+  $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
 
   function renderMonthSelect(){
     $('monthSelect').innerHTML=months.map(m=>`<option value="${esc(m.month_key)}"${m.month_key===selectedMonth?' selected':''}>${esc(monthLabel(m.month_key))}</option>`).join('');
@@ -425,25 +435,79 @@
     ]);
     if(p.error||e.error||s.error){alert((p.error||e.error||s.error).message);return;}
     allProfiles=(p.data||[]); adminEntries=e.data||[]; adminSubmissions=s.data||[];
-    renderSummary(); renderUsers();
+    renderUsers();
+    await loadAnnualData();
   }
 
-  function activePeople(){return allProfiles.filter(p=>p.active);}
-  function renderSummary(){
-    const people=activePeople(), codes=monthCodes.filter(c=>c.active || adminEntries.some(e=>Number(e.code_id)===Number(c.id)));
-    const subSet=new Set(adminSubmissions.map(s=>s.user_id));
-    const validated=people.filter(p=>subSet.has(p.id)).length;
-    $('adminMonthStats').textContent=`${validated}/${people.length} validé(s)`;
+  // Supabase limite les réponses par défaut : récupérer toutes les pages pour l'année.
+  async function fetchAll(makeQuery){
+    const result=[];
+    for(let from=0;;from+=500){
+      const {data,error}=await makeQuery().range(from,from+499);
+      if(error) throw error;
+      result.push(...(data||[]));
+      if(!data || data.length<500) return result;
+    }
+  }
+
+  async function loadAnnualData(){
+    const request=++annualRequest, year=annualYear;
+    annualReady=false;
+    $('exportSummary').disabled=$('exportRaw').disabled=true;
+    $('summaryTable').innerHTML='<div class="muted small">Chargement du suivi annuel…</div>';
+    $('annualStats').textContent='';
+    if(!year) return;
+    const start=`${year}-01`, end=`${Number(year)+1}-01`;
+    try {
+      const [codes,ents,subs]=await Promise.all([
+        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('submissions').select('user_id,month_key').gte('month_key',start).lt('month_key',end).order('month_key').order('user_id'))
+      ]);
+      if(request!==annualRequest) return;
+      annualCodes=codes; annualEntries=ents; annualSubmissions=subs;
+      annualReady=true;
+      renderAnnualSummary();
+      $('exportSummary').disabled=$('exportRaw').disabled=false;
+    } catch(error){
+      if(request!==annualRequest) return;
+      $('summaryTable').innerHTML=`<div class="notice warn">Impossible de charger le suivi annuel : ${esc(error.message)}</div>`;
+    }
+  }
+
+  function annualReport(){
+    const codeById=new Map(annualCodes.map(c=>[Number(c.id),c]));
+    const codeNames=[...new Set(annualCodes.map(c=>c.code))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const people=allProfiles.filter(p=>p.active || annualEntries.some(e=>e.user_id===p.id));
+    const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
+    for(const e of annualEntries){
+      const code=codeById.get(Number(e.code_id))?.code;
+      if(!code) continue;
+      const cents=Math.round(Number(e.hours||0)*100), key=`${e.user_id}\u0000${code}`;
+      amounts.set(key,(amounts.get(key)||0)+cents);
+      codeTotals.set(code,(codeTotals.get(code)||0)+cents);
+    }
+    return {people,codeNames,amounts,codeTotals,codeById};
+  }
+
+  function renderAnnualSummary(){
+    const {people,codeNames,amounts,codeTotals}=annualReport();
+    const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
+    $('annualStats').textContent=`${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
     let html='<div class="tablewrap"><table><thead><tr><th>Collègue</th>';
-    codes.forEach(c=>html+=`<th class="num">${esc(c.code)}</th>`);
-    html+='<th class="num">Total</th><th>État</th></tr></thead><tbody>';
+    codeNames.forEach(code=>html+=`<th class="num">${esc(code)}</th>`);
+    html+='<th class="num">Total</th></tr></thead><tbody>';
     people.forEach(p=>{
-      let total=0; html+=`<tr><td><strong>${esc(p.full_name||p.email)}</strong><br><span class="muted small">${esc(p.email)}</span></td>`;
-      codes.forEach(c=>{const h=adminEntries.filter(e=>e.user_id===p.id&&Number(e.code_id)===Number(c.id)).reduce((a,e)=>a+Number(e.hours||0),0); total+=h; html+=`<td class="num">${h?fmt(h):'—'}</td>`;});
-      html+=`<td class="num"><strong>${fmt(total)}</strong></td><td>${subSet.has(p.id)?'<span class="pill ok">Validé</span>':'<span class="pill warn">À faire</span>'}</td></tr>`;
+      let total=0;
+      html+=`<tr><td><strong>${esc(p.full_name||p.email)}</strong><br><span class="muted small">${esc(p.email)}</span></td>`;
+      codeNames.forEach(code=>{const cents=amounts.get(`${p.id}\u0000${code}`)||0;total+=cents;html+=`<td class="num">${cents?fmt(cents/100):'—'}</td>`;});
+      html+=`<td class="num"><strong>${fmt(total/100)}</strong></td></tr>`;
     });
-    html+='</tbody></table></div>';
-    $('summaryTable').innerHTML=people.length?html:'<div class="muted small">Aucun utilisateur actif.</div>';
+    const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
+    html+='<tr><th>Total par code</th>';
+    codeNames.forEach(code=>html+=`<th class="num">${fmt((codeTotals.get(code)||0)/100)}</th>`);
+    html+=`<th class="num">${fmt(grandTotal/100)}</th></tr></tbody></table></div>`;
+    $('summaryTable').innerHTML=html;
   }
 
   function renderAdminCodes(){
@@ -609,16 +673,29 @@
     const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
   }
   $('exportRaw').onclick=()=>{
+    if(!annualReady) return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures','Validé']];
-    const subSet=new Set(adminSubmissions.map(s=>s.user_id));
-    adminEntries.forEach(e=>{const p=allProfiles.find(x=>x.id===e.user_id);rows.push([selectedMonth,p?.full_name||'',p?.email||'',e.month_codes?.code||'',e.month_codes?.label||'',String(Number(e.hours)).replace('.',','),subSet.has(e.user_id)?'Oui':'Non']);});
-    csvDownload(`pointage-detail-${selectedMonth}.csv`,rows);
+    const subSet=new Set(annualSubmissions.map(s=>`${s.month_key}\u0000${s.user_id}`));
+    const profiles=new Map(allProfiles.map(p=>[p.id,p]));
+    const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
+    annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
+      const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',c?.code||'',c?.label||'',String(Number(e.hours)).replace('.',','),subSet.has(`${e.month_key}\u0000${e.user_id}`)?'Oui':'Non']);
+    });
+    csvDownload(`pointage-detail-${annualYear}.csv`,rows);
   };
   $('exportSummary').onclick=()=>{
-    const codes=monthCodes.filter(c=>c.active || adminEntries.some(e=>Number(e.code_id)===Number(c.id))), people=activePeople(), subSet=new Set(adminSubmissions.map(s=>s.user_id));
-    const rows=[['Mois','Nom','E-mail',...codes.map(c=>c.code),'Total','Validé']];
-    people.forEach(p=>{let total=0;const vals=codes.map(c=>{const h=adminEntries.filter(e=>e.user_id===p.id&&Number(e.code_id)===Number(c.id)).reduce((a,e)=>a+Number(e.hours||0),0);total+=h;return String(h).replace('.',',');});rows.push([selectedMonth,p.full_name||'',p.email||'',...vals,String(total).replace('.',','),subSet.has(p.id)?'Oui':'Non']);});
-    csvDownload(`pointage-recap-${selectedMonth}.csv`,rows);
+    if(!annualReady) return;
+    const {people,codeNames,amounts,codeTotals}=annualReport();
+    const rows=[['Année','Nom','E-mail',...codeNames,'Total']];
+    people.forEach(p=>{
+      let total=0;
+      const vals=codeNames.map(code=>{const cents=amounts.get(`${p.id}\u0000${code}`)||0;total+=cents;return String(cents/100).replace('.',',');});
+      rows.push([annualYear,p.full_name||'',p.email||'',...vals,String(total/100).replace('.',',')]);
+    });
+    const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
+    rows.push([annualYear,'Total par code','',...codeNames.map(code=>String((codeTotals.get(code)||0)/100).replace('.',',')),String(grandTotal/100).replace('.',',')]);
+    csvDownload(`pointage-recap-${annualYear}.csv`,rows);
   };
 
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
