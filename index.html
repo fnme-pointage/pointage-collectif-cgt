@@ -143,7 +143,13 @@
 
     <section id="admin-codes" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Codes disponibles pour ce mois</h2><button id="addAdminCode" class="secondary">+ Code</button></div>
+        <div class="sectiontitle">
+          <h2>Codes disponibles pour ce mois</h2>
+          <div>
+            <button id="loadStandardCodes" class="secondary">Liste standard</button>
+            <button id="addAdminCode" class="secondary">+ Code</button>
+          </div>
+        </div>
         <div id="adminCodes"></div>
         <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
         <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
@@ -215,6 +221,36 @@
   const monthLabel = m => { const [y,mo]=m.split('-').map(Number); return new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(y,mo-1,1)); };
   const msg = (text,type='') => `<div class="notice ${type}">${esc(text)}</div>`;
 
+  const STANDARD_CODES = [
+    {label:'SOCIAL COMMISSION CCAS',code:'S4'},
+    {label:'SOCIAL ADMINISTRATEUR',code:'S6'},
+    {label:'SOCIAL AUTRE',code:'S0'},
+    {label:'HEURE DS',code:'D4'},
+    {label:'REUNION CSE',code:'1A'},
+    {label:'PREPARATION CSE',code:'1B'},
+    {label:'CSEC',code:'1K'},
+    {label:'PREPARATION CSEC',code:'1L'},
+    {label:'COMMISSION FACULTATIVE CSEC',code:'1R'},
+    {label:'REUNION CSSCT C',code:'OE'},
+    {label:'DETACHEMENT SYNDICAL',code:'L4'},
+    {label:'CONVOCATION DIRECTION + PREPARATION CSP',code:'46'},
+    {label:'REUNION CSSCT',code:'OA'},
+    {label:'PREPARATION CSSCT C',code:'OB'},
+    {label:'CSNP',code:'Z7'},
+    {label:'COORDINATEUR NATIONAL OU ADJOINT',code:'81'},
+    {label:'DETACHEMENT SYNDICAL',code:'E4'},
+    {label:'REUNION RPX',code:'RA'},
+    {label:'PREPARATION RPX',code:'RB'},
+    {label:'REUNION CSP',code:'8F'},
+    {label:'PREPARATION CSP',code:'8G'},
+    {label:'HEURE CONF OU FEDE',code:'N4'},
+    {label:'PREPARATION ET REUNION CPS',code:'1G'},
+    {label:'GREVE',code:'52'},
+    {label:'FORMATION OUVRIERE',code:'51'}
+  ];
+
+  const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
+
   function setAuthMode(mode){
     show('loginForm',mode==='login'); show('signupForm',mode==='signup');
     $('loginTab').className=mode==='login'?'':'secondary';
@@ -270,6 +306,8 @@
       const m=curMonth();
       const {error:e}=await sb.from('months').insert({month_key:m,is_open:true});
       if(e){alert(e.message);return;}
+      const {error:ce}=await sb.from('month_codes').insert(standardRows(m));
+      if(ce){alert('Mois créé, mais erreur lors de l’ajout de la liste standard : '+ce.message);}
       return loadMonths();
     }
     selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
@@ -421,6 +459,14 @@
     document.querySelectorAll('[data-aactive]').forEach(el=>el.onchange=e=>editableAdminCodes[+e.target.dataset.aactive].active=e.target.checked);
     document.querySelectorAll('[data-aremove]').forEach(el=>el.onclick=e=>{editableAdminCodes.splice(+e.target.dataset.aremove,1);renderAdminCodes();});
   }
+  $('loadStandardCodes').onclick=()=>{
+    const existing=new Set(editableAdminCodes.map(c=>String(c.code||'').trim().toUpperCase()));
+    const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
+    if(!missing.length){alert('Tous les codes de la liste standard sont déjà présents.');return;}
+    editableAdminCodes.push(...missing.map(c=>({id:null,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
+    renderAdminCodes();
+    alert(`${missing.length} code(s) standard ajouté(s). Clique sur « Enregistrer les codes » pour confirmer.`);
+  };
   $('addAdminCode').onclick=()=>{editableAdminCodes.push({id:null,month_key:selectedMonth,code:'',label:'',active:true});renderAdminCodes();};
   $('saveAdminCodes').onclick=async()=>{
     const clean=editableAdminCodes.map(c=>({...c,code:c.code.trim(),label:c.label.trim()}));
@@ -465,9 +511,14 @@
     if(months.some(x=>x.month_key===m)){alert('Ce mois existe déjà.');return;}
     const {error}=await sb.from('months').insert({month_key:m,is_open:true});
     if(error){alert(error.message);return;}
+    let src=[];
     if($('copyCodes').checked && selectedMonth){
-      const src=monthCodes.filter(c=>c.active).map(c=>({month_key:m,code:c.code,label:c.label,active:true}));
-      if(src.length){const {error:ce}=await sb.from('month_codes').insert(src); if(ce){alert('Mois créé, mais erreur lors de la copie des codes : '+ce.message);}}
+      src=monthCodes.filter(c=>c.active).map(c=>({month_key:m,code:c.code,label:c.label,active:true}));
+    }
+    if(!src.length) src=standardRows(m);
+    if(src.length){
+      const {error:ce}=await sb.from('month_codes').insert(src);
+      if(ce){alert('Mois créé, mais erreur lors de l’ajout des codes : '+ce.message);}
     }
     selectedMonth=m; await loadMonths();
   };
