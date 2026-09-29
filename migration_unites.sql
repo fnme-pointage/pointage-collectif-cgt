@@ -130,7 +130,9 @@ grant insert,update,delete on public.units to authenticated;
 grant select,update on public.profiles to authenticated;
 grant select,insert,update,delete on public.months,public.month_codes,public.entries,public.submissions to authenticated;
 
-create policy units_public_list on public.units for select to anon,authenticated
+create policy units_signup_list on public.units for select to anon
+using (active);
+create policy units_member_list on public.units for select to authenticated
 using (active or (select public.pointage_is_admin()));
 create policy units_admin_insert on public.units for insert to authenticated
 with check ((select public.pointage_is_admin()));
