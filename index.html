@@ -27,6 +27,7 @@
     .login{max-width:470px;margin:8vh auto 0}.login h1{margin-top:0}.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}.notice{border-radius:12px;padding:10px 12px;background:#f2f4f7;font-size:.88rem;margin-bottom:10px}.notice.warn{background:var(--warnbg);color:#7a2e0e}.notice.ok{background:var(--okbg);color:#05603a}
     hr{border:0;border-top:1px solid #eef0f4;margin:14px 0}.checkbox{display:flex;align-items:center;gap:7px}.checkbox input{width:auto}
     .adminnav{display:flex;gap:7px;overflow:auto;padding-bottom:2px;margin-bottom:14px}.adminnav button{white-space:nowrap;background:#eef0f4;color:var(--text)}.adminnav button.active{background:var(--accent);color:#fff}
+    dialog{border:1px solid var(--border);border-radius:16px;padding:22px;width:min(440px,calc(100% - 28px));color:var(--text);box-shadow:0 16px 40px #0003}dialog::backdrop{background:#0008}dialog h2{margin:0 0 12px;font-size:1.1rem}dialog p{white-space:pre-line;line-height:1.5}dialog .actions{justify-content:flex-end}dialog .actions button{flex:0 1 auto;min-width:110px}
     @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.codegrid{grid-template-columns:90px 1fr 42px}.codegrid .activecell{grid-column:1/3}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
   </style>
 </head>
@@ -198,6 +199,19 @@
   </div>
 </div>
 
+<dialog id="confirmDialog" aria-labelledby="confirmTitle">
+  <h2 id="confirmTitle">Confirmation</h2>
+  <p id="confirmMessage"></p>
+  <div id="confirmInputArea" class="hidden">
+    <label for="confirmInput" id="confirmInputLabel"></label>
+    <input id="confirmInput" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="actions">
+    <button id="confirmCancel" type="button" class="secondary">Annuler</button>
+    <button id="confirmAccept" type="button">Confirmer</button>
+  </div>
+</dialog>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -222,6 +236,27 @@
   const curMonth = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
   const monthLabel = m => { const [y,mo]=m.split('-').map(Number); return new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(y,mo-1,1)); };
   const msg = (text,type='') => `<div class="notice ${type}">${esc(text)}</div>`;
+
+  function confirmAction(message,{title='Confirmation',button='Confirmer',expected=''}={}){
+    const dialog=$('confirmDialog'), input=$('confirmInput'), accept=$('confirmAccept');
+    $('confirmTitle').textContent=title;
+    $('confirmMessage').textContent=message;
+    $('confirmInputArea').classList.toggle('hidden',!expected);
+    $('confirmInputLabel').textContent=`Pour confirmer, écris exactement : ${expected}`;
+    input.value='';
+    accept.textContent=button;
+    accept.className=button==='Supprimer'?'danger':'';
+    accept.disabled=!!expected;
+    input.oninput=()=>{accept.disabled=!!expected && input.value!==expected;};
+    $('confirmCancel').onclick=()=>dialog.close('cancel');
+    accept.onclick=()=>dialog.close('confirm');
+    dialog.oncancel=e=>{e.preventDefault();dialog.close('cancel');};
+    return new Promise(resolve=>{
+      dialog.onclose=()=>resolve(dialog.returnValue==='confirm');
+      dialog.showModal();
+      if(expected) input.focus();
+    });
+  }
 
   const STANDARD_CODES = [
     {label:'SOCIAL COMMISSION CCAS',code:'S4'},
@@ -305,19 +340,19 @@
     const {data,error}=await sb.from('months').select('*').order('month_key',{ascending:false});
     if(error){alert(error.message);return;}
     months=data||[];
-    if(!months.length && profile.is_admin){
-      const m=curMonth();
-      const {error:e}=await sb.from('months').insert({month_key:m,is_open:true});
-      if(e){alert(e.message);return;}
-      const {error:ce}=await sb.from('month_codes').insert(standardRows(m));
-      if(ce){alert('Mois créé, mais erreur lors de l’ajout de la liste standard : '+ce.message);}
-      return loadMonths();
-    }
     selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
                     (months.find(m=>m.month_key===curMonth())?.month_key || months[0]?.month_key || '');
     renderMonthSelect();
     if(profile.is_admin) renderAnnualYears();
-    if(selectedMonth) await loadMonthData();
+    if(selectedMonth){await loadMonthData();return;}
+    $('monthState').textContent='Aucun mois';
+    $('adminSelectedMonth').textContent='Aucun mois sélectionné';
+    $('editMonthKey').value='';
+    $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=true;
+    monthCodes=[]; entries=[]; submission=null; editableAdminCodes=[];
+    renderUserEntries(); renderAdminCodes();
+    $('userNotice').innerHTML=msg('Aucun mois disponible. Crée un mois pour commencer.','warn');
+    if(profile.is_admin) await loadAnnualData();
   }
 
   function renderAnnualYears(){
@@ -336,6 +371,7 @@
 
   async function loadMonthData(){
     const mrec=currentMonthRec();
+    $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=false;
     $('monthState').textContent=mrec?.is_open?'Mois ouvert':'Mois fermé';
     $('monthState').className='pill '+(mrec?.is_open?'ok':'danger');
     $('adminSelectedMonth').textContent=selectedMonth?monthLabel(selectedMonth):'';
@@ -413,7 +449,7 @@
 
   $('submitMonth').onclick=async()=>{
     if(!(await saveEntries(false))) return;
-    if(!confirm('Valider ce mois ? Tu pourras le rouvrir tant que l’administrateur n’a pas fermé le mois.')) return;
+    if(!await confirmAction('Valider ce mois ? Tu pourras le rouvrir tant que l’administrateur n’a pas fermé le mois.')) return;
     const {error}=await sb.from('submissions').insert({user_id:session.user.id,month_key:selectedMonth});
     if(error){alert(error.message);return;} await loadMonthData();
   };
@@ -457,7 +493,7 @@
     $('exportSummary').disabled=$('exportRaw').disabled=true;
     $('summaryTable').innerHTML='<div class="muted small">Chargement du suivi annuel…</div>';
     $('annualStats').textContent='';
-    if(!year) return;
+    if(!year){$('summaryTable').innerHTML='<div class="muted small">Aucune année disponible.</div>';return;}
     const start=`${year}-01`, end=`${Number(year)+1}-01`;
     try {
       const [codes,ents,subs]=await Promise.all([
@@ -564,7 +600,7 @@
   $('toggleMonthState').onclick=async()=>{
     const rec=currentMonthRec(), next=!rec.is_open;
     const warning=next?'Rouvrir ce mois ? Les utilisateurs pourront à nouveau modifier leur pointage.':'Fermer ce mois ? Les utilisateurs ne pourront plus modifier leur pointage.';
-    if(!confirm(warning)) return;
+    if(!await confirmAction(warning)) return;
     const {error}=await sb.from('months').update({is_open:next}).eq('month_key',selectedMonth);
     if(error){alert(error.message);return;}
     await loadMonths();
@@ -615,7 +651,7 @@
       text += `\n\nLes ${entryCount} saisie(s) et ${validationCount} validation(s) rattachées à ce mois seront conservées.`;
     }
 
-    if(!confirm(text)) return;
+    if(!await confirmAction(text)) return;
 
     const {error}=await sb.from('months').update({month_key:newKey}).eq('month_key',oldKey);
 
@@ -648,15 +684,7 @@
       warning += `\n\nCe mois ne contient actuellement aucun pointage.`;
     }
 
-    if(!confirm(warning)) return;
-
-    if(entryCount || validationCount){
-      const typed=prompt(`Pour confirmer la suppression, écris exactement : ${key}`);
-      if(typed!==key){
-        $('monthAdminMessage').innerHTML=msg('Suppression annulée : confirmation incorrecte.','warn');
-        return;
-      }
-    }
+    if(!await confirmAction(warning,{title:'Supprimer le mois',button:'Supprimer',expected:(entryCount||validationCount)?key:''})) return;
 
     const {error}=await sb.from('months').delete().eq('month_key',key);
     if(error){
@@ -665,8 +693,8 @@
     }
 
     selectedMonth='';
-    alert('Mois supprimé.');
     await loadMonths();
+    $('monthAdminMessage').innerHTML=msg('Mois supprimé.','ok');
   };
 
   function csvDownload(filename, rows){

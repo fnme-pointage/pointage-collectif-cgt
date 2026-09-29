@@ -1,4 +1,4 @@
-const CACHE='pointage-collectif-v6';
+const CACHE='pointage-collectif-v7';
 const STATIC_ASSETS=['./manifest.json'];
 
 self.addEventListener('install', event => {
