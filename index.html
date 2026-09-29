@@ -22,13 +22,13 @@
     .entry{display:grid;grid-template-columns:1fr 130px 44px;gap:8px;align-items:end;padding:8px 0;border-bottom:1px solid #eef0f4}.entry:last-child{border-bottom:0}
     .icon{height:42px;padding:0;background:var(--dangerbg);color:var(--danger);font-size:1.1rem}
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions>*{flex:1;min-width:170px}
-    .codegrid{display:grid;grid-template-columns:130px 1fr 92px 44px;gap:8px;align-items:center;margin-bottom:8px}
+    .codestable{min-width:950px}.codestable td:nth-child(3){white-space:normal;min-width:300px}.codestable td:nth-child(1){min-width:230px}.codestable td:nth-child(2){min-width:100px}.codestable .icon{width:38px}
     .tablewrap{overflow:auto;border:1px solid #eef0f4;border-radius:12px} table{border-collapse:collapse;width:100%;min-width:680px;background:#fff} th,td{padding:9px 10px;border-bottom:1px solid #eef0f4;text-align:left;white-space:nowrap;font-size:.88rem}th{background:#f8f9fb;position:sticky;top:0;z-index:1}td.num,th.num{text-align:right}
     .login{max-width:470px;margin:8vh auto 0}.login h1{margin-top:0}.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}.notice{border-radius:12px;padding:10px 12px;background:#f2f4f7;font-size:.88rem;margin-bottom:10px}.notice.warn{background:var(--warnbg);color:#7a2e0e}.notice.ok{background:var(--okbg);color:#05603a}
     hr{border:0;border-top:1px solid #eef0f4;margin:14px 0}.checkbox{display:flex;align-items:center;gap:7px}.checkbox input{width:auto}
     .adminnav{display:flex;gap:7px;overflow:auto;padding-bottom:2px;margin-bottom:14px}.adminnav button{white-space:nowrap;background:#eef0f4;color:var(--text)}.adminnav button.active{background:var(--accent);color:#fff}
     dialog{border:1px solid var(--border);border-radius:16px;padding:22px;width:min(440px,calc(100% - 28px));color:var(--text);box-shadow:0 16px 40px #0003}dialog::backdrop{background:#0008}dialog h2{margin:0 0 12px;font-size:1.1rem}dialog p{white-space:pre-line;line-height:1.5}dialog .actions{justify-content:flex-end}dialog .actions button{flex:0 1 auto;min-width:110px}
-    @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.codegrid{grid-template-columns:90px 1fr 42px}.codegrid .activecell{grid-column:1/3}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
+    @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
   </style>
 </head>
 <body>
@@ -179,42 +179,9 @@
             <button id="addAdminCode" class="secondary">+ Code</button>
           </div>
         </div>
-        <div id="adminCodes"></div>
+        <div id="adminCodes" class="tablewrap"></div>
         <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
         <div id="codeAdminMessage" style="margin-top:10px"></div>
-        <div class="tablewrap" style="margin-top:14px">
-          <table style="min-width:980px">
-            <thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th></tr></thead>
-            <tbody>
-              <tr><td>SOCIAL COMMISSION CCAS</td><td><strong>S4</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
-              <tr><td>SOCIAL ADMINISTRATEUR</td><td><strong>S6</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
-              <tr><td>SOCIAL AUTRE</td><td><strong>S0</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
-              <tr><td>HEURE DS</td><td><strong>D4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>DETACHEMENT SYNDICAL</td><td><strong>L4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA + CRISTALISATION + DAP</td></tr>
-              <tr><td>DETACHEMENT SYNDICAL</td><td><strong>E4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA</td></tr>
-              <tr><td>HEURE CONF OU FEDE</td><td><strong>N4</strong></td><td style="white-space:normal;min-width:430px">EN FONCTION DE LA NOTIF CONF OU FD</td></tr>
-              <tr><td>COORDINATEUR NATIONAL OU ADJOINT</td><td><strong>81</strong></td><td style="white-space:normal;min-width:430px">EN FONCTION DE LA DOTATION DPNT</td></tr>
-              <tr><td>REUNION CSE</td><td><strong>1A</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION CSE</td><td><strong>1B</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>REUNION CSSCT</td><td><strong>OA</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION ET REUNION CPS</td><td><strong>1G</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>REUNION RPX</td><td><strong>RA</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION RPX</td><td><strong>RB</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>REUNION CSEC</td><td><strong>1K</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION CSEC</td><td><strong>1L</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>COMMISSION FACULTATIVE CSEC</td><td><strong>1R</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>REUNION CSSCT C</td><td><strong>OE</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION CSSCT C</td><td><strong>OB</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>CONVOCATION DIRECTION REUNION DIVERS</td><td><strong>46</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>REUNION CSP</td><td><strong>8F</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>PREPARATION CSP</td><td><strong>8G</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>CSNP</td><td><strong>Z7</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
-              <tr><td>GREVE</td><td><strong>52</strong></td><td style="white-space:normal;min-width:430px">AUTANT QUE BESOIN</td></tr>
-              <tr><td>FORMATION OUVRIERE</td><td><strong>51</strong></td><td style="white-space:normal;min-width:430px">CODE DU TRAVAIL</td></tr>
-              <tr><td>DEPLACEMENT SYNDICAL</td><td><strong>DP</strong></td><td style="white-space:normal;min-width:430px">COLLECTE CGT POUR INFORMATION / NOTE DECOMPTE DES H DPNT + ACCORDS CSE / DROIT SYNDICAL</td></tr>
-            </tbody>
-          </table>
-        </div>
       <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
       </div>
     </section>
@@ -363,6 +330,11 @@
   ];
 
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
+  const standardOrder = new Map(STANDARD_CODES.map((c,i)=>[c.code,i]));
+  const referenceFor = code => STANDARD_CODES.find(c=>c.code===String(code||'').trim().toUpperCase())?.document||'—';
+  function orderAdminCodes(){
+    editableAdminCodes.sort((a,b)=>(standardOrder.get(String(a.code).toUpperCase())??Infinity)-(standardOrder.get(String(b.code).toUpperCase())??Infinity));
+  }
 
   function setAuthMode(mode){
     show('loginForm',mode==='login'); show('signupForm',mode==='signup');
@@ -552,6 +524,7 @@
     renderUserEntries();
     if(profile.is_admin){
       editableAdminCodes=monthCodes.map(x=>({...x}));
+      orderAdminCodes();
       renderAdminCodes();
       await loadAdminData();
     }
@@ -719,14 +692,18 @@
   }
 
   function renderAdminCodes(){
-    $('adminCodes').innerHTML=editableAdminCodes.length?editableAdminCodes.map((c,i)=>`
-      <div class="codegrid">
-        <input data-acode="${i}" value="${esc(c.code)}" placeholder="Code">
-        <input data-alabel="${i}" value="${esc(c.label)}" placeholder="Libellé">
-        <label class="checkbox activecell"><input data-aactive="${i}" type="checkbox" ${c.active?'checked':''}> Actif</label>
-        <button class="icon" data-aremove="${i}" ${c.id?'disabled title="Désactive le code au lieu de le supprimer"':''}>×</button>
-      </div>`).join(''):'<div class="muted small">Aucun code pour ce mois.</div>';
-    document.querySelectorAll('[data-acode]').forEach(el=>el.oninput=e=>editableAdminCodes[+e.target.dataset.acode].code=e.target.value);
+    $('adminCodes').innerHTML=`<table class="codestable"><thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th><th>Actif</th><th></th></tr></thead><tbody>${editableAdminCodes.length?editableAdminCodes.map((c,i)=>`
+      <tr>
+        <td><input data-alabel="${i}" aria-label="Libellé" value="${esc(c.label)}" placeholder="Libellé"></td>
+        <td><input data-acode="${i}" aria-label="Code" value="${esc(c.code)}" placeholder="Code"></td>
+        <td data-areference="${i}">${esc(referenceFor(c.code))}</td>
+        <td><label class="checkbox"><input data-aactive="${i}" type="checkbox" ${c.active?'checked':''}> Actif</label></td>
+        <td><button class="icon" aria-label="Retirer le code" data-aremove="${i}" ${c.id?'disabled title="Désactive le code au lieu de le supprimer"':''}>×</button></td>
+      </tr>`).join(''):'<tr><td colspan="5" class="muted small">Aucun code pour ce mois.</td></tr>'}</tbody></table>`;
+    document.querySelectorAll('[data-acode]').forEach(el=>el.oninput=e=>{
+      editableAdminCodes[+e.target.dataset.acode].code=e.target.value;
+      document.querySelector(`[data-areference="${e.target.dataset.acode}"]`).textContent=referenceFor(e.target.value);
+    });
     document.querySelectorAll('[data-alabel]').forEach(el=>el.oninput=e=>editableAdminCodes[+e.target.dataset.alabel].label=e.target.value);
     document.querySelectorAll('[data-aactive]').forEach(el=>el.onchange=e=>editableAdminCodes[+e.target.dataset.aactive].active=e.target.checked);
     document.querySelectorAll('[data-aremove]').forEach(el=>el.onclick=e=>{editableAdminCodes.splice(+e.target.dataset.aremove,1);renderAdminCodes();});
@@ -744,6 +721,7 @@
     const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
     if(!missing.length && !updated){$('codeAdminMessage').innerHTML=msg('Tous les codes de la liste standard sont déjà présents.','ok');return;}
     editableAdminCodes.push(...missing.map(c=>({id:null,unit_id:selectedUnit,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
+    orderAdminCodes();
     renderAdminCodes();
     $('codeAdminMessage').innerHTML=msg(`${missing.length} code(s) ajouté(s), ${updated} code(s) modifié(s). Clique sur « Enregistrer les codes » pour confirmer.`,'ok');
   };
