@@ -182,7 +182,15 @@
         <div id="adminCodes"></div>
         <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
         <div id="codeAdminMessage" style="margin-top:10px"></div>
-        <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
+        <div class="tablewrap" style="margin-top:14px">
+        <table style="min-width:980px">
+          <thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th></tr></thead>
+          <tbody>
+            ${STANDARD_CODES.map(c=>`<tr><td>${esc(c.label)}</td><td><strong>${esc(c.code)}</strong></td><td style="white-space:normal;min-width:430px">${esc(c.document)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
       </div>
     </section>
 
@@ -301,32 +309,32 @@
   }
 
   const STANDARD_CODES = [
-    {label:'SOCIAL COMMISSION CCAS',code:'S4'},
-    {label:'SOCIAL ADMINISTRATEUR',code:'S6'},
-    {label:'SOCIAL AUTRE',code:'S0'},
-    {label:'HEURE DS',code:'D4'},
-    {label:'REUNION CSE',code:'1A'},
-    {label:'PREPARATION CSE',code:'1B'},
-    {label:'CSEC',code:'1K'},
-    {label:'PREPARATION CSEC',code:'1L'},
-    {label:'COMMISSION FACULTATIVE CSEC',code:'1R'},
-    {label:'REUNION CSSCT C',code:'OE'},
-    {label:'DETACHEMENT SYNDICAL',code:'L4'},
-    {label:'CONVOCATION DIRECTION + PREPARATION CSP',code:'46'},
-    {label:'REUNION CSSCT',code:'OA'},
-    {label:'PREPARATION CSSCT C',code:'OB'},
-    {label:'CSNP',code:'Z7'},
-    {label:'COORDINATEUR NATIONAL OU ADJOINT',code:'81'},
-    {label:'DETACHEMENT SYNDICAL',code:'E4'},
-    {label:'REUNION RPX',code:'RA'},
-    {label:'PREPARATION RPX',code:'RB'},
-    {label:'REUNION CSP',code:'8F'},
-    {label:'PREPARATION CSP',code:'8G'},
-    {label:'HEURE CONF OU FEDE',code:'N4'},
-    {label:'PREPARATION ET REUNION CPS',code:'1G'},
-    {label:'GREVE',code:'52'},
-    {label:'FORMATION OUVRIERE',code:'51'},
-    {label:'DÉPLACEMENTS',code:'DP'}
+    {label:'SOCIAL COMMISSION CCAS',code:'S4',document:'HEURE ACCORD MOYEN BENEVOLE'},
+    {label:'SOCIAL ADMINISTRATEUR',code:'S6',document:'HEURE ACCORD MOYEN BENEVOLE'},
+    {label:'SOCIAL AUTRE',code:'S0',document:'HEURE ACCORD MOYEN BENEVOLE'},
+    {label:'HEURE DS',code:'D4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF + NOTE DECOMPTE DES H DPNT'},
+    {label:'DETACHEMENT SYNDICAL',code:'L4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA + CRISTALISATION + DAP'},
+    {label:'DETACHEMENT SYNDICAL',code:'E4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA'},
+    {label:'HEURE CONF OU FEDE',code:'N4',document:'EN FONCTION DE LA NOTIF CONF OU FD'},
+    {label:'COORDINATEUR NATIONAL OU ADJOINT',code:'81',document:'EN FONCTION DE LA DOTATION DPNT'},
+    {label:'REUNION CSE',code:'1A',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION CSE',code:'1B',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'REUNION CSSCT',code:'OA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION ET REUNION CPS',code:'1G',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'REUNION RPX',code:'RA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION RPX',code:'RB',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
+    {label:'REUNION CSEC',code:'1K',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION CSEC',code:'1L',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
+    {label:'COMMISSION FACULTATIVE CSEC',code:'1R',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
+    {label:'REUNION CSSCT C',code:'OE',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION CSSCT C',code:'OB',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
+    {label:'CONVOCATION DIRECTION REUNION DIVERS',code:'46',document:'NOTE DECOMPTE DES H DPNT'},
+    {label:'REUNION CSP',code:'8F',document:'NOTE DECOMPTE DES H DPNT'},
+    {label:'PREPARATION CSP',code:'8G',document:'NOTE DECOMPTE DES H DPNT'},
+    {label:'CSNP',code:'Z7',document:'NOTE DECOMPTE DES H DPNT'},
+    {label:'GREVE',code:'52',document:'AUTANT QUE BESOIN'},
+    {label:'FORMATION OUVRIERE',code:'51',document:'CODE DU TRAVAIL'},
+    {label:'DEPLACEMENT SYNDICAL',code:'DP',document:'COLLECTE CGT POUR INFORMATION / NOTE DECOMPTE DES H DPNT + ACCORDS CSE / DROIT SYNDICAL'}
   ];
 
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
