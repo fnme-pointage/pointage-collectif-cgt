@@ -54,6 +54,12 @@
       <div style="height:9px"></div>
       <label>Mot de passe</label><input id="loginPassword" type="password" autocomplete="current-password">
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
+      <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
+    </div>
+    <div id="forgotForm" class="hidden">
+      <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
+      <div class="actions"><button id="sendRecovery" type="button">Recevoir un lien de réinitialisation</button></div>
+      <div class="actions"><button id="backToLogin" class="secondary" type="button">Retour à la connexion</button></div>
     </div>
     <div id="signupForm" class="hidden">
       <label>Nom et prénom</label><input id="signupName" type="text" autocomplete="name">
@@ -66,6 +72,21 @@
       <div class="actions"><button id="signupBtn">Créer mon compte</button></div>
       <p class="muted small">Après inscription, le responsable doit activer le compte avant la première utilisation.</p>
     </div>
+  </div>
+</div>
+
+<div id="recoveryView" class="app hidden">
+  <div class="card login">
+    <h1>Nouveau mot de passe</h1>
+    <div id="recoveryMsg"></div>
+    <div id="recoveryForm">
+      <label for="newPassword">Nouveau mot de passe</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password">
+      <div style="height:9px"></div>
+      <label for="confirmPassword">Confirmer le mot de passe</label><input id="confirmPassword" type="password" minlength="8" autocomplete="new-password">
+      <div class="actions"><button id="saveNewPassword" type="button">Enregistrer le mot de passe</button></div>
+    </div>
+    <div class="actions"><button id="recoveryLogin" class="secondary hidden" type="button">Accéder à l’application</button></div>
+    <div class="actions"><button id="recoveryBack" class="secondary" type="button">Retour à la connexion</button></div>
   </div>
 </div>
 
@@ -83,7 +104,7 @@
     <h1>Pointage collectif</h1>
     <div class="userbox">
       <strong id="userName"></strong><br>
-      <span id="userRole" class="muted"></span> · <a href="#" id="logoutLink">Déconnexion</a>
+      <span id="userRole" class="muted"></span> · <a href="#" id="changePasswordLink">Changer mon mot de passe</a> · <a href="#" id="logoutLink">Déconnexion</a>
     </div>
   </div>
 
@@ -240,6 +261,7 @@
     document.getElementById('configMissing').classList.remove('hidden');
     return;
   }
+  let recovering=new URLSearchParams(location.hash.slice(1)).get('type')==='recovery' || new URLSearchParams(location.search).get('type')==='recovery';
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[], submission=null;
@@ -310,12 +332,26 @@
 
   function setAuthMode(mode){
     show('loginForm',mode==='login'); show('signupForm',mode==='signup');
+    show('forgotForm',false);
     $('loginTab').className=mode==='login'?'':'secondary';
     $('signupTab').className=mode==='signup'?'':'secondary';
     $('authMsg').innerHTML='';
   }
   $('loginTab').onclick=()=>setAuthMode('login');
   $('signupTab').onclick=()=>setAuthMode('signup');
+  $('forgotPassword').onclick=()=>{
+    $('forgotEmail').value=$('loginEmail').value.trim();
+    show('loginForm',false); show('forgotForm',true); $('authMsg').innerHTML='';
+  };
+  $('backToLogin').onclick=()=>setAuthMode('login');
+  $('sendRecovery').onclick=async()=>{
+    const email=$('forgotEmail').value.trim();
+    if(!email || !$('forgotEmail').checkValidity()){$('authMsg').innerHTML=msg('Indique une adresse e-mail valide.','warn');return;}
+    $('sendRecovery').disabled=true;
+    const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+    $('sendRecovery').disabled=false;
+    $('authMsg').innerHTML=error?msg(error.message,'warn'):msg('Si ce compte existe, un lien de réinitialisation a été envoyé. Consulte ta boîte mail.','ok');
+  };
   async function loadUnits(){
     const {data,error}=await sb.from('units').select('id,name').eq('active',true).order('name');
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
@@ -341,12 +377,29 @@
 
   async function logout(){await sb.auth.signOut();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
+  $('changePasswordLink').onclick=async e=>{
+    e.preventDefault();
+    $('newPassword').value=''; $('confirmPassword').value='';
+    $('recoveryMsg').innerHTML='';
+    show('recoveryForm',true); show('recoveryLogin',false);
+    recovering=true; await route();
+  };
 
-  sb.auth.onAuthStateChange(async(_event,newSession)=>{session=newSession; await route();});
+  sb.auth.onAuthStateChange(async(event,newSession)=>{
+    session=newSession;
+    if(event==='PASSWORD_RECOVERY') recovering=true;
+    await route();
+  });
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
   async function route(){
-    show('authView',!session); show('pendingView',false); show('mainView',false);
+    show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
+    if(recovering){
+      $('saveNewPassword').disabled=!session;
+      if(!session) $('recoveryMsg').innerHTML=msg('Ce lien est expiré ou invalide. Demande un nouveau lien depuis la connexion.','warn');
+      else if($('recoveryForm').classList.contains('hidden')===false) $('recoveryMsg').innerHTML='';
+      return;
+    }
     if(!session) return;
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
@@ -372,6 +425,28 @@
     show('userArea',selectedUnit===profile.unit_id);
     await loadMonths();
   }
+
+  $('saveNewPassword').onclick=async()=>{
+    const password=$('newPassword').value;
+    if(!session){$('recoveryMsg').innerHTML=msg('Ce lien est expiré ou invalide. Demande un nouveau lien depuis la connexion.','warn');return;}
+    if(password.length<8){$('recoveryMsg').innerHTML=msg('Le mot de passe doit contenir au moins 8 caractères.','warn');return;}
+    if(password!==$('confirmPassword').value){$('recoveryMsg').innerHTML=msg('Les deux mots de passe sont différents.','warn');return;}
+    $('saveNewPassword').disabled=true;
+    const {error}=await sb.auth.updateUser({password});
+    $('saveNewPassword').disabled=false;
+    if(error){$('recoveryMsg').innerHTML=msg(error.message,'warn');return;}
+    $('newPassword').value=''; $('confirmPassword').value='';
+    show('recoveryForm',false);show('recoveryLogin',true);
+    $('recoveryMsg').innerHTML=msg('Mot de passe modifié. Tu peux accéder à l’application.','ok');
+    history.replaceState(null,'',location.pathname+location.search);
+  };
+  $('recoveryLogin').onclick=async()=>{recovering=false;await route();};
+  $('recoveryBack').onclick=async()=>{
+    history.replaceState(null,'',location.pathname);
+    recovering=false;
+    await sb.auth.signOut();
+    await route();
+  };
 
   function renderAdminUnits(){
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
