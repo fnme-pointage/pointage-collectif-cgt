@@ -154,6 +154,7 @@
         </div>
         <div id="adminCodes"></div>
         <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
+        <div id="codeAdminMessage" style="margin-top:10px"></div>
         <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
       </div>
     </section>
@@ -284,7 +285,7 @@
     {label:'PREPARATION ET REUNION CPS',code:'1G'},
     {label:'GREVE',code:'52'},
     {label:'FORMATION OUVRIERE',code:'51'},
-    {label:'Déplacements',code:'DEP'}
+    {label:'DÉPLACEMENTS',code:'DP'}
   ];
 
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
@@ -561,12 +562,20 @@
     document.querySelectorAll('[data-aremove]').forEach(el=>el.onclick=e=>{editableAdminCodes.splice(+e.target.dataset.aremove,1);renderAdminCodes();});
   }
   $('loadStandardCodes').onclick=()=>{
+    let updated=0;
+    const currentDP=editableAdminCodes.find(c=>String(c.code||'').trim().toUpperCase()==='DP');
+    if(currentDP){
+      if(currentDP.label!=='DÉPLACEMENTS'){currentDP.label='DÉPLACEMENTS';updated++;}
+    } else {
+      const formerDEP=editableAdminCodes.find(c=>String(c.code||'').trim().toUpperCase()==='DEP');
+      if(formerDEP){formerDEP.code='DP';formerDEP.label='DÉPLACEMENTS';updated++;}
+    }
     const existing=new Set(editableAdminCodes.map(c=>String(c.code||'').trim().toUpperCase()));
     const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
-    if(!missing.length){alert('Tous les codes de la liste standard sont déjà présents.');return;}
+    if(!missing.length && !updated){$('codeAdminMessage').innerHTML=msg('Tous les codes de la liste standard sont déjà présents.','ok');return;}
     editableAdminCodes.push(...missing.map(c=>({id:null,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
     renderAdminCodes();
-    alert(`${missing.length} code(s) standard ajouté(s). Clique sur « Enregistrer les codes » pour confirmer.`);
+    $('codeAdminMessage').innerHTML=msg(`${missing.length} code(s) ajouté(s), ${updated} code(s) modifié(s). Clique sur « Enregistrer les codes » pour confirmer.`,'ok');
   };
   $('addAdminCode').onclick=()=>{editableAdminCodes.push({id:null,month_key:selectedMonth,code:'',label:'',active:true});renderAdminCodes();};
   $('saveAdminCodes').onclick=async()=>{
@@ -582,7 +591,8 @@
         if(error){alert(error.message);return;}
       }
     }
-    alert('Codes enregistrés.'); await loadMonthData();
+    await loadMonthData();
+    $('codeAdminMessage').innerHTML=msg('Codes enregistrés.','ok');
   };
 
   function renderUsers(){
