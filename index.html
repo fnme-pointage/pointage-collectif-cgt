@@ -61,6 +61,8 @@
       <label>Adresse e-mail</label><input id="signupEmail" type="email" autocomplete="email">
       <div style="height:9px"></div>
       <label>Mot de passe</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password">
+      <div style="height:9px"></div>
+      <label for="signupUnit">Unité</label><select id="signupUnit" required></select>
       <div class="actions"><button id="signupBtn">Créer mon compte</button></div>
       <p class="muted small">Après inscription, le responsable doit activer le compte avant la première utilisation.</p>
     </div>
@@ -87,6 +89,9 @@
 
   <div class="card">
     <div class="row">
+      <div id="adminUnitField" class="monthfield hidden">
+        <label for="adminUnit">Unité affichée</label><select id="adminUnit"></select>
+      </div>
       <div class="monthfield">
         <label>Mois</label>
         <select id="monthSelect"></select>
@@ -126,6 +131,7 @@
       <button data-admin-tab="codes">Codes du mois</button>
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="months">Mois</button>
+      <button data-admin-tab="units">Unités</button>
     </div>
 
     <section id="admin-results">
@@ -197,6 +203,17 @@
         <div id="monthAdminMessage" style="margin-top:10px"></div>
       </div>
     </section>
+    <section id="admin-units" class="hidden">
+      <div class="card">
+        <div class="sectiontitle"><h2>Unités</h2></div>
+        <div id="unitsList"></div>
+        <div class="row">
+          <div class="grow"><label for="newUnitName">Nouvelle unité</label><input id="newUnitName" maxlength="100" placeholder="Ex. UFPI"></div>
+          <button id="createUnit">Créer l’unité</button>
+        </div>
+        <div id="unitMessage" style="margin-top:10px"></div>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -228,6 +245,7 @@
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[], submission=null;
   let allProfiles=[], adminEntries=[], adminSubmissions=[], editableAdminCodes=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualSubmissions=[], annualReady=false, annualRequest=0;
+  let units=[], selectedUnit='';
 
   const $ = id => document.getElementById(id);
   const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
@@ -298,6 +316,14 @@
   }
   $('loginTab').onclick=()=>setAuthMode('login');
   $('signupTab').onclick=()=>setAuthMode('signup');
+  async function loadUnits(){
+    const {data,error}=await sb.from('units').select('id,name').eq('active',true).order('name');
+    if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
+    units=data||[];
+    $('signupUnit').innerHTML='<option value="">Choisir une unité</option>'+units.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+    return true;
+  }
+  loadUnits();
 
   $('loginBtn').onclick=async()=>{
     $('authMsg').innerHTML='';
@@ -306,9 +332,9 @@
   };
   $('signupBtn').onclick=async()=>{
     $('authMsg').innerHTML='';
-    const name=$('signupName').value.trim(), email=$('signupEmail').value.trim(), password=$('signupPassword').value;
-    if(!name||!email||password.length<8){$('authMsg').innerHTML=msg('Renseigne le nom, l’e-mail et un mot de passe de 8 caractères minimum.','warn');return;}
-    const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:name}}});
+    const name=$('signupName').value.trim(), email=$('signupEmail').value.trim(), password=$('signupPassword').value, unitId=$('signupUnit').value;
+    if(!name||!email||password.length<8||!unitId||!units.some(u=>u.id===unitId)){$('authMsg').innerHTML=msg('Renseigne le nom, l’e-mail, l’unité et un mot de passe de 8 caractères minimum.','warn');return;}
+    const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:name,unit_id:unitId}}});
     if(error){$('authMsg').innerHTML=msg(error.message,'warn');return;}
     $('authMsg').innerHTML=msg('Compte créé. Si la confirmation e-mail est activée, valide le message reçu, puis connecte-toi. Ton compte devra ensuite être activé par l’administrateur.','ok');
   };
@@ -325,6 +351,7 @@
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
+    if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
     if(!profile.active && !profile.is_admin){
       show('authView',false);show('pendingView',true);
       $('pendingIdentity').textContent=`${profile.full_name||profile.email} — ${profile.email}`;
@@ -334,11 +361,35 @@
     $('userName').textContent=profile.full_name||profile.email;
     $('userRole').textContent=profile.is_admin?'Administrateur':'Utilisateur';
     show('adminArea',profile.is_admin);
+    show('adminUnitField',profile.is_admin);
+    if(profile.is_admin){
+      const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
+      if(ue){alert(ue.message);return;}
+      units=allUnits||[];
+      if(!units.some(u=>u.id===selectedUnit)) selectedUnit=profile.unit_id;
+      renderAdminUnits();
+    } else selectedUnit=profile.unit_id;
+    show('userArea',selectedUnit===profile.unit_id);
     await loadMonths();
   }
 
+  function renderAdminUnits(){
+    $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
+  }
+  $('adminUnit').onchange=async()=>{selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';show('userArea',selectedUnit===profile.unit_id);await loadMonths();};
+  $('createUnit').onclick=async()=>{
+    const name=$('newUnitName').value.trim();
+    if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
+    const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
+    if(error){$('unitMessage').innerHTML=msg(error.message,'warn');return;}
+    units.push(data); units.sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+    selectedUnit=data.id; $('newUnitName').value='';renderAdminUnits();show('userArea',selectedUnit===profile.unit_id);await loadMonths();
+    $('unitMessage').innerHTML=msg('Unité créée. Elle est disponible lors des inscriptions.','ok');
+  };
+
   async function loadMonths(){
-    const {data,error}=await sb.from('months').select('*').order('month_key',{ascending:false});
+    const {data,error}=await sb.from('months').select('*').eq('unit_id',selectedUnit).order('month_key',{ascending:false});
     if(error){alert(error.message);return;}
     months=data||[];
     selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
@@ -353,7 +404,11 @@
     monthCodes=[]; entries=[]; submission=null; editableAdminCodes=[];
     renderUserEntries(); renderAdminCodes();
     $('userNotice').innerHTML=msg('Aucun mois disponible. Crée un mois pour commencer.','warn');
-    if(profile.is_admin) await loadAnnualData();
+    if(profile.is_admin){
+      const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
+      if(pe){alert(pe.message);return;}
+      allProfiles=people||[];adminEntries=[];adminSubmissions=[];renderUsers();await loadAnnualData();
+    }
   }
 
   function renderAnnualYears(){
@@ -379,11 +434,11 @@
     $('editMonthKey').value=selectedMonth||'';
     $('toggleMonthState').textContent=mrec?.is_open?'Fermer le mois':'Rouvrir le mois';
     $('toggleMonthState').className=mrec?.is_open?'danger':'';
-    const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('month_key',selectedMonth).order('code');
+    const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).order('code');
     if(ce){alert(ce.message);return;} monthCodes=codes||[];
-    const {data:ents,error:ee}=await sb.from('entries').select('*').eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');
+    const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:String(x.hours)}));
-    const {data:subs,error:se}=await sb.from('submissions').select('*').eq('month_key',selectedMonth).eq('user_id',session.user.id).maybeSingle();
+    const {data:subs,error:se}=await sb.from('submissions').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).maybeSingle();
     if(se){alert(se.message);return;} submission=subs;
     renderUserEntries();
     if(profile.is_admin){
@@ -393,7 +448,7 @@
     }
   }
 
-  function canEditOwn(){return !!currentMonthRec()?.is_open && !submission;}
+  function canEditOwn(){return selectedUnit===profile.unit_id && !!currentMonthRec()?.is_open && !submission;}
 
   function renderUserEntries(){
     const can=canEditOwn();
@@ -430,16 +485,16 @@
     const used=new Set(entries.map(e=>Number(e.code_id)));
     const next=monthCodes.find(c=>c.active&&!used.has(Number(c.id)));
     if(!next){alert('Tous les codes disponibles sont déjà présents dans le pointage.');return;}
-    entries.push({id:null,user_id:session.user.id,month_key:selectedMonth,code_id:next.id,hours:''}); renderUserEntries();
+    entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:next.id,hours:''}); renderUserEntries();
   };
 
   async function saveEntries(showOk=true){
     if(!canEditOwn()) return false;
-    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({user_id:session.user.id,month_key:selectedMonth,code_id:Number(r.code_id),hours:parseH(r.hours)}));
+    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:Number(r.code_id),hours:parseH(r.hours)}));
     const ids=clean.map(r=>r.code_id);
     if(new Set(ids).size!==ids.length){alert('Un même code ne peut apparaître qu’une fois dans le mois.');return false;}
     if(clean.some(r=>r.hours<0)){alert('Le nombre d’heures ne peut pas être négatif.');return false;}
-    const {error:d}=await sb.from('entries').delete().eq('user_id',session.user.id).eq('month_key',selectedMonth);
+    const {error:d}=await sb.from('entries').delete().eq('user_id',session.user.id).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
     if(d){alert(d.message);return false;}
     if(clean.length){const {error:i}=await sb.from('entries').insert(clean); if(i){alert(i.message);return false;}}
     if(showOk) alert('Pointage enregistré.');
@@ -451,25 +506,25 @@
   $('submitMonth').onclick=async()=>{
     if(!(await saveEntries(false))) return;
     if(!await confirmAction('Valider ce mois ? Tu pourras le rouvrir tant que l’administrateur n’a pas fermé le mois.')) return;
-    const {error}=await sb.from('submissions').insert({user_id:session.user.id,month_key:selectedMonth});
+    const {error}=await sb.from('submissions').insert({user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth});
     if(error){alert(error.message);return;} await loadMonthData();
   };
   $('reopenOwn').onclick=async()=>{
-    const {error}=await sb.from('submissions').delete().eq('user_id',session.user.id).eq('month_key',selectedMonth);
+    const {error}=await sb.from('submissions').delete().eq('user_id',session.user.id).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
     if(error){alert(error.message);return;} await loadMonthData();
   };
 
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-    ['results','codes','users','months'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    ['results','codes','users','months','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
   });
 
   async function loadAdminData(){
     const [p,e,s]=await Promise.all([
-      sb.from('profiles').select('*').order('full_name'),
-      sb.from('entries').select('*,month_codes(code,label)').eq('month_key',selectedMonth),
-      sb.from('submissions').select('*').eq('month_key',selectedMonth)
+      sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name'),
+      sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit).eq('month_key',selectedMonth),
+      sb.from('submissions').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth)
     ]);
     if(p.error||e.error||s.error){alert((p.error||e.error||s.error).message);return;}
     allProfiles=(p.data||[]); adminEntries=e.data||[]; adminSubmissions=s.data||[];
@@ -489,7 +544,7 @@
   }
 
   async function loadAnnualData(){
-    const request=++annualRequest, year=annualYear;
+    const request=++annualRequest, year=annualYear, unitId=selectedUnit;
     annualReady=false;
     $('exportSummary').disabled=$('exportRaw').disabled=true;
     $('summaryTable').innerHTML='<div class="muted small">Chargement du suivi annuel…</div>';
@@ -498,9 +553,9 @@
     const start=`${year}-01`, end=`${Number(year)+1}-01`;
     try {
       const [codes,ents,subs]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('submissions').select('user_id,month_key').gte('month_key',start).lt('month_key',end).order('month_key').order('user_id'))
+        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('submissions').select('user_id,month_key').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('month_key').order('user_id'))
       ]);
       if(request!==annualRequest) return;
       annualCodes=codes; annualEntries=ents; annualSubmissions=subs;
@@ -516,7 +571,7 @@
   function annualReport(){
     const codeById=new Map(annualCodes.map(c=>[Number(c.id),c]));
     const codeNames=[...new Set(annualCodes.map(c=>c.code))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const people=allProfiles.filter(p=>p.active || annualEntries.some(e=>e.user_id===p.id));
+    const people=allProfiles.filter(p=>p.unit_id===selectedUnit && (p.active || annualEntries.some(e=>e.user_id===p.id)));
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of annualEntries){
       const code=codeById.get(Number(e.code_id))?.code;
@@ -531,7 +586,7 @@
   function renderAnnualSummary(){
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
-    $('annualStats').textContent=`${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
+    $('annualStats').textContent=`${units.find(u=>u.id===selectedUnit)?.name||''} · ${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
     let html='<div class="tablewrap"><table><thead><tr><th>Collègue</th>';
     codeNames.forEach(code=>html+=`<th class="num">${esc(code)}</th>`);
     html+='<th class="num">Total</th></tr></thead><tbody>';
@@ -573,21 +628,21 @@
     const existing=new Set(editableAdminCodes.map(c=>String(c.code||'').trim().toUpperCase()));
     const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
     if(!missing.length && !updated){$('codeAdminMessage').innerHTML=msg('Tous les codes de la liste standard sont déjà présents.','ok');return;}
-    editableAdminCodes.push(...missing.map(c=>({id:null,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
+    editableAdminCodes.push(...missing.map(c=>({id:null,unit_id:selectedUnit,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
     renderAdminCodes();
     $('codeAdminMessage').innerHTML=msg(`${missing.length} code(s) ajouté(s), ${updated} code(s) modifié(s). Clique sur « Enregistrer les codes » pour confirmer.`,'ok');
   };
-  $('addAdminCode').onclick=()=>{editableAdminCodes.push({id:null,month_key:selectedMonth,code:'',label:'',active:true});renderAdminCodes();};
+  $('addAdminCode').onclick=()=>{editableAdminCodes.push({id:null,unit_id:selectedUnit,month_key:selectedMonth,code:'',label:'',active:true});renderAdminCodes();};
   $('saveAdminCodes').onclick=async()=>{
     const clean=editableAdminCodes.map(c=>({...c,code:c.code.trim(),label:c.label.trim()}));
     if(clean.some(c=>!c.code||!c.label)){alert('Chaque code doit avoir un code et un libellé.');return;}
     const lc=clean.map(c=>c.code.toLowerCase()); if(new Set(lc).size!==lc.length){alert('Deux codes identiques sont présents.');return;}
     for(const c of clean){
       if(c.id){
-        const {error}=await sb.from('month_codes').update({code:c.code,label:c.label,active:c.active}).eq('id',c.id);
+        const {error}=await sb.from('month_codes').update({code:c.code,label:c.label,active:c.active}).eq('unit_id',selectedUnit).eq('id',c.id);
         if(error){alert(error.message);return;}
       } else {
-        const {error}=await sb.from('month_codes').insert({month_key:selectedMonth,code:c.code,label:c.label,active:c.active});
+        const {error}=await sb.from('month_codes').insert({unit_id:selectedUnit,month_key:selectedMonth,code:c.code,label:c.label,active:c.active});
         if(error){alert(error.message);return;}
       }
     }
@@ -601,7 +656,7 @@
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-active]').forEach(el=>el.onchange=async e=>{
       const id=e.target.dataset.userActive, val=e.target.checked;
-      const {error}=await sb.from('profiles').update({active:val}).eq('id',id);
+      const {error}=await sb.from('profiles').update({active:val}).eq('unit_id',selectedUnit).eq('id',id);
       if(error){alert(error.message);e.target.checked=!val;return;}
       await loadAdminData();
     });
@@ -611,7 +666,7 @@
     const rec=currentMonthRec(), next=!rec.is_open;
     const warning=next?'Rouvrir ce mois ? Les utilisateurs pourront à nouveau modifier leur pointage.':'Fermer ce mois ? Les utilisateurs ne pourront plus modifier leur pointage.';
     if(!await confirmAction(warning)) return;
-    const {error}=await sb.from('months').update({is_open:next}).eq('month_key',selectedMonth);
+    const {error}=await sb.from('months').update({is_open:next}).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
     if(error){alert(error.message);return;}
     await loadMonths();
   };
@@ -620,13 +675,13 @@
   $('createMonth').onclick=async()=>{
     const m=$('newMonth').value; if(!m){alert('Choisis un mois.');return;}
     if(months.some(x=>x.month_key===m)){alert('Ce mois existe déjà.');return;}
-    const {error}=await sb.from('months').insert({month_key:m,is_open:true});
+    const {error}=await sb.from('months').insert({unit_id:selectedUnit,month_key:m,is_open:true});
     if(error){alert(error.message);return;}
     let src=[];
     if($('copyCodes').checked && selectedMonth){
-      src=monthCodes.filter(c=>c.active).map(c=>({month_key:m,code:c.code,label:c.label,active:true}));
+      src=monthCodes.filter(c=>c.active).map(c=>({unit_id:selectedUnit,month_key:m,code:c.code,label:c.label,active:true}));
     }
-    if(!src.length) src=standardRows(m);
+    if(!src.length) src=standardRows(m).map(c=>({...c,unit_id:selectedUnit}));
     if(src.length){
       const {error:ce}=await sb.from('month_codes').insert(src);
       if(ce){alert('Mois créé, mais erreur lors de l’ajout des codes : '+ce.message);}
@@ -663,7 +718,7 @@
 
     if(!await confirmAction(text)) return;
 
-    const {error}=await sb.from('months').update({month_key:newKey}).eq('month_key',oldKey);
+    const {error}=await sb.from('months').update({month_key:newKey}).eq('unit_id',selectedUnit).eq('month_key',oldKey);
 
     if(error){
       $('monthAdminMessage').innerHTML=msg(
@@ -696,7 +751,7 @@
 
     if(!await confirmAction(warning,{title:'Supprimer le mois',button:'Supprimer',expected:(entryCount||validationCount)?key:''})) return;
 
-    const {error}=await sb.from('months').delete().eq('month_key',key);
+    const {error}=await sb.from('months').delete().eq('unit_id',selectedUnit).eq('month_key',key);
     if(error){
       $('monthAdminMessage').innerHTML=msg(error.message,'warn');
       return;
@@ -721,7 +776,7 @@
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
       rows.push([e.month_key,p?.full_name||'',p?.email||'',c?.code||'',c?.label||'',String(Number(e.hours)).replace('.',','),subSet.has(`${e.month_key}\u0000${e.user_id}`)?'Oui':'Non']);
     });
-    csvDownload(`pointage-detail-${annualYear}.csv`,rows);
+    csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
   $('exportSummary').onclick=()=>{
     if(!annualReady) return;
@@ -734,7 +789,7 @@
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     rows.push([annualYear,'Total par code','',...codeNames.map(code=>String((codeTotals.get(code)||0)/100).replace('.',',')),String(grandTotal/100).replace('.',',')]);
-    csvDownload(`pointage-recap-${annualYear}.csv`,rows);
+    csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
 
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
