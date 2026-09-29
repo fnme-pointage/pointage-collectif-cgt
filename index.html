@@ -58,7 +58,11 @@
     </div>
     <div id="forgotForm" class="hidden">
       <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
-      <div class="actions"><button id="sendRecovery" type="button">Recevoir un lien de réinitialisation</button></div>
+      <div class="actions"><button id="sendRecovery" type="button">Recevoir un code par mail</button></div>
+      <div style="height:12px"></div>
+      <label for="recoveryCode">Code reçu par mail</label>
+      <input id="recoveryCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Recopie le code reçu">
+      <div class="actions"><button id="verifyRecoveryCode" type="button">Valider le code</button></div>
       <div class="actions"><button id="backToLogin" class="secondary" type="button">Retour à la connexion</button></div>
     </div>
     <div id="signupForm" class="hidden">
@@ -269,6 +273,7 @@
   let allProfiles=[], adminUserProfiles=[], adminEntries=[], adminSubmissions=[], editableAdminCodes=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualSubmissions=[], annualReady=false, annualRequest=0;
   let units=[], selectedUnit='';
+  let recoveryVerifying=false;
 
   const $ = id => document.getElementById(id);
   const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
@@ -347,6 +352,7 @@
   $('signupTab').onclick=()=>setAuthMode('signup');
   $('forgotPassword').onclick=()=>{
     $('forgotEmail').value=$('loginEmail').value.trim();
+    $('recoveryCode').value='';
     show('loginForm',false); show('forgotForm',true); $('authMsg').innerHTML='';
   };
   $('backToLogin').onclick=()=>setAuthMode('login');
@@ -356,7 +362,31 @@
     $('sendRecovery').disabled=true;
     const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
     $('sendRecovery').disabled=false;
-    $('authMsg').innerHTML=error?msg(error.message,'warn'):msg('Si ce compte existe, un lien de réinitialisation a été envoyé. Consulte ta boîte mail.','ok');
+    $('authMsg').innerHTML=error?msg(error.message,'warn'):msg('Si ce compte existe, un mail de réinitialisation a été envoyé. Recopie son code ci-dessous. Si tu reçois plusieurs mails, utilise le code du dernier.','ok');
+  };
+  $('verifyRecoveryCode').onclick=async()=>{
+    const email=$('forgotEmail').value.trim();
+    const token=$('recoveryCode').value.replace(/\s/g,'');
+    if(!email || !$('forgotEmail').checkValidity()){$('authMsg').innerHTML=msg('Indique une adresse e-mail valide.','warn');return;}
+    if(!/^\d+$/.test(token)){$('authMsg').innerHTML=msg('Recopie le code numérique reçu par mail.','warn');return;}
+    recoveryVerifying=true;
+    $('verifyRecoveryCode').disabled=true; $('sendRecovery').disabled=true;
+    try{
+      const {data,error}=await sb.auth.verifyOtp({email,token,type:'recovery'});
+      if(error || !data?.session){
+        $('authMsg').innerHTML=msg('Code incorrect, expiré ou déjà utilisé. Vérifie le dernier mail reçu ou demande un nouveau code.','warn');
+        return;
+      }
+      session=data.session; recovering=true;
+      $('recoveryCode').value=''; $('newPassword').value=''; $('confirmPassword').value='';
+      show('recoveryForm',true); show('recoveryLogin',false);
+      await route();
+    } catch(error){
+      $('authMsg').innerHTML=msg('Impossible de vérifier le code. Vérifie ta connexion et réessaie.','warn');
+    } finally{
+      recoveryVerifying=false;
+      $('verifyRecoveryCode').disabled=false; $('sendRecovery').disabled=false;
+    }
   };
   async function loadUnits(){
     const {data,error}=await sb.from('units').select('id,name').eq('active',true).order('name');
@@ -391,10 +421,11 @@
     recovering=true; await route();
   };
 
-  sb.auth.onAuthStateChange(async(event,newSession)=>{
+  sb.auth.onAuthStateChange((event,newSession)=>{
     session=newSession;
     if(event==='PASSWORD_RECOVERY') recovering=true;
-    await route();
+    // Les appels Supabase doivent attendre la fin du callback d'authentification.
+    if(!recoveryVerifying) setTimeout(()=>{route();},0);
   });
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
