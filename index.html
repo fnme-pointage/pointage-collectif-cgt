@@ -371,7 +371,7 @@
     $('authMsg').innerHTML='';
     const name=$('signupName').value.trim(), email=$('signupEmail').value.trim(), password=$('signupPassword').value, unitId=$('signupUnit').value;
     if(!name||!email||password.length<8||!unitId||!units.some(u=>u.id===unitId)){$('authMsg').innerHTML=msg('Renseigne le nom, l’e-mail, l’unité et un mot de passe de 8 caractères minimum.','warn');return;}
-    const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:name,unit_id:unitId}}});
+    const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname,data:{full_name:name,unit_id:unitId}}});
     if(error){$('authMsg').innerHTML=msg(error.message,'warn');return;}
     $('authMsg').innerHTML=msg('Compte créé. Si la confirmation e-mail est activée, valide le message reçu, puis connecte-toi. Ton compte devra ensuite être activé par l’administrateur.','ok');
   };
