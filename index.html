@@ -183,13 +183,38 @@
         <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
         <div id="codeAdminMessage" style="margin-top:10px"></div>
         <div class="tablewrap" style="margin-top:14px">
-        <table style="min-width:980px">
-          <thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th></tr></thead>
-          <tbody>
-            ${STANDARD_CODES.map(c=>`<tr><td>${esc(c.label)}</td><td><strong>${esc(c.code)}</strong></td><td style="white-space:normal;min-width:430px">${esc(c.document)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+          <table style="min-width:980px">
+            <thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th></tr></thead>
+            <tbody>
+              <tr><td>SOCIAL COMMISSION CCAS</td><td><strong>S4</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
+              <tr><td>SOCIAL ADMINISTRATEUR</td><td><strong>S6</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
+              <tr><td>SOCIAL AUTRE</td><td><strong>S0</strong></td><td style="white-space:normal;min-width:430px">HEURE ACCORD MOYEN BENEVOLE</td></tr>
+              <tr><td>HEURE DS</td><td><strong>D4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>DETACHEMENT SYNDICAL</td><td><strong>L4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA + CRISTALISATION + DAP</td></tr>
+              <tr><td>DETACHEMENT SYNDICAL</td><td><strong>E4</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA</td></tr>
+              <tr><td>HEURE CONF OU FEDE</td><td><strong>N4</strong></td><td style="white-space:normal;min-width:430px">EN FONCTION DE LA NOTIF CONF OU FD</td></tr>
+              <tr><td>COORDINATEUR NATIONAL OU ADJOINT</td><td><strong>81</strong></td><td style="white-space:normal;min-width:430px">EN FONCTION DE LA DOTATION DPNT</td></tr>
+              <tr><td>REUNION CSE</td><td><strong>1A</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION CSE</td><td><strong>1B</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>REUNION CSSCT</td><td><strong>OA</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION ET REUNION CPS</td><td><strong>1G</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>REUNION RPX</td><td><strong>RA</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION RPX</td><td><strong>RB</strong></td><td style="white-space:normal;min-width:430px">AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>REUNION CSEC</td><td><strong>1K</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION CSEC</td><td><strong>1L</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>COMMISSION FACULTATIVE CSEC</td><td><strong>1R</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>REUNION CSSCT C</td><td><strong>OE</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION CSSCT C</td><td><strong>OB</strong></td><td style="white-space:normal;min-width:430px">ACCORD CSEC + NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>CONVOCATION DIRECTION REUNION DIVERS</td><td><strong>46</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>REUNION CSP</td><td><strong>8F</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>PREPARATION CSP</td><td><strong>8G</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>CSNP</td><td><strong>Z7</strong></td><td style="white-space:normal;min-width:430px">NOTE DECOMPTE DES H DPNT</td></tr>
+              <tr><td>GREVE</td><td><strong>52</strong></td><td style="white-space:normal;min-width:430px">AUTANT QUE BESOIN</td></tr>
+              <tr><td>FORMATION OUVRIERE</td><td><strong>51</strong></td><td style="white-space:normal;min-width:430px">CODE DU TRAVAIL</td></tr>
+              <tr><td>DEPLACEMENT SYNDICAL</td><td><strong>DP</strong></td><td style="white-space:normal;min-width:430px">COLLECTE CGT POUR INFORMATION / NOTE DECOMPTE DES H DPNT + ACCORDS CSE / DROIT SYNDICAL</td></tr>
+            </tbody>
+          </table>
+        </div>
       <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
       </div>
     </section>
