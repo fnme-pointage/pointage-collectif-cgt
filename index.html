@@ -189,6 +189,7 @@
     <section id="admin-users" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Utilisateurs</h2></div>
+        <p class="muted small">Les comptes affichés appartiennent à l’unité sélectionnée en haut de la page. Utilise « Modifier » pour compléter le nom ou changer l’unité d’un compte créé dans Supabase.</p>
         <div id="usersTable"></div>
       </div>
     </section>
@@ -726,14 +727,40 @@
   };
 
   function renderUsers(){
-    let html='<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Actif</th></tr></thead><tbody>';
-    allProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'')}</td><td>${esc(p.email||'')}</td><td>${p.is_admin?'Administrateur':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${p.id}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td></tr>`);
+    let html='<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>';
+    allProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${p.is_admin?'Administrateur':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button></td></tr>`);
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-active]').forEach(el=>el.onchange=async e=>{
       const id=e.target.dataset.userActive, val=e.target.checked;
       const {error}=await sb.from('profiles').update({active:val}).eq('unit_id',selectedUnit).eq('id',id);
       if(error){alert(error.message);e.target.checked=!val;return;}
       await loadAdminData();
+    });
+    document.querySelectorAll('[data-user-edit]').forEach(button=>button.onclick=()=>{
+      const p=allProfiles.find(item=>item.id===button.dataset.userEdit);
+      if(!p) return;
+      const cell=button.closest('td');
+      cell.innerHTML=`<label>Nom et prénom<input data-edit-name type="text" maxlength="150" value="${esc(p.full_name||'')}"></label>
+        <label>Unité<select data-edit-unit>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>
+        <button data-edit-save type="button">Enregistrer</button> <button class="secondary" data-edit-cancel type="button">Annuler</button>`;
+      cell.querySelector('[data-edit-cancel]').onclick=renderUsers;
+      cell.querySelector('[data-edit-save]').onclick=async()=>{
+        const name=cell.querySelector('[data-edit-name]').value.trim();
+        const unitId=cell.querySelector('[data-edit-unit]').value;
+        if(!name){alert('Indique le nom et le prénom.');return;}
+        if(unitId!==p.unit_id){
+          const [entriesResult,submissionsResult]=await Promise.all([
+            sb.from('entries').select('id',{count:'exact',head:true}).eq('user_id',p.id),
+            sb.from('submissions').select('user_id',{count:'exact',head:true}).eq('user_id',p.id)
+          ]);
+          if(entriesResult.error||submissionsResult.error){alert((entriesResult.error||submissionsResult.error).message);return;}
+          if(entriesResult.count||submissionsResult.count){alert('Ce compte possède déjà des pointages ou des validations. Son unité ne peut pas être changée depuis cet écran.');return;}
+        }
+        const {data,error}=await sb.from('profiles').update({full_name:name,unit_id:unitId}).eq('id',p.id).eq('unit_id',p.unit_id).select('id').single();
+        if(error||!data){alert(error?.message||'Modification impossible. Recharge la page.');return;}
+        if(p.id===profile.id){profile.full_name=name;profile.unit_id=unitId;$('userName').textContent=name;show('userArea',selectedUnit===unitId);}
+        await loadAdminData();
+      };
     });
   }
 
