@@ -356,7 +356,7 @@
   async function loadUnits(){
     const {data,error}=await sb.from('units').select('id,name').eq('active',true).order('name');
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
-    units=data||[];
+    units=(data||[]).filter(u=>u.name!=='ADMIN');
     $('signupUnit').innerHTML='<option value="">Choisir une unité</option>'+units.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
     return true;
   }
@@ -732,6 +732,9 @@
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-active]').forEach(el=>el.onchange=async e=>{
       const id=e.target.dataset.userActive, val=e.target.checked;
+      if(val && selectedUnit===units.find(u=>u.name==='ADMIN')?.id){
+        alert('Affecte ce compte à une unité avant de l’activer.');e.target.checked=false;return;
+      }
       const {error}=await sb.from('profiles').update({active:val}).eq('unit_id',selectedUnit).eq('id',id);
       if(error){alert(error.message);e.target.checked=!val;return;}
       await loadAdminData();
