@@ -58,6 +58,7 @@
       <label>Mot de passe</label><input id="loginPassword" type="password" autocomplete="current-password">
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
       <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
+      <div class="actions"><button id="openSignupVerification" class="secondary" type="button">Confirmer mon adresse e-mail avec un code</button></div>
     </div>
     <div id="forgotForm" class="hidden">
       <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
@@ -78,6 +79,14 @@
       <label for="signupUnit">Unité souhaitée</label><select id="signupUnit" required></select>
       <div class="actions"><button id="signupBtn">Créer mon compte</button></div>
       <p class="muted small">Après inscription, le compte arrive dans ADMIN. L’administrateur choisit l’unité et active le compte avant la première utilisation.</p>
+    </div>
+    <div id="signupVerificationForm" class="hidden">
+      <p class="notice">Recopie le code reçu par mail pour confirmer ton adresse. Si tu reçois plusieurs mails, utilise le code du dernier.</p>
+      <label for="signupVerificationEmail">Adresse e-mail du compte</label><input id="signupVerificationEmail" type="email" autocomplete="email">
+      <div style="height:9px"></div>
+      <label for="signupVerificationCode">Code reçu par mail</label><input id="signupVerificationCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Recopie le code reçu">
+      <div class="actions"><button id="verifySignupCode" type="button">Confirmer mon adresse e-mail</button><button id="resendSignupCode" class="secondary" type="button">Recevoir un nouveau code</button></div>
+      <div class="actions"><button id="signupVerificationBack" class="secondary" type="button">Retour à la connexion</button></div>
     </div>
   </div>
 </div>
@@ -405,6 +414,7 @@
 
   function setAuthMode(mode){
     show('loginForm',mode==='login'); show('signupForm',mode==='signup');
+    show('signupVerificationForm',mode==='verifySignup');
     show('forgotForm',false);
     $('loginTab').className=mode==='login'?'':'secondary';
     $('signupTab').className=mode==='signup'?'':'secondary';
@@ -412,6 +422,37 @@
   }
   $('loginTab').onclick=()=>setAuthMode('login');
   $('signupTab').onclick=()=>setAuthMode('signup');
+  let signupVerifying=false;
+  function openSignupVerification(email){
+    $('signupVerificationEmail').value=email||'';
+    $('signupVerificationCode').value='';
+    setAuthMode('verifySignup');
+  }
+  $('openSignupVerification').onclick=()=>openSignupVerification($('loginEmail').value.trim());
+  $('signupVerificationBack').onclick=()=>setAuthMode('login');
+  $('resendSignupCode').onclick=async()=>{
+    const email=$('signupVerificationEmail').value.trim();
+    if(!email || !$('signupVerificationEmail').checkValidity()){$('authMsg').innerHTML=msg('Indique une adresse e-mail valide.','warn');return;}
+    $('resendSignupCode').disabled=true;
+    try{
+      const {error}=await sb.auth.resend({type:'signup',email});
+      $('authMsg').innerHTML=error?msg(error.message,'warn'):msg('Si ce compte attend sa confirmation, un nouveau code a été envoyé. Utilise le dernier code reçu.','ok');
+    }catch(error){$('authMsg').innerHTML=msg('Envoi impossible. Vérifie ta connexion et réessaie.','warn');}
+    finally{$('resendSignupCode').disabled=false;}
+  };
+  $('verifySignupCode').onclick=async()=>{
+    const email=$('signupVerificationEmail').value.trim(),token=$('signupVerificationCode').value.replace(/\s/g,'');
+    if(!email || !$('signupVerificationEmail').checkValidity()){$('authMsg').innerHTML=msg('Indique une adresse e-mail valide.','warn');return;}
+    if(!/^\d+$/.test(token)){$('authMsg').innerHTML=msg('Recopie le code numérique reçu par mail.','warn');return;}
+    signupVerifying=true;$('verifySignupCode').disabled=$('resendSignupCode').disabled=true;
+    try{
+      const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
+      if(error || !data?.session){$('authMsg').innerHTML=msg('Code incorrect, expiré ou déjà utilisé. Demande un nouveau code si nécessaire.','warn');return;}
+      session=data.session;$('signupVerificationCode').value='';
+      await route();
+    }catch(error){$('authMsg').innerHTML=msg('Impossible de vérifier le code. Vérifie ta connexion et réessaie.','warn');}
+    finally{signupVerifying=false;$('verifySignupCode').disabled=$('resendSignupCode').disabled=false;}
+  };
   $('forgotPassword').onclick=()=>{
     $('forgotEmail').value=$('loginEmail').value.trim();
     $('recoveryCode').value='';
@@ -462,15 +503,25 @@
   $('loginBtn').onclick=async()=>{
     $('authMsg').innerHTML='';
     const {error}=await sb.auth.signInWithPassword({email:$('loginEmail').value.trim(),password:$('loginPassword').value});
-    if(error) $('authMsg').innerHTML=msg(error.message,'warn');
+    if(error?.code==='email_not_confirmed'){
+      openSignupVerification($('loginEmail').value.trim());
+      $('authMsg').innerHTML=msg('Confirme ton adresse e-mail avec le code reçu. Tu peux demander un nouveau code ci-dessous.','warn');
+    }else if(error) $('authMsg').innerHTML=msg(error.message,'warn');
   };
   $('signupBtn').onclick=async()=>{
     $('authMsg').innerHTML='';
     const name=$('signupName').value.trim(), email=$('signupEmail').value.trim(), password=$('signupPassword').value, unitId=$('signupUnit').value;
     if(!name||!email||password.length<8||!unitId||!units.some(u=>u.id===unitId)){$('authMsg').innerHTML=msg('Renseigne le nom, l’e-mail, l’unité et un mot de passe de 8 caractères minimum.','warn');return;}
-    const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname,data:{full_name:name,unit_id:unitId}}});
-    if(error){$('authMsg').innerHTML=msg(error.message,'warn');return;}
-    $('authMsg').innerHTML=msg('Compte créé. Si la confirmation e-mail est activée, valide le message reçu, puis connecte-toi. Ton compte arrive dans ADMIN ; l’administrateur doit choisir ton unité et activer ton compte.','ok');
+    $('signupBtn').disabled=true;
+    try{
+      const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:name,unit_id:unitId}}});
+      if(error){$('authMsg').innerHTML=msg(error.message,'warn');return;}
+      $('signupPassword').value='';
+      if(data?.session){session=data.session;await route();return;}
+      openSignupVerification(email);
+      $('authMsg').innerHTML=msg('Un code de confirmation a été envoyé par mail. Recopie-le ci-dessous. L’administrateur choisira ensuite ton unité et activera ton compte.','ok');
+    }catch(error){$('authMsg').innerHTML=msg('Inscription impossible. Vérifie ta connexion et réessaie.','warn');}
+    finally{$('signupBtn').disabled=false;}
   };
 
   async function logout(){if(!await allowLeavePointage()) return;closePdfReader();documents=[];await sb.auth.signOut();}
@@ -489,7 +540,7 @@
     if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event) && entriesDirty && profile?.id===newSession?.user?.id) return;
     if(event==='PASSWORD_RECOVERY') recovering=true;
     // Les appels Supabase doivent attendre la fin du callback d'authentification.
-    if(!recoveryVerifying) setTimeout(()=>{route();},0);
+    if(!recoveryVerifying && !signupVerifying) setTimeout(()=>{route();},0);
   });
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
