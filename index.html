@@ -174,6 +174,10 @@
           <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
           <button id="exportRaw" class="secondary" disabled>Exporter le détail annuel CSV</button>
         </div>
+        <div id="globalExportArea" class="hidden">
+          <div class="actions"><button id="exportGlobalSummary" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
+          <div id="globalExportMessage" aria-live="polite"></div>
+        </div>
       </div>
     </section>
 
@@ -528,7 +532,7 @@
     selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
                     (months.find(m=>m.month_key===curMonth())?.month_key || months[0]?.month_key || '');
     renderMonthSelect();
-    if(profile.is_admin) renderAnnualYears();
+    if(profile.is_admin) await renderAnnualYears();
     if(selectedMonth){await loadMonthData();return;}
     $('monthState').textContent='Aucun mois';
     $('adminSelectedMonth').textContent='Aucun mois sélectionné';
@@ -544,8 +548,15 @@
     }
   }
 
-  function renderAnnualYears(){
-    const years=[...new Set(months.map(m=>String(m.month_key).slice(0,4)))].sort().reverse();
+  async function renderAnnualYears(){
+    let yearMonths=months;
+    const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    show('globalExportArea',globalView);
+    if(globalView){
+      try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').order('unit_id').order('month_key'));}
+      catch(error){$('globalExportMessage').innerHTML=msg('Impossible de charger les années de toutes les unités : '+error.message,'warn');}
+    }
+    const years=[...new Set([...yearMonths.map(m=>String(m.month_key).slice(0,4)),...(globalView?[curMonth().slice(0,4)]:[])])].sort().reverse();
     if(!years.includes(annualYear)) annualYear=years.includes(curMonth().slice(0,4))?curMonth().slice(0,4):(years[0]||'');
     $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
   }
@@ -708,6 +719,7 @@
   async function loadAnnualData(){
     const request=++annualRequest, year=annualYear, unitId=selectedUnit;
     annualReady=false;
+    $('exportGlobalSummary').disabled=!/^[1-9][0-9]{3}$/.test(year);
     show('summaryTable',units.find(u=>u.id===unitId)?.name!=='ADMIN');
     $('exportSummary').disabled=$('exportRaw').disabled=true;
     $('summaryTable').innerHTML='<div class="muted small">Chargement du suivi annuel…</div>';
@@ -1056,6 +1068,56 @@
       button.textContent='Exporter CSV';
     }
   }
+
+  function globalSummaryRows(year,people,codes,globalEntries){
+    const users=people.filter(p=>!p.is_admin);
+    const userIds=new Set(users.map(p=>p.id));
+    const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
+    const amounts=new Map(), totals=new Map();
+    for(const entry of globalEntries){
+      if(!userIds.has(entry.user_id)) continue;
+      const code=codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      const cents=Math.round(Number(entry.hours||0)*100);
+      if(!amounts.has(entry.user_id)) amounts.set(entry.user_id,new Map());
+      const userAmounts=amounts.get(entry.user_id);
+      userAmounts.set(code,(userAmounts.get(code)||0)+cents);
+      totals.set(code,(totals.get(code)||0)+cents);
+    }
+    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const unitName=id=>units.find(u=>u.id===id)?.name||'';
+    const decimal=cents=>String(cents/100).replace('.',',');
+    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total']];
+    users.sort((a,b)=>unitName(a.unit_id).localeCompare(unitName(b.unit_id),'fr') || String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
+    for(const person of users){
+      const userAmounts=amounts.get(person.id)||new Map();
+      const total=[...userAmounts.values()].reduce((sum,n)=>sum+n,0);
+      rows.push([year,person.full_name||'',person.email||'',unitName(person.unit_id),...codeNames.map(code=>decimal(userAmounts.get(code)||0)),decimal(total)]);
+    }
+    rows.push([year,'Total par code','','',...codeNames.map(code=>decimal(totals.get(code)||0)),decimal([...totals.values()].reduce((sum,n)=>sum+n,0))]);
+    return rows;
+  }
+
+  $('exportGlobalSummary').onclick=async()=>{
+    if(!profile?.is_admin) return;
+    const year=annualYear;
+    if(!/^[1-9][0-9]{3}$/.test(year)){$('globalExportMessage').innerHTML=msg('Choisis une année valide.','warn');return;}
+    const button=$('exportGlobalSummary'), start=year+'-01', end=String(Number(year)+1)+'-01';
+    button.disabled=true;button.textContent='Export en cours…';$('globalExportMessage').innerHTML='';
+    try{
+      const [people,codes,globalEntries]=await Promise.all([
+        fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
+        fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').gte('month_key',start).lt('month_key',end).order('id'))
+      ]);
+      const rows=globalSummaryRows(year,people,codes,globalEntries);
+      csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
+      $('globalExportMessage').innerHTML=msg('Export '+year+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
+    }catch(error){
+      $('globalExportMessage').innerHTML=msg('Impossible de réaliser l’export global : '+error.message,'warn');
+    }finally{
+      button.disabled=false;button.textContent='Exporter tous les utilisateurs de toutes les unités CSV';
+    }
+  };
 
   function csvDownload(filename, rows){
     const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
