@@ -139,7 +139,7 @@
       <div class="sectiontitle">
         <div>
           <h2>Mon pointage</h2>
-          <div id="submissionText" class="muted small"></div>
+          <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
         </div>
         <div class="big" id="userTotal">0,00 h</div>
       </div>
@@ -147,13 +147,10 @@
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures.</p>
       <div id="entryList"></div>
       <div class="actions">
-        <button id="addEntry" type="button">+ Ajouter un code</button>
-        <button id="saveEntries" class="secondary">Enregistrer</button>
+        <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
+        <button id="saveEntries" type="button">Enregistrer mes données</button>
       </div>
-      <div class="actions">
-        <button id="submitMonth">✓ Valider mon mois</button>
-        <button id="reopenOwn" class="secondary hidden">Rouvrir mon pointage</button>
-      </div>
+      <div class="notice warn">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
       <p class="muted small">Saisie en décimal/quantième : 7,25 ; 7,50 ; 7,75 ; etc.</p>
     </div>
   </div>
@@ -326,11 +323,12 @@
   let recovering=new URLSearchParams(location.hash.slice(1)).get('type')==='recovery' || new URLSearchParams(location.search).get('type')==='recovery';
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[], submission=null;
-  let allProfiles=[], adminUserProfiles=[], adminEntries=[], adminSubmissions=[], editableAdminCodes=[];
-  let annualYear='', annualEntries=[], annualCodes=[], annualSubmissions=[], annualReady=false, annualRequest=0;
+  let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
+  let allProfiles=[], adminUserProfiles=[], adminEntries=[], editableAdminCodes=[];
+  let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
   let units=[], selectedUnit='';
   let recoveryVerifying=false;
+  let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
   const $ = id => document.getElementById(id);
@@ -475,10 +473,11 @@
     $('authMsg').innerHTML=msg('Compte créé. Si la confirmation e-mail est activée, valide le message reçu, puis connecte-toi. Ton compte arrive dans ADMIN ; l’administrateur doit choisir ton unité et activer ton compte.','ok');
   };
 
-  async function logout(){closePdfReader();documents=[];await sb.auth.signOut();}
+  async function logout(){if(!await allowLeavePointage()) return;closePdfReader();documents=[];await sb.auth.signOut();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
+    if(!await allowLeavePointage()) return;
     $('newPassword').value=''; $('confirmPassword').value='';
     $('recoveryMsg').innerHTML='';
     show('recoveryForm',true); show('recoveryLogin',false);
@@ -487,6 +486,7 @@
 
   sb.auth.onAuthStateChange((event,newSession)=>{
     session=newSession;
+    if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event) && entriesDirty && profile?.id===newSession?.user?.id) return;
     if(event==='PASSWORD_RECOVERY') recovering=true;
     // Les appels Supabase doivent attendre la fin du callback d'authentification.
     if(!recoveryVerifying) setTimeout(()=>{route();},0);
@@ -581,13 +581,13 @@
     $('adminSelectedMonth').textContent='Aucun mois sélectionné';
     $('editMonthKey').value='';
     $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=true;
-    monthCodes=[]; entries=[]; submission=null; editableAdminCodes=[];
+    monthCodes=[]; entries=[]; savedEntriesState='[]';entriesDirty=false;editableAdminCodes=[];
     renderUserEntries(); renderAdminCodes();
     $('userNotice').innerHTML=msg('Aucun mois disponible. Crée un mois pour commencer.','warn');
     if(profile.is_admin){
       const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
       if(pe){alert(pe.message);return;}
-      allProfiles=people||[];adminEntries=[];adminSubmissions=[];await loadAdminUsers();await loadAnnualData();
+      allProfiles=people||[];adminEntries=[];await loadAdminUsers();await loadAnnualData();
     }
   }
 
@@ -608,7 +608,11 @@
 
   function renderMonthSelect(){
     $('monthSelect').innerHTML=months.map(m=>`<option value="${esc(m.month_key)}"${m.month_key===selectedMonth?' selected':''}>${esc(monthLabel(m.month_key))}</option>`).join('');
-    $('monthSelect').onchange=async()=>{selectedMonth=$('monthSelect').value;await loadMonthData();};
+    $('monthSelect').onchange=async()=>{
+      const nextMonth=$('monthSelect').value;
+      if(!await allowLeavePointage()){$('monthSelect').value=selectedMonth;return;}
+      selectedMonth=nextMonth;await loadMonthData();
+    };
   }
 
   function currentMonthRec(){return months.find(m=>m.month_key===selectedMonth);}
@@ -626,8 +630,7 @@
     if(ce){alert(ce.message);return;} monthCodes=orderedCodes(codes||[]);
     const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:String(x.hours)}));
-    const {data:subs,error:se}=await sb.from('submissions').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).maybeSingle();
-    if(se){alert(se.message);return;} submission=subs;
+    savedEntriesState=entryState();entriesDirty=false;
     renderUserEntries();
     if(profile.is_admin){
       editableAdminCodes=monthCodes.map(x=>({...x}));
@@ -637,13 +640,11 @@
     }
   }
 
-  function canEditOwn(){return !profile.is_admin && selectedUnit===profile.unit_id && !!currentMonthRec()?.is_open && !submission;}
+  function canEditOwn(){return !profile.is_admin && selectedUnit===profile.unit_id && !!currentMonthRec()?.is_open ;}
 
   function renderUserEntries(){
     const can=canEditOwn();
-    $('submissionText').textContent=submission?`Validé le ${new Date(submission.submitted_at).toLocaleString('fr-FR')}`:'Non validé';
-    $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') :
-                                submission ? msg('Ton mois est validé. Rouvre-le si tu dois corriger une saisie.','ok') : '';
+    $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
       const code=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
@@ -667,7 +668,7 @@
       if(!canEditOwn() || entries.some((r,j)=>j!==i && Number(r.code_id)===id)) return;
       if(!entries[i]) entries[i]={id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''};
       entries[i].code_id=id;
-      renderUserEntries();
+      updateEntrySaveState();renderUserEntries();
       $('entryCode'+i).focus();
     });
     document.querySelectorAll('[data-picker]').forEach(el=>el.ontoggle=()=>{
@@ -676,17 +677,15 @@
     document.querySelectorAll('[data-hours]').forEach(el=>el.oninput=e=>{
       const entry=entries[Number(e.target.dataset.hours)];
       if(entry) entry.hours=e.target.value;
-      updateTotal();
+      updateEntrySaveState();updateTotal();
     });
     document.querySelectorAll('[data-del]').forEach(el=>el.onclick=e=>{
       entries.splice(Number(e.target.dataset.del),1);
-      renderUserEntries();
+      updateEntrySaveState();renderUserEntries();
     });
     $('addEntry').disabled=!can || entries.some(r=>!r.code_id) || !monthCodes.some(c=>c.active && !entries.some(r=>Number(r.code_id)===Number(c.id)));
-    $('saveEntries').disabled=!can;
-    $('submitMonth').classList.toggle('hidden',!!submission);
-    $('submitMonth').disabled=!currentMonthRec()?.is_open;
-    show('reopenOwn',!!submission && !!currentMonthRec()?.is_open);
+    $('saveEntries').disabled=!can || savingEntries;
+    updateEntrySaveState();
     updateTotal();
   }
 
@@ -695,35 +694,53 @@
   $('addEntry').onclick=()=>{
     if(!canEditOwn()) return;
     entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''});
-    renderUserEntries();
+    updateEntrySaveState();renderUserEntries();
     $('entryCode'+(entries.length-1)).focus();
   };
 
-  async function saveEntries(showOk=true){
-    if(!canEditOwn()) return false;
-    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:Number(r.code_id),hours:parseH(r.hours)}));
-    const ids=clean.map(r=>r.code_id);
-    if(new Set(ids).size!==ids.length){alert('Un même code ne peut apparaître qu’une fois dans le mois.');return false;}
-    if(clean.some(r=>r.hours<0)){alert('Le nombre d’heures ne peut pas être négatif.');return false;}
-    const {error:d}=await sb.from('entries').delete().eq('user_id',session.user.id).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
-    if(d){alert(d.message);return false;}
-    if(clean.length){const {error:i}=await sb.from('entries').insert(clean); if(i){alert(i.message);return false;}}
-    if(showOk) alert('Pointage enregistré.');
-    await loadMonthData();
-    return true;
+  function entryState(){
+    return JSON.stringify(entries.map(r=>({code_id:Number(r.code_id)||'',hours:String(r.hours??'')})));
   }
-  $('saveEntries').onclick=()=>saveEntries(true);
-
-  $('submitMonth').onclick=async()=>{
-    if(!(await saveEntries(false))) return;
-    if(!await confirmAction('Valider ce mois ? Tu pourras le rouvrir tant que l’administrateur n’a pas fermé le mois.')) return;
-    const {error}=await sb.from('submissions').insert({user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth});
-    if(error){alert(error.message);return;} await loadMonthData();
-  };
-  $('reopenOwn').onclick=async()=>{
-    const {error}=await sb.from('submissions').delete().eq('user_id',session.user.id).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
-    if(error){alert(error.message);return;} await loadMonthData();
-  };
+  function updateEntrySaveState(){
+    entriesDirty=entryState()!==savedEntriesState;
+    $('entrySaveStatus').textContent=entriesDirty?'Modifications non enregistrées':'Données enregistrées';
+    $('entrySaveStatus').className=entriesDirty?'pill warn':'pill ok';
+  }
+  async function allowLeavePointage(){
+    if(savingEntries){alert('L’enregistrement est en cours. Attends la confirmation avant de quitter.');return false;}
+    if(!entriesDirty || profile?.is_admin) return true;
+    const leave=await confirmAction('Tes dernières modifications ne sont pas enregistrées. Clique sur « Annuler » pour revenir et utiliser « Enregistrer mes données », ou quitte sans enregistrer.',{title:'Données non enregistrées',button:'Quitter sans enregistrer'});
+    if(leave) entriesDirty=false;
+    return leave;
+  }
+  window.addEventListener('beforeunload',event=>{
+    if(entriesDirty || savingEntries){event.preventDefault();event.returnValue='';}
+  });
+  async function saveEntries(){
+    if(!canEditOwn() || savingEntries) return false;
+    const incomplete=entries.some(r=>(r.code_id && String(r.hours??'').trim()==='') || (!r.code_id && String(r.hours??'').trim()!==''));
+    if(incomplete){$('userNotice').innerHTML=msg('Renseigne les heures pour chaque code choisi, ou retire la ligne avant d’enregistrer.','warn');return false;}
+    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({code_id:Number(r.code_id),hours:Number(String(r.hours).trim().replace(',','.'))}));
+    if(clean.some(r=>!Number.isFinite(r.hours)||r.hours<0)){$('userNotice').innerHTML=msg('Indique un nombre d’heures valide, positif ou nul.','warn');return false;}
+    if(new Set(clean.map(r=>r.code_id)).size!==clean.length){$('userNotice').innerHTML=msg('Un même code ne peut apparaître qu’une fois dans le mois.','warn');return false;}
+    const savedState=entryState();
+    savingEntries=true;$('saveEntries').disabled=true;$('saveEntries').textContent='Enregistrement en cours…';
+    try{
+      const {error}=await sb.rpc('pointage_save_entries',{p_unit_id:selectedUnit,p_month_key:selectedMonth,p_entries:clean});
+      if(error) throw error;
+      // Garder les éventuelles modifications saisies pendant la requête.
+      savedEntriesState=savedState;
+      updateEntrySaveState();
+      $('userNotice').innerHTML=msg(entriesDirty?'Enregistrement terminé. De nouvelles modifications restent à enregistrer.':'Tes données sont enregistrées. Tu peux quitter l’outil.','ok');
+      return true;
+    }catch(error){
+      $('userNotice').innerHTML=msg('Enregistrement impossible : '+error.message+'. Tes modifications restent à enregistrer.','warn');
+      return false;
+    }finally{
+      savingEntries=false;$('saveEntries').disabled=!canEditOwn();$('saveEntries').textContent='Enregistrer mes données';
+    }
+  }
+  $('saveEntries').onclick=()=>saveEntries();
 
   // Base documentaire commune à tous les comptes activés.
   const DOCUMENT_BUCKET='pointage-documents';
@@ -886,13 +903,12 @@
   });
 
   async function loadAdminData(){
-    const [p,e,s]=await Promise.all([
+    const [p,e]=await Promise.all([
       sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name'),
-      sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit).eq('month_key',selectedMonth),
-      sb.from('submissions').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth)
+      sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit).eq('month_key',selectedMonth)
     ]);
-    if(p.error||e.error||s.error){alert((p.error||e.error||s.error).message);return;}
-    allProfiles=(p.data||[]); adminEntries=e.data||[]; adminSubmissions=s.data||[];
+    if(p.error||e.error){alert((p.error||e.error).message);return;}
+    allProfiles=(p.data||[]); adminEntries=e.data||[];
     await loadAdminUsers();
     await loadAnnualData();
   }
@@ -925,16 +941,14 @@
     if(!year){$('summaryTable').innerHTML='<div class="muted small">Aucune année disponible.</div>';return;}
     const start=`${year}-01`, end=`${Number(year)+1}-01`;
     try {
-      const [codes,ents,subs]=await Promise.all([
+      const [codes,ents]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('submissions').select('user_id,month_key').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('month_key').order('user_id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
       annualCodes=codes;
       annualEntries=ents.filter(e=>!adminIds.has(e.user_id));
-      annualSubmissions=subs.filter(item=>!adminIds.has(item.user_id));
       annualReady=true;
       renderAnnualSummary();
       $('exportSummary').disabled=$('exportRaw').disabled=false;
@@ -1076,7 +1090,7 @@
             sb.from('submissions').select('user_id',{count:'exact',head:true}).eq('user_id',p.id)
           ]);
           if(entriesResult.error||submissionsResult.error){alert((entriesResult.error||submissionsResult.error).message);return;}
-          if(entriesResult.count||submissionsResult.count){alert('Ce compte possède déjà des pointages ou des validations. Son unité ne peut pas être changée depuis cet écran.');return;}
+          if(entriesResult.count||submissionsResult.count){alert('Ce compte possède déjà des données de pointage. Son unité ne peut pas être changée depuis cet écran.');return;}
         }
         const {data,error}=await sb.from('profiles').update({full_name:name,unit_id:unitId}).eq('id',p.id).eq('unit_id',p.unit_id).select('id').single();
         if(error||!data){alert(error?.message||'Modification impossible. Recharge la page.');return;}
@@ -1163,11 +1177,10 @@
     }
 
     const entryCount=adminEntries.length;
-    const validationCount=adminSubmissions.length;
 
     let text=`Modifier ${monthLabel(oldKey)} en ${monthLabel(newKey)} ?`;
-    if(entryCount || validationCount){
-      text += `\n\nLes ${entryCount} saisie(s) et ${validationCount} validation(s) rattachées à ce mois seront conservées.`;
+    if(entryCount){
+      text += `\n\nLes ${entryCount} saisie(s) rattachées à ce mois seront conservées.`;
     }
 
     if(!await confirmAction(text)) return;
@@ -1193,17 +1206,16 @@
     if(!key) return;
 
     const entryCount=adminEntries.length;
-    const validationCount=adminSubmissions.length;
 
     let warning=`Supprimer définitivement ${monthLabel(key)} ?`;
-    if(entryCount || validationCount){
-      warning += `\n\nATTENTION : ce mois contient ${entryCount} saisie(s) et ${validationCount} validation(s). Elles seront également supprimées.`;
+    if(entryCount){
+      warning += `\n\nATTENTION : ce mois contient ${entryCount} saisie(s). Elles seront également supprimées.`;
       warning += `\n\nCette opération est irréversible.`;
     } else {
       warning += `\n\nCe mois ne contient actuellement aucun pointage.`;
     }
 
-    if(!await confirmAction(warning,{title:'Supprimer le mois',button:'Supprimer',expected:(entryCount||validationCount)?key:''})) return;
+    if(!await confirmAction(warning,{title:'Supprimer le mois',button:'Supprimer',expected:entryCount?key:''})) return;
 
     const {error}=await sb.from('months').delete().eq('unit_id',selectedUnit).eq('month_key',key);
     if(error){
@@ -1324,13 +1336,12 @@
   }
   $('exportRaw').onclick=()=>{
     if(!annualReady) return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures','Validé']];
-    const subSet=new Set(annualSubmissions.map(s=>`${s.month_key}\u0000${s.user_id}`));
+    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',c?.code||'',c?.label||'',String(Number(e.hours)).replace('.',','),subSet.has(`${e.month_key}\u0000${e.user_id}`)?'Oui':'Non']);
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',c?.code||'',c?.label||'',String(Number(e.hours)).replace('.',',')]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
