@@ -364,32 +364,32 @@
   }
 
   const STANDARD_CODES = [
-    {label:'SOCIAL COMMISSION CCAS',code:'S4',document:'HEURE ACCORD MOYEN BENEVOLE'},
-    {label:'SOCIAL ADMINISTRATEUR',code:'S6',document:'HEURE ACCORD MOYEN BENEVOLE'},
-    {label:'SOCIAL AUTRE',code:'S0',document:'HEURE ACCORD MOYEN BENEVOLE'},
-    {label:'HEURE DS',code:'D4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF + NOTE DECOMPTE DES H DPNT'},
-    {label:'DETACHEMENT SYNDICAL',code:'L4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA + CRISTALISATION + DAP'},
+    {label:'SOCIAL COMMISSION CCAS',code:'S4',document:'ACCORD MOYENS BENEVOLES'},
+    {label:'SOCIAL ADMINISTRATEUR',code:'S6',document:'ACCORD MOYENS BENEVOLES'},
+    {label:'SOCIAL AUTRE',code:'S0',document:'ACCORD MOYENS BENEVOLES'},
+    {label:'HEURE DS',code:'D4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'DETACHEMENT SYNDICAL',code:'L4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA + CRISTALLISATION + DAPE'},
     {label:'DETACHEMENT SYNDICAL',code:'E4',document:'AVENANT N°2 ACCORD DROIT SYNDICAL + NOTIFICATION DROIT SYNDICAL EDF SA'},
-    {label:'HEURE CONF OU FEDE',code:'N4',document:'EN FONCTION DE LA NOTIF CONF OU FD'},
-    {label:'COORDINATEUR NATIONAL OU ADJOINT',code:'81',document:'EN FONCTION DE LA DOTATION DPNT'},
-    {label:'REUNION CSE',code:'1A',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION CSE',code:'1B',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'REUNION CSSCT',code:'OA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION ET REUNION CPS',code:'1G',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'REUNION RPX',code:'RA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION RPX',code:'RB',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES H DPNT'},
-    {label:'REUNION CSEC',code:'1K',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION CSEC',code:'1L',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
-    {label:'COMMISSION FACULTATIVE CSEC',code:'1R',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
-    {label:'REUNION CSSCT C',code:'OE',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION CSSCT C',code:'OB',document:'ACCORD CSEC + NOTE DECOMPTE DES H DPNT'},
-    {label:'CONVOCATION DIRECTION REUNION DIVERS',code:'46',document:'NOTE DECOMPTE DES H DPNT'},
-    {label:'REUNION CSP',code:'8F',document:'NOTE DECOMPTE DES H DPNT'},
-    {label:'PREPARATION CSP',code:'8G',document:'NOTE DECOMPTE DES H DPNT'},
-    {label:'CSNP',code:'Z7',document:'NOTE DECOMPTE DES H DPNT'},
-    {label:'GREVE',code:'52',document:'AUTANT QUE BESOIN'},
+    {label:'HEURE FEDERALE OU CONFEDERALE',code:'N4',document:'EN FONCTION DE LA NOTIFICATION FEDERALE OU CONFEDERALE'},
+    {label:'COORDINATEUR METIER ET APPUI',code:'81',document:'EN FONCTION DE LA DOTATION DPNT'},
+    {label:'REUNION CSE',code:'1A',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION CSE',code:'1B',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'REUNION CSSCT',code:'OA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION ET REUNION CPS',code:'1G',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'REUNION RPX',code:'RA',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION RPX',code:'RB',document:'AVENANT N°2 ACCORD CSE + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'REUNION CSEC',code:'1K',document:'ACCORD CSEC + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION CSEC',code:'1L',document:'ACCORD CSEC + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'COMMISSION FACULTATIVE CSEC',code:'1R',document:'ACCORD CSEC + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'REUNION CSSCT C',code:'OE',document:'ACCORD CSEC + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION CSSCT C',code:'OB',document:'ACCORD CSEC + NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'CONVOCATION DIRECTION',code:'46',document:'NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'REUNION CSP',code:'8F',document:'NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'PREPARATION CSP',code:'8G',document:'NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'CSNP',code:'Z7',document:'NOTE DECOMPTE DES HEURES DPNT'},
+    {label:'GREVE',code:'52',document:'AUTANT QUE DE BESOIN'},
     {label:'FORMATION OUVRIERE',code:'51',document:'CODE DU TRAVAIL'},
-    {label:'DEPLACEMENT SYNDICAL',code:'DP',document:'COLLECTE CGT POUR INFORMATION / NOTE DECOMPTE DES H DPNT + ACCORDS CSE / DROIT SYNDICAL'}
+    {label:'DEPLACEMENT SYNDICAL',code:'DP',document:'COLLECTE CGT POUR INFORMATION / NOTE DECOMPTE DES HEURES DPNT + ACCORDS CSE / DROIT SYNDICAL'}
   ];
 
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
@@ -1005,13 +1005,14 @@
   }
   $('loadStandardCodes').onclick=()=>{
     let updated=0;
-    const currentDP=editableAdminCodes.find(c=>String(c.code||'').trim().toUpperCase()==='DP');
-    if(currentDP){
-      if(currentDP.label!=='DÉPLACEMENTS'){currentDP.label='DÉPLACEMENTS';updated++;}
-    } else {
-      const formerDEP=editableAdminCodes.find(c=>String(c.code||'').trim().toUpperCase()==='DEP');
-      if(formerDEP){formerDEP.code='DP';formerDEP.label='DÉPLACEMENTS';updated++;}
-    }
+    const hasDP=editableAdminCodes.some(c=>String(c.code||'').trim().toUpperCase()==='DP');
+    editableAdminCodes.forEach(c=>{
+      const previousCode=c.code, previousLabel=c.label;
+      if(!hasDP && String(c.code||'').trim().toUpperCase()==='DEP') c.code='DP';
+      const standard=STANDARD_CODES.find(item=>item.code===String(c.code||'').trim().toUpperCase());
+      if(standard) c.label=standard.label;
+      if(c.code!==previousCode || c.label!==previousLabel) updated++;
+    });
     const existing=new Set(editableAdminCodes.map(c=>String(c.code||'').trim().toUpperCase()));
     const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
     if(!missing.length && !updated){$('codeAdminMessage').innerHTML=msg('Tous les codes de la liste standard sont déjà présents.','ok');return;}
