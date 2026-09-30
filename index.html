@@ -215,6 +215,14 @@
         </div>
         <hr>
         <div class="row">
+          <div class="smallfield"><label for="newYear">Année complète</label><input id="newYear" type="number" min="1900" max="9999" step="1"></div>
+          <label class="checkbox"><input id="copyYearCodes" type="checkbox" checked> Copier les codes du mois affiché</label>
+          <button id="createYear" type="button">Créer les 12 mois</button>
+        </div>
+        <p class="muted small">Création pour l’unité sélectionnée. Les mois existants sont conservés. Sans copie, la liste standard est utilisée. Tu peux ensuite ajouter ou modifier un code dans « Codes du mois ».</p>
+        <div id="yearAdminMessage" aria-live="polite"></div>
+        <hr>
+        <div class="row">
           <div class="grow">
             <strong id="adminSelectedMonth"></strong><br>
             <span class="muted small">Tu peux ouvrir/fermer, modifier ou supprimer le mois sélectionné.</span>
@@ -874,6 +882,36 @@
     const {error}=await sb.from('months').update({is_open:next}).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
     if(error){alert(error.message);return;}
     await loadMonths();
+  };
+
+  $('newYear').value=curMonth().slice(0,4);
+  $('createYear').onclick=async()=>{
+    if(!profile?.is_admin) return;
+    const year=$('newYear').value.trim(), unitId=selectedUnit;
+    if(!/^[1-9][0-9]{3}$/.test(year) || Number(year)<1900){
+      $('yearAdminMessage').innerHTML=msg('Indique une année valide à partir de 1900.','warn');return;
+    }
+    const unitName=units.find(u=>u.id===unitId)?.name||'';
+    const existing=months.filter(m=>m.month_key.startsWith(year+'-')).length;
+    if(existing===12){$('yearAdminMessage').innerHTML=msg('Les douze mois de '+year+' existent déjà pour '+unitName+'.','ok');return;}
+    let codes=$('copyYearCodes').checked?monthCodes.filter(c=>c.active).map(c=>({code:c.code,label:c.label})):[];
+    if(!codes.length) codes=STANDARD_CODES.map(c=>({code:c.code,label:c.label}));
+    if(!await confirmAction('Créer les '+(12-existing)+' mois manquants de '+year+' pour '+unitName+' avec '+codes.length+' codes par mois ? Les mois existants seront conservés.')) return;
+    const button=$('createYear');
+    button.disabled=true;button.textContent='Création en cours…';$('yearAdminMessage').innerHTML='';
+    try{
+      const {data,error}=await sb.rpc('pointage_create_year',{p_unit_id:unitId,p_year:Number(year),p_codes:codes});
+      if(error) throw error;
+      if(selectedUnit===unitId){
+        selectedMonth=year+'-01';
+        await loadMonths();
+      }
+      $('yearAdminMessage').innerHTML=msg(data.created+' mois créé(s) pour '+unitName+' en '+year+', '+data.existing+' mois déjà présent(s) conservé(s).','ok');
+    }catch(error){
+      $('yearAdminMessage').innerHTML=msg('Création impossible : '+error.message,'warn');
+    }finally{
+      button.disabled=false;button.textContent='Créer les 12 mois';
+    }
   };
 
   $('newMonth').value=curMonth();
