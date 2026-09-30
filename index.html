@@ -137,9 +137,9 @@
         <div class="big" id="userTotal">0,00 h</div>
       </div>
       <div id="userNotice"></div>
-      <div id="entryList"></div>
+      <p class="muted small">Sélectionne les codes utilisés ce mois, puis renseigne les heures sur chaque ligne.</p>
+      <div id="entryList" class="tablewrap"></div>
       <div class="actions">
-        <button id="addEntry">+ Ajouter un code</button>
         <button id="saveEntries" class="secondary">Enregistrer</button>
       </div>
       <div class="actions">
@@ -337,8 +337,14 @@
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
   const standardOrder = new Map(STANDARD_CODES.map((c,i)=>[c.code,i]));
   const referenceFor = code => STANDARD_CODES.find(c=>c.code===String(code||'').trim().toUpperCase())?.document||'—';
-  function orderAdminCodes(){
-    editableAdminCodes.sort((a,b)=>(standardOrder.get(String(a.code).toUpperCase())??Infinity)-(standardOrder.get(String(b.code).toUpperCase())??Infinity));
+  function orderedCodes(codes){
+    return codes.slice().sort((a,b)=>(standardOrder.get(String(a.code).trim().toUpperCase())??Infinity)-(standardOrder.get(String(b.code).trim().toUpperCase())??Infinity));
+  }
+  function orderAdminCodes(){ editableAdminCodes=orderedCodes(editableAdminCodes); }
+
+  // Structure commune aux deux écrans : même catalogue et mêmes références.
+  function codesTable(rows,extraHeaders,renderRow){
+    return `<table class="codestable"><thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th>${extraHeaders}</tr></thead><tbody>${rows.length?rows.map(renderRow).join(''):`<tr><td colspan="5" class="muted small">Aucun code pour ce mois.</td></tr>`}</tbody></table>`;
   }
 
   function setAuthMode(mode){
@@ -547,7 +553,7 @@
     $('toggleMonthState').textContent=mrec?.is_open?'Fermer le mois':'Rouvrir le mois';
     $('toggleMonthState').className=mrec?.is_open?'danger':'';
     const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).order('code');
-    if(ce){alert(ce.message);return;} monthCodes=codes||[];
+    if(ce){alert(ce.message);return;} monthCodes=orderedCodes(codes||[]);
     const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:String(x.hours)}));
     const {data:subs,error:se}=await sb.from('submissions').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).maybeSingle();
@@ -568,23 +574,29 @@
     $('submissionText').textContent=submission?`Validé le ${new Date(submission.submitted_at).toLocaleString('fr-FR')}`:'Non validé';
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') :
                                 submission ? msg('Ton mois est validé. Rouvre-le si tu dois corriger une saisie.','ok') : '';
-    if(!entries.length){
-      $('entryList').innerHTML=`<div class="muted small">Aucune saisie pour ce mois.</div>`;
-    } else {
-      $('entryList').innerHTML=entries.map((r,i)=>`
-        <div class="entry">
-          <div><label>Code</label><select data-code="${i}" ${can?'':'disabled'}>
-            <option value="">Choisir...</option>
-            ${monthCodes.filter(c=>c.active || c.id===r.code_id).map(c=>`<option value="${c.id}"${Number(c.id)===Number(r.code_id)?' selected':''}>${esc(c.code)} — ${esc(c.label)}</option>`).join('')}
-          </select></div>
-          <div><label>Heures</label><input data-hours="${i}" type="text" inputmode="decimal" value="${esc(r.hours)}" ${can?'':'disabled'}></div>
-          <button class="icon" data-del="${i}" ${can?'':'disabled'}>×</button>
-        </div>`).join('');
-    }
-    document.querySelectorAll('[data-code]').forEach(el=>el.onchange=e=>{entries[+e.target.dataset.code].code_id=Number(e.target.value)||''; updateTotal();});
-    document.querySelectorAll('[data-hours]').forEach(el=>el.oninput=e=>{entries[+e.target.dataset.hours].hours=e.target.value; updateTotal();});
-    document.querySelectorAll('[data-del]').forEach(el=>el.onclick=e=>{entries.splice(+e.target.dataset.del,1);renderUserEntries();});
-    $('addEntry').disabled=!can || monthCodes.filter(c=>c.active).length===0;
+    const visibleCodes=monthCodes.filter(c=>c.active || entries.some(r=>Number(r.code_id)===Number(c.id)));
+    $('entryList').innerHTML=codesTable(visibleCodes,'<th>Utilisé</th><th>Heures</th>',c=>{
+      const entry=entries.find(r=>Number(r.code_id)===Number(c.id));
+      return `<tr>
+        <td>${esc(c.label)}</td>
+        <td>${esc(c.code)}</td>
+        <td>${esc(referenceFor(c.code))}</td>
+        <td><label class="checkbox"><input data-use-code="${c.id}" type="checkbox" aria-label="Utiliser le code ${esc(c.code)}" ${entry?'checked':''} ${can?'':'disabled'}>${c.active?'':'Inactif'}</label></td>
+        <td><input data-code-hours="${c.id}" type="text" inputmode="decimal" aria-label="Heures pour le code ${esc(c.code)}" value="${esc(entry?.hours??'')}" ${can && entry?'':'disabled'}></td>
+      </tr>`;
+    });
+    document.querySelectorAll('[data-use-code]').forEach(el=>el.onchange=e=>{
+      const id=Number(e.target.dataset.useCode);
+      if(e.target.checked){
+        if(!entries.some(r=>Number(r.code_id)===id)) entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:id,hours:''});
+      } else entries=entries.filter(r=>Number(r.code_id)!==id);
+      renderUserEntries();
+    });
+    document.querySelectorAll('[data-code-hours]').forEach(el=>el.oninput=e=>{
+      const entry=entries.find(r=>Number(r.code_id)===Number(e.target.dataset.codeHours));
+      if(entry) entry.hours=e.target.value;
+      updateTotal();
+    });
     $('saveEntries').disabled=!can;
     $('submitMonth').classList.toggle('hidden',!!submission);
     $('submitMonth').disabled=!currentMonthRec()?.is_open;
@@ -593,13 +605,6 @@
   }
 
   function updateTotal(){ $('userTotal').textContent=`${fmt(entries.reduce((a,r)=>a+parseH(r.hours),0))} h`; }
-
-  $('addEntry').onclick=()=>{
-    const used=new Set(entries.map(e=>Number(e.code_id)));
-    const next=monthCodes.find(c=>c.active&&!used.has(Number(c.id)));
-    if(!next){alert('Tous les codes disponibles sont déjà présents dans le pointage.');return;}
-    entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:next.id,hours:''}); renderUserEntries();
-  };
 
   async function saveEntries(showOk=true){
     if(!canEditOwn()) return false;
@@ -723,14 +728,14 @@
   }
 
   function renderAdminCodes(){
-    $('adminCodes').innerHTML=`<table class="codestable"><thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th><th>Actif</th><th></th></tr></thead><tbody>${editableAdminCodes.length?editableAdminCodes.map((c,i)=>`
+    $('adminCodes').innerHTML=codesTable(editableAdminCodes,'<th>Actif</th><th></th>',(c,i)=>`
       <tr>
         <td><input data-alabel="${i}" aria-label="Libellé" value="${esc(c.label)}" placeholder="Libellé"></td>
         <td><input data-acode="${i}" aria-label="Code" value="${esc(c.code)}" placeholder="Code"></td>
         <td data-areference="${i}">${esc(referenceFor(c.code))}</td>
         <td><label class="checkbox"><input data-aactive="${i}" type="checkbox" ${c.active?'checked':''}> Actif</label></td>
         <td><button class="icon" aria-label="Retirer le code" data-aremove="${i}" ${c.id?'disabled title="Désactive le code au lieu de le supprimer"':''}>×</button></td>
-      </tr>`).join(''):'<tr><td colspan="5" class="muted small">Aucun code pour ce mois.</td></tr>'}</tbody></table>`;
+      </tr>`);
     document.querySelectorAll('[data-acode]').forEach(el=>el.oninput=e=>{
       editableAdminCodes[+e.target.dataset.acode].code=e.target.value;
       document.querySelector(`[data-areference="${e.target.dataset.acode}"]`).textContent=referenceFor(e.target.value);
