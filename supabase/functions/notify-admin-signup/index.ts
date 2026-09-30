@@ -15,9 +15,9 @@ Deno.serve(async (request: Request) => {
   const password = Deno.env.get("POINTAGE_GMAIL_APP_PASSWORD");
   if (!password) return Response.json({error:"SMTP_NOT_CONFIGURED"}, {status:503});
   const appPassword = password.replace(/\s/g, "");
-  if (appPassword.length !== 16) return Response.json({error:"APP_PASSWORD_FORMAT_INVALID"}, {status:400});
+  if (!/^[a-z]{16}$/.test(appPassword)) return Response.json({error:"APP_PASSWORD_FORMAT_INVALID"}, {status:400});
   const transport = nodemailer.createTransport({
-    host:"smtp.gmail.com", port:465, secure:true,
+    host:"smtp.gmail.com", port:465, secure:true, authMethod:"LOGIN",
     auth:{user:recipient,pass:appPassword},
     connectionTimeout:10000,greetingTimeout:10000,socketTimeout:20000,
     disableFileAccess:true,disableUrlAccess:true,
