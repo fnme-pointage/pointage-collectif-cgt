@@ -30,6 +30,7 @@
     hr{border:0;border-top:1px solid #eef0f4;margin:14px 0}.checkbox{display:flex;align-items:center;gap:7px}.checkbox input{width:auto}
     .adminnav{display:flex;gap:7px;overflow:auto;padding-bottom:2px;margin-bottom:14px}.adminnav button{white-space:nowrap;background:#eef0f4;color:var(--text)}.adminnav button.active{background:var(--accent);color:#fff}
     dialog{border:1px solid var(--border);border-radius:16px;padding:22px;width:min(440px,calc(100% - 28px));color:var(--text);box-shadow:0 16px 40px #0003}dialog::backdrop{background:#0008}dialog h2{margin:0 0 12px;font-size:1.1rem}dialog p{white-space:pre-line;line-height:1.5}dialog .actions{justify-content:flex-end}dialog .actions button{flex:0 1 auto;min-width:110px}
+    .document-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #eef0f4}.document-row:last-child{border:0}.document-row>div:first-child{min-width:0;overflow-wrap:anywhere}.document-actions{display:flex;gap:8px;flex-shrink:0}#pdfReader{width:min(1100px,96vw);max-height:94vh;padding:16px}#pdfReader .reader-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.reader-scroll{overflow:auto;max-height:70vh;background:#e9edf2;border-radius:10px;padding:10px;text-align:center}.reader-scroll canvas{background:white;box-shadow:0 1px 8px #0002;max-width:none}#readerTitle{overflow-wrap:anywhere}@media print{#pdfReader{display:none!important}}
     @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
   </style>
 </head>
@@ -129,6 +130,10 @@
     </div>
   </div>
 
+  <div id="userNav" class="adminnav hidden">
+    <button id="userPointageTab" class="active" type="button">Mon pointage</button>
+    <button id="userDocumentsTab" type="button">Base documentaire</button>
+  </div>
   <div id="userArea" class="hidden">
     <div class="card">
       <div class="sectiontitle">
@@ -160,6 +165,7 @@
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="months">Mois</button>
       <button data-admin-tab="units">Unités</button>
+      <button data-admin-tab="documents">Base documentaire</button>
     </div>
 
     <section id="admin-results">
@@ -260,7 +266,39 @@
       </div>
     </section>
   </div>
+  <section id="documentsArea" class="hidden">
+    <div class="card">
+      <div class="sectiontitle"><h2>Base documentaire</h2><button id="refreshDocuments" class="secondary" type="button">Actualiser</button></div>
+      <p class="muted small">Documents PDF disponibles en consultation.</p>
+      <div id="documentAdminForm" class="hidden">
+        <div class="row">
+          <div class="grow"><label for="documentTitle">Titre du document</label><input id="documentTitle" maxlength="200" placeholder="Ex. Accord droit syndical"></div>
+          <div class="grow"><label for="documentFile">Fichier PDF — 50 Mo maximum</label><input id="documentFile" type="file" accept="application/pdf,.pdf"></div>
+          <button id="addDocument" type="button">Ajouter le PDF</button>
+        </div>
+        <p id="documentStorage" class="muted small"></p>
+        <hr>
+      </div>
+      <label for="documentSearch">Rechercher un document</label><input id="documentSearch" type="search" placeholder="Rechercher par titre">
+      <div id="documentMessage" aria-live="polite" style="margin-top:10px"></div>
+      <div id="documentList"></div>
+    </div>
+  </section>
 </div>
+
+<dialog id="pdfReader" aria-labelledby="readerTitle">
+  <h2 id="readerTitle"></h2>
+  <div class="reader-bar">
+    <button id="readerPrev" class="secondary" type="button">← Page précédente</button>
+    <span id="readerPage" aria-live="polite"></span>
+    <button id="readerNext" class="secondary" type="button">Page suivante →</button>
+    <button id="readerZoomOut" class="secondary" aria-label="Réduire" type="button">−</button>
+    <button id="readerZoomIn" class="secondary" aria-label="Agrandir" type="button">+</button>
+    <button id="readerClose" class="secondary" type="button">Fermer</button>
+  </div>
+  <div id="readerMessage" aria-live="polite"></div>
+  <div id="readerScroll" class="reader-scroll"><canvas id="readerCanvas" aria-label="Page du document PDF"></canvas></div>
+</dialog>
 
 <dialog id="confirmDialog" aria-labelledby="confirmTitle">
   <h2 id="confirmTitle">Confirmation</h2>
@@ -293,6 +331,7 @@
   let annualYear='', annualEntries=[], annualCodes=[], annualSubmissions=[], annualReady=false, annualRequest=0;
   let units=[], selectedUnit='';
   let recoveryVerifying=false;
+  let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
   const $ = id => document.getElementById(id);
   const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
@@ -436,7 +475,7 @@
     $('authMsg').innerHTML=msg('Compte créé. Si la confirmation e-mail est activée, valide le message reçu, puis connecte-toi. Ton compte arrive dans ADMIN ; l’administrateur doit choisir ton unité et activer ton compte.','ok');
   };
 
-  async function logout(){await sb.auth.signOut();}
+  async function logout(){closePdfReader();documents=[];await sb.auth.signOut();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
@@ -455,6 +494,8 @@
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
   async function route(){
+    show('documentsArea',false);show('userNav',false);
+    closePdfReader();
     show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
     if(recovering){
       $('saveNewPassword').disabled=!session;
@@ -476,6 +517,8 @@
     $('userName').textContent=profile.full_name||profile.email;
     $('userRole').textContent=profile.is_admin?'Administrateur':'Utilisateur';
     show('adminArea',profile.is_admin);
+    show('userNav',!profile.is_admin);
+    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
@@ -682,10 +725,164 @@
     if(error){alert(error.message);return;} await loadMonthData();
   };
 
+  // Base documentaire commune à tous les comptes activés.
+  const DOCUMENT_BUCKET='pointage-documents';
+  const PDF_ASSET_URL='https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/';
+  const PDF_LIBRARY_URL=PDF_ASSET_URL+'legacy/build/';
+  const canReadDocuments=()=>!!session && !!profile && (profile.is_admin || profile.active);
+  $('userPointageTab').onclick=()=>{
+    show('documentsArea',false);show('userArea',!profile.is_admin);
+    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');
+  };
+  $('userDocumentsTab').onclick=()=>{
+    show('userArea',false);show('documentsArea',true);
+    $('userPointageTab').classList.remove('active');$('userDocumentsTab').classList.add('active');
+    loadDocuments();
+  };
+  $('refreshDocuments').onclick=()=>loadDocuments();
+  $('documentSearch').oninput=()=>renderDocuments();
+  async function loadDocuments(){
+    if(!canReadDocuments()) return;
+    const request=++documentRequest;
+    show('documentAdminForm',profile.is_admin);
+    $('documentMessage').innerHTML='';
+    $('documentList').innerHTML='<p class="muted small">Chargement des documents…</p>';
+    try{
+      const rows=await fetchAll(()=>sb.from('pointage_documents').select('*').order('title').order('id'));
+      if(request!==documentRequest || !canReadDocuments()) return;
+      documents=rows;renderDocuments();
+    }catch(error){
+      if(request!==documentRequest) return;
+      $('documentList').innerHTML='';
+      $('documentMessage').innerHTML=msg('Impossible de charger les documents : '+error.message,'warn');
+    }
+  }
+  function renderDocuments(){
+    const search=$('documentSearch').value.trim().toLocaleLowerCase('fr');
+    const visible=documents.filter(d=>d.title.toLocaleLowerCase('fr').includes(search));
+    $('documentList').innerHTML=visible.length?visible.map(d=>`<div class="document-row">
+      <div><strong>${esc(d.title)}</strong><br><span class="muted small">PDF · ${fmt(Number(d.file_size)/1048576)} Mo</span></div>
+      <div class="document-actions"><button type="button" class="secondary" data-view-document="${esc(d.id)}">Consulter</button>
+      ${profile.is_admin?`<button type="button" class="danger" data-delete-document="${esc(d.id)}">Supprimer</button>`:''}</div>
+    </div>`).join(''):'<p class="muted small">'+(search?'Aucun document ne correspond à cette recherche.':'Aucun document disponible pour le moment.')+'</p>';
+    $('documentStorage').textContent=documents.length+' PDF · '+fmt(documents.reduce((total,d)=>total+Number(d.file_size||0),0)/1048576)+' Mo de PDF enregistrés / quota gratuit de 1 Go.';
+    document.querySelectorAll('[data-view-document]').forEach(button=>button.onclick=()=>openPdfDocument(button.dataset.viewDocument));
+    document.querySelectorAll('[data-delete-document]').forEach(button=>button.onclick=()=>deleteDocument(button.dataset.deleteDocument,button));
+  }
+  $('addDocument').onclick=async()=>{
+    if(!profile?.is_admin) return;
+    const title=$('documentTitle').value.trim(), file=$('documentFile').files[0];
+    if(!title||!file){$('documentMessage').innerHTML=msg('Renseigne un titre et choisis un PDF.','warn');return;}
+    if(file.size===0 || file.size>52428800){$('documentMessage').innerHTML=msg('Le PDF doit faire entre 1 octet et 50 Mo.','warn');return;}
+    const header=new TextDecoder().decode(await file.slice(0,1024).arrayBuffer());
+    if(!header.includes('%PDF-')){$('documentMessage').innerHTML=msg('Le fichier sélectionné ne semble pas être un PDF.','warn');return;}
+    const button=$('addDocument'), id=crypto.randomUUID(), path=id+'.pdf';
+    button.disabled=true;button.textContent='Ajout en cours…';$('documentMessage').innerHTML='';
+    let uploaded=false;
+    try{
+      const {error:uploadError}=await sb.storage.from(DOCUMENT_BUCKET).upload(path,file,{contentType:'application/pdf',cacheControl:'3600',upsert:false});
+      if(uploadError) throw uploadError;
+      uploaded=true;
+      const {error}=await sb.from('pointage_documents').insert({id,title,file_path:path,file_size:file.size});
+      if(error) throw error;
+      uploaded=false;
+      $('documentTitle').value='';$('documentFile').value='';
+      await loadDocuments();
+      $('documentMessage').innerHTML=msg('Document ajouté. Les utilisateurs activés peuvent le consulter.','ok');
+    }catch(error){
+      if(uploaded){
+        const {error:cleanupError}=await sb.storage.from(DOCUMENT_BUCKET).remove([path]);
+        if(cleanupError){$('documentMessage').innerHTML=msg('Ajout incomplet : '+error.message+'. Le fichier '+path+' reste à retirer du stockage.','warn');return;}
+      }
+      $('documentMessage').innerHTML=msg('Impossible d’ajouter le PDF : '+error.message,'warn');
+    }finally{button.disabled=false;button.textContent='Ajouter le PDF';}
+  };
+  async function deleteDocument(id,button){
+    if(!profile?.is_admin) return;
+    const documentInfo=documents.find(d=>d.id===id);
+    if(!documentInfo || !await confirmAction('Supprimer le document « '+documentInfo.title+' » ?',{button:'Supprimer'})) return;
+    button.disabled=true;
+    try{
+      const {error:storageError}=await sb.storage.from(DOCUMENT_BUCKET).remove([documentInfo.file_path]);
+      if(storageError) throw storageError;
+      const {error}=await sb.from('pointage_documents').delete().eq('id',id);
+      if(error) throw error;
+      await loadDocuments();
+      $('documentMessage').innerHTML=msg('Document supprimé.','ok');
+    }catch(error){$('documentMessage').innerHTML=msg('Suppression impossible : '+error.message,'warn');button.disabled=false;}
+  }
+  function closePdfReader(){
+    readerRequest++;
+    if(readerRender){readerRender.cancel();readerRender=null;}
+    if(readerPdf){readerPdf.destroy();readerPdf=null;}
+    if($('pdfReader').open) $('pdfReader').close();
+    $('readerCanvas').width=0;$('readerCanvas').height=0;
+  }
+  $('readerClose').onclick=closePdfReader;
+  $('pdfReader').oncancel=e=>{e.preventDefault();closePdfReader();};
+  $('readerCanvas').oncontextmenu=e=>e.preventDefault();
+  $('readerPrev').onclick=()=>{if(readerPdf && readerPageNumber>1){readerPageNumber--;renderPdfPage();}};
+  $('readerNext').onclick=()=>{if(readerPdf && readerPageNumber<readerPdf.numPages){readerPageNumber++;renderPdfPage();}};
+  $('readerZoomOut').onclick=()=>{readerZoom=Math.max(.5,readerZoom-.25);renderPdfPage();};
+  $('readerZoomIn').onclick=()=>{readerZoom=Math.min(3,readerZoom+.25);renderPdfPage();};
+  async function openPdfDocument(id){
+    if(!canReadDocuments()) return;
+    const documentInfo=documents.find(d=>d.id===id);
+    if(!documentInfo) return;
+    closePdfReader();
+    const request=readerRequest;
+    $('readerTitle').textContent=documentInfo.title;
+    $('readerMessage').innerHTML=msg('Chargement du PDF…');
+    $('readerPage').textContent='';
+    $('readerPrev').disabled=$('readerNext').disabled=true;
+    $('pdfReader').showModal();
+    try{
+      if(!pdfLibrary) pdfLibrary=import(PDF_LIBRARY_URL+'pdf.min.mjs').catch(error=>{pdfLibrary=null;throw error;});
+      const [library,result]=await Promise.all([pdfLibrary,sb.storage.from(DOCUMENT_BUCKET).download(documentInfo.file_path)]);
+      if(result.error) throw result.error;
+      if(request!==readerRequest || !canReadDocuments()) return;
+      library.GlobalWorkerOptions.workerSrc=PDF_LIBRARY_URL+'pdf.worker.min.mjs';
+      const pdf=await library.getDocument({data:new Uint8Array(await result.data.arrayBuffer()),isEvalSupported:false,
+        cMapUrl:PDF_ASSET_URL+'cmaps/',cMapPacked:true,standardFontDataUrl:PDF_ASSET_URL+'standard_fonts/',wasmUrl:PDF_ASSET_URL+'wasm/'}).promise;
+      if(request!==readerRequest){await pdf.destroy();return;}
+      readerPdf=pdf;readerPageNumber=1;readerZoom=1;
+      await renderPdfPage();
+    }catch(error){
+      if(request===readerRequest) $('readerMessage').innerHTML=msg('Impossible d’afficher ce PDF : '+error.message,'warn');
+    }
+  }
+  async function renderPdfPage(){
+    if(!readerPdf) return;
+    const request=++readerRequest, pdf=readerPdf, number=readerPageNumber;
+    if(readerRender){readerRender.cancel();try{await readerRender.promise;}catch{}readerRender=null;}
+    try{
+      const page=await pdf.getPage(number);
+      if(request!==readerRequest || !readerPdf) return;
+      const base=page.getViewport({scale:1});
+      const width=Math.max(240,Math.min(950,$('readerScroll').clientWidth-24));
+      const viewport=page.getViewport({scale:width/base.width*readerZoom});
+      const ratio=Math.min(window.devicePixelRatio||1,2), canvas=$('readerCanvas');
+      canvas.width=Math.floor(viewport.width*ratio);canvas.height=Math.floor(viewport.height*ratio);
+      canvas.style.width=Math.floor(viewport.width)+'px';canvas.style.height=Math.floor(viewport.height)+'px';
+      canvas.setAttribute('aria-label',$('readerTitle').textContent+' — page '+number);
+      $('readerPrev').disabled=number===1;$('readerNext').disabled=number===pdf.numPages;
+      $('readerPage').textContent='Page '+number+' / '+pdf.numPages;
+      $('readerMessage').innerHTML='';
+      readerRender=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:ratio===1?null:[ratio,0,0,ratio,0,0]});
+      await readerRender.promise;
+      if(request===readerRequest) readerRender=null;
+    }catch(error){
+      if(request===readerRequest && error.name!=='RenderingCancelledException') $('readerMessage').innerHTML=msg('Affichage impossible : '+error.message,'warn');
+    }
+  }
+
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','months','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    const docsTab=btn.dataset.adminTab==='documents';
+    show('documentsArea',docsTab);
+    if(docsTab) loadDocuments();
   });
 
   async function loadAdminData(){
