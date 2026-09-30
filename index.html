@@ -700,6 +700,7 @@
   async function loadAnnualData(){
     const request=++annualRequest, year=annualYear, unitId=selectedUnit;
     annualReady=false;
+    show('summaryTable',units.find(u=>u.id===unitId)?.name!=='ADMIN');
     $('exportSummary').disabled=$('exportRaw').disabled=true;
     $('summaryTable').innerHTML='<div class="muted small">Chargement du suivi annuel…</div>';
     $('annualStats').textContent='';
@@ -741,6 +742,13 @@
   }
 
   function renderAnnualSummary(){
+    const showTable=units.find(u=>u.id===selectedUnit)?.name!=='ADMIN';
+    show('summaryTable',showTable);
+    if(!showTable){
+      $('summaryTable').innerHTML='';
+      $('annualStats').textContent='';
+      return;
+    }
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
     $('annualStats').textContent=`${units.find(u=>u.id===selectedUnit)?.name||''} · ${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
