@@ -14,9 +14,11 @@ Deno.serve(async (request: Request) => {
   if (authError || !allowed) return new Response("Unauthorized", { status: 401 });
   const password = Deno.env.get("POINTAGE_GMAIL_APP_PASSWORD");
   if (!password) return Response.json({error:"SMTP_NOT_CONFIGURED"}, {status:503});
+  const appPassword = password.replace(/\s/g, "");
+  if (appPassword.length !== 16) return Response.json({error:"APP_PASSWORD_FORMAT_INVALID"}, {status:400});
   const transport = nodemailer.createTransport({
     host:"smtp.gmail.com", port:465, secure:true,
-    auth:{user:recipient,pass:password.replace(/\s/g, "")},
+    auth:{user:recipient,pass:appPassword},
     connectionTimeout:10000,greetingTimeout:10000,socketTimeout:20000,
     disableFileAccess:true,disableUrlAccess:true,
   });
@@ -28,7 +30,7 @@ Deno.serve(async (request: Request) => {
         subject:"Test — notifications d’inscription Pointage collectif",
         text:"Les notifications sont configurées. Tu recevras un mail lorsqu’un nouvel inscrit aura confirmé son adresse et attendra l’activation de son compte.\n\n"+appUrl});
       return Response.json({sent:1,test:true});
-    } catch(error) { const e=error as {code?:string;responseCode?:number;command?:string;name?:string;response?:string}; return Response.json({error:"SMTP_TEST_FAILED",reason:/Application-specific password required/i.test(e.response||"")?"APP_PASSWORD_REQUIRED":/log in.*web browser/i.test(e.response||"")?"GOOGLE_ACCOUNT_VERIFICATION_REQUIRED":"AUTHENTICATION_FAILED",code:String(e.code||e.name||"UNKNOWN").replace(/[^A-Za-z0-9_]/g,"").slice(0,40),smtpStatus:Number(e.responseCode)||null,command:String(e.command||"").replace(/[^A-Z]/g,"").slice(0,20)},{status:502}); }
+    } catch(error) { const e=error as {code?:string;responseCode?:number;command?:string;name?:string;response?:string}; return Response.json({error:"SMTP_TEST_FAILED",enhancedStatus:(e.response||"").match(/\b[245]\.\d{1,3}\.\d{1,3}\b/)?.[0]||null,reason:/Application-specific password required/i.test(e.response||"")?"APP_PASSWORD_REQUIRED":/log in.*web browser/i.test(e.response||"")?"GOOGLE_ACCOUNT_VERIFICATION_REQUIRED":"AUTHENTICATION_FAILED",code:String(e.code||e.name||"UNKNOWN").replace(/[^A-Za-z0-9_]/g,"").slice(0,40),smtpStatus:Number(e.responseCode)||null,command:String(e.command||"").replace(/[^A-Z]/g,"").slice(0,20)},{status:502}); }
     finally { transport.close(); }
   }
   const {data: jobs,error: claimError}=await sb.rpc("pointage_claim_signup_notifications",{p_token:token});
