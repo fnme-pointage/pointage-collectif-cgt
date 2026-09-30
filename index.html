@@ -712,7 +712,10 @@
         fetchAll(()=>sb.from('submissions').select('user_id,month_key').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('month_key').order('user_id'))
       ]);
       if(request!==annualRequest) return;
-      annualCodes=codes; annualEntries=ents; annualSubmissions=subs;
+      const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
+      annualCodes=codes;
+      annualEntries=ents.filter(e=>!adminIds.has(e.user_id));
+      annualSubmissions=subs.filter(item=>!adminIds.has(item.user_id));
       annualReady=true;
       renderAnnualSummary();
       $('exportSummary').disabled=$('exportRaw').disabled=false;
@@ -725,7 +728,7 @@
   function annualReport(){
     const codeById=new Map(annualCodes.map(c=>[Number(c.id),c]));
     const codeNames=[...new Set(annualCodes.map(c=>c.code))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const people=allProfiles.filter(p=>p.unit_id===selectedUnit && (p.active || annualEntries.some(e=>e.user_id===p.id)));
+    const people=allProfiles.filter(p=>!p.is_admin && p.unit_id===selectedUnit && (p.active || annualEntries.some(e=>e.user_id===p.id)));
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of annualEntries){
       const code=codeById.get(Number(e.code_id))?.code;
@@ -811,7 +814,7 @@
 
   function renderUsers(){
     let html='<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité</th><th>Rôle</th><th>Actif</th><th>Gestion</th><th>Export individuel</th></tr></thead><tbody>';
-    adminUserProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td><td>${p.is_admin?'Administrateur':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button></td><td><button class="secondary" data-user-export="${esc(p.id)}" type="button">Exporter CSV</button></td></tr>`);
+    adminUserProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td><td>${p.is_admin?'Administrateur':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button></td><td>${p.is_admin?'<span class="muted small">Sans pointage</span>':`<button class="secondary" data-user-export="${esc(p.id)}" type="button">Exporter CSV</button>`}</td></tr>`);
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-export]').forEach(button=>button.onclick=()=>exportIndividual(button.dataset.userExport,button));
     document.querySelectorAll('[data-user-active]').forEach(el=>el.onchange=async e=>{
@@ -975,7 +978,7 @@
     if(!profile?.is_admin) return;
     const person=adminUserProfiles.find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
-    if(!person) return;
+    if(!person || person.is_admin) return;
     if(!/^[1-9]\d{3}$/.test(year)){
       $('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');
       return;
