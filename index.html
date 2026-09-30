@@ -167,9 +167,9 @@
   <div id="adminArea" class="hidden">
     <div class="adminnav">
       <button data-admin-tab="results" class="active">Suivi</button>
-      <button data-admin-tab="codes">Codes du mois</button>
+      <button data-admin-tab="codes" class="hidden">Codes du mois</button>
       <button data-admin-tab="users">Utilisateurs</button>
-      <button data-admin-tab="months">Mois</button>
+      <button data-admin-tab="months" class="hidden">Mois</button>
       <button data-admin-tab="units">Unités</button>
       <button data-admin-tab="documents">Base documentaire</button>
     </div>
@@ -619,6 +619,7 @@
   };
 
   async function loadMonths(){
+    if(profile.is_admin) renderAdminNavigation();
     const {data,error}=await sb.from('months').select('*').eq('unit_id',selectedUnit).order('month_key',{ascending:false});
     if(error){alert(error.message);return;}
     months=data||[];
@@ -944,7 +945,22 @@
   }
 
   // ADMIN
+  function renderAdminNavigation(){
+    const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    document.querySelectorAll('[data-admin-tab="codes"], [data-admin-tab="months"]').forEach(btn=>{
+      btn.classList.toggle('hidden',isAdminUnit);
+    });
+    if(isAdminUnit){
+      const activeTab=document.querySelector('[data-admin-tab].active');
+      if(['codes','months'].includes(activeTab?.dataset.adminTab)){
+        document.querySelector('[data-admin-tab="results"]').click();
+      }
+      show('admin-codes',false);
+      show('admin-months',false);
+    }
+  }
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
+    if(btn.classList.contains('hidden')) return;
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','months','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     const docsTab=btn.dataset.adminTab==='documents';
