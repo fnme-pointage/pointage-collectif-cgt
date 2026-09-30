@@ -21,6 +21,7 @@
     .sectiontitle{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.sectiontitle h2{font-size:1rem;margin:0}
     .entry{display:grid;grid-template-columns:1fr 130px 44px;gap:8px;align-items:end;padding:8px 0;border-bottom:1px solid #eef0f4}.entry:last-child{border-bottom:0}
     .entry{padding:12px;background:#f8f9fb;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;align-items:start}.entry:last-child{border-bottom:1px solid var(--border)}.entry>div{min-width:0}.entry .icon{margin-top:24px}.entry-reference{font-size:.78rem;color:var(--muted);line-height:1.5;margin-top:8px;overflow-wrap:anywhere}.entry select{font-size:.9rem}
+    .code-picker{position:relative}.code-picker summary{list-style:none;cursor:pointer;border:1px solid var(--border);border-radius:10px;padding:10px 32px 10px 11px;background:#fff;position:relative;font-size:.9rem}.code-picker summary::-webkit-details-marker{display:none}.code-picker summary::after{content:'▾';position:absolute;right:12px}.picker-panel{position:absolute;top:calc(100% + 6px);left:0;width:min(850px,calc(100vw - 60px));z-index:5;background:#fff;box-shadow:0 8px 24px #0002;border:1px solid var(--border);border-radius:12px;max-height:380px;overflow:auto}.code-picker .codestable{min-width:720px}.code-picker .codestable td{white-space:normal}.code-picker .codestable td:first-child{min-width:200px}.code-choice{font-size:.85rem;padding:7px 10px;white-space:nowrap}.picker-current{font-size:.9rem;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:#eef0f4}
     .icon{height:42px;padding:0;background:var(--dangerbg);color:var(--danger);font-size:1.1rem}
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions>*{flex:1;min-width:170px}
     .codestable{min-width:950px}.codestable td:nth-child(3){white-space:normal;min-width:300px}.codestable td:nth-child(1){min-width:230px}.codestable td:nth-child(2){min-width:100px}.codestable .icon{width:38px}
@@ -138,7 +139,7 @@
         <div class="big" id="userTotal">0,00 h</div>
       </div>
       <div id="userNotice"></div>
-      <p class="muted small">Choisis un code dans le menu déroulant, puis renseigne les heures. Les accords de référence apparaissent sous le code.</p>
+      <p class="muted small">Ouvre la liste déroulante pour consulter les libellés, les codes et les accords, puis sélectionne un code et renseigne les heures.</p>
       <div id="entryList"></div>
       <div class="actions">
         <button id="addEntry" type="button">+ Ajouter un code</button>
@@ -346,7 +347,7 @@
 
   // Structure commune aux deux écrans : même catalogue et mêmes références.
   function codesTable(rows,extraHeaders,renderRow){
-    return `<table class="codestable"><thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th>${extraHeaders}</tr></thead><tbody>${rows.length?rows.map(renderRow).join(''):`<tr><td colspan="5" class="muted small">Aucun code pour ce mois.</td></tr>`}</tbody></table>`;
+    return `<table class="codestable"><thead><tr><th>Libellé</th><th>Code</th><th>Document de référence</th>${extraHeaders}</tr></thead><tbody>${rows.length?rows.map(renderRow).join(''):`<tr><td colspan="${extraHeaders?5:3}" class="muted small">Aucun code pour ce mois.</td></tr>`}</tbody></table>`;
   }
 
   function setAuthMode(mode){
@@ -580,25 +581,30 @@
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
       const code=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
       return `<div class="entry">
-        <div><label for="entryCode${i}">Code et libellé</label>
-          <select id="entryCode${i}" data-code="${i}" ${can?'':'disabled'}>
-            <option value="">Choisir un code…</option>
-            ${monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)).map(c=>{
+        <div><label id="entryCodeLabel${i}">Libellé, code et accords</label>
+          ${can?`<details class="code-picker" data-picker="${i}">
+            <summary id="entryCode${i}" aria-labelledby="entryCodeLabel${i} entryCode${i}">${code?`${esc(code.code)} — ${esc(code.label)}`:'Choisir un code…'}</summary>
+            <div class="picker-panel">${codesTable(monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)),'',c=>{
               const used=entries.some((other,j)=>j!==i && Number(other.code_id)===Number(c.id));
-              return `<option value="${c.id}" ${Number(c.id)===Number(r.code_id)?'selected':''} ${used?'disabled':''}>${esc(c.code)} — ${esc(c.label)}${c.active?'':' (inactif)'}</option>`;
-            }).join('')}
-          </select>
+              return `<tr><td>${esc(c.label)}${c.active?'':' (inactif)'}</td><td><button class="code-choice" type="button" data-pick-entry="${i}" data-pick-code="${c.id}" aria-label="Choisir ${esc(c.code)} — ${esc(c.label)}" ${used?'disabled':''}>${esc(c.code)}${Number(c.id)===Number(r.code_id)?' ✓':''}</button></td><td>${esc(referenceFor(c.code))}</td></tr>`;
+            })}</div>
+          </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
           <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code.code))}`:'Les accords seront affichés après le choix du code.'}</div>
         </div>
         <div><label for="entryHours${i}">Heures</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="decimal" placeholder="Ex. 7,50" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
       </div>`;
     }).join(''):'<div class="muted small">Aucune saisie pour ce mois.</div>';
-    document.querySelectorAll('[data-code]').forEach(el=>el.onchange=e=>{
-      const i=Number(e.target.dataset.code), id=Number(e.target.value)||'';
+    document.querySelectorAll('[data-pick-code]').forEach(el=>el.onclick=e=>{
+      const i=Number(e.currentTarget.dataset.pickEntry), id=Number(e.currentTarget.dataset.pickCode);
+      if(!canEditOwn() || entries.some((r,j)=>j!==i && Number(r.code_id)===id)) return;
       if(!entries[i]) entries[i]={id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''};
       entries[i].code_id=id;
       renderUserEntries();
+      $('entryCode'+i).focus();
+    });
+    document.querySelectorAll('[data-picker]').forEach(el=>el.ontoggle=()=>{
+      if(el.open) document.querySelectorAll('[data-picker]').forEach(other=>{if(other!==el) other.open=false;});
     });
     document.querySelectorAll('[data-hours]').forEach(el=>el.oninput=e=>{
       const entry=entries[Number(e.target.dataset.hours)];
