@@ -20,6 +20,7 @@
     .muted{color:var(--muted)} .small{font-size:.82rem}.big{font-size:1.9rem;font-weight:800}
     .sectiontitle{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.sectiontitle h2{font-size:1rem;margin:0}
     .entry{display:grid;grid-template-columns:1fr 130px 44px;gap:8px;align-items:end;padding:8px 0;border-bottom:1px solid #eef0f4}.entry:last-child{border-bottom:0}
+    .entry{padding:12px;background:#f8f9fb;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;align-items:start}.entry:last-child{border-bottom:1px solid var(--border)}.entry>div{min-width:0}.entry .icon{margin-top:24px}.entry-reference{font-size:.78rem;color:var(--muted);line-height:1.5;margin-top:8px;overflow-wrap:anywhere}.entry select{font-size:.9rem}
     .icon{height:42px;padding:0;background:var(--dangerbg);color:var(--danger);font-size:1.1rem}
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions>*{flex:1;min-width:170px}
     .codestable{min-width:950px}.codestable td:nth-child(3){white-space:normal;min-width:300px}.codestable td:nth-child(1){min-width:230px}.codestable td:nth-child(2){min-width:100px}.codestable .icon{width:38px}
@@ -137,9 +138,10 @@
         <div class="big" id="userTotal">0,00 h</div>
       </div>
       <div id="userNotice"></div>
-      <p class="muted small">Sélectionne les codes utilisés ce mois, puis renseigne les heures sur chaque ligne.</p>
-      <div id="entryList" class="tablewrap"></div>
+      <p class="muted small">Choisis un code dans le menu déroulant, puis renseigne les heures. Les accords de référence apparaissent sous le code.</p>
+      <div id="entryList"></div>
       <div class="actions">
+        <button id="addEntry" type="button">+ Ajouter un code</button>
         <button id="saveEntries" class="secondary">Enregistrer</button>
       </div>
       <div class="actions">
@@ -574,29 +576,40 @@
     $('submissionText').textContent=submission?`Validé le ${new Date(submission.submitted_at).toLocaleString('fr-FR')}`:'Non validé';
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') :
                                 submission ? msg('Ton mois est validé. Rouvre-le si tu dois corriger une saisie.','ok') : '';
-    const visibleCodes=monthCodes.filter(c=>c.active || entries.some(r=>Number(r.code_id)===Number(c.id)));
-    $('entryList').innerHTML=codesTable(visibleCodes,'<th>Utilisé</th><th>Heures</th>',c=>{
-      const entry=entries.find(r=>Number(r.code_id)===Number(c.id));
-      return `<tr>
-        <td>${esc(c.label)}</td>
-        <td>${esc(c.code)}</td>
-        <td>${esc(referenceFor(c.code))}</td>
-        <td><label class="checkbox"><input data-use-code="${c.id}" type="checkbox" aria-label="Utiliser le code ${esc(c.code)}" ${entry?'checked':''} ${can?'':'disabled'}>${c.active?'':'Inactif'}</label></td>
-        <td><input data-code-hours="${c.id}" type="text" inputmode="decimal" aria-label="Heures pour le code ${esc(c.code)}" value="${esc(entry?.hours??'')}" ${can && entry?'':'disabled'}></td>
-      </tr>`;
-    });
-    document.querySelectorAll('[data-use-code]').forEach(el=>el.onchange=e=>{
-      const id=Number(e.target.dataset.useCode);
-      if(e.target.checked){
-        if(!entries.some(r=>Number(r.code_id)===id)) entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:id,hours:''});
-      } else entries=entries.filter(r=>Number(r.code_id)!==id);
+    const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
+    $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
+      const code=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
+      return `<div class="entry">
+        <div><label for="entryCode${i}">Code et libellé</label>
+          <select id="entryCode${i}" data-code="${i}" ${can?'':'disabled'}>
+            <option value="">Choisir un code…</option>
+            ${monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)).map(c=>{
+              const used=entries.some((other,j)=>j!==i && Number(other.code_id)===Number(c.id));
+              return `<option value="${c.id}" ${Number(c.id)===Number(r.code_id)?'selected':''} ${used?'disabled':''}>${esc(c.code)} — ${esc(c.label)}${c.active?'':' (inactif)'}</option>`;
+            }).join('')}
+          </select>
+          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code.code))}`:'Les accords seront affichés après le choix du code.'}</div>
+        </div>
+        <div><label for="entryHours${i}">Heures</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="decimal" placeholder="Ex. 7,50" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
+        <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
+      </div>`;
+    }).join(''):'<div class="muted small">Aucune saisie pour ce mois.</div>';
+    document.querySelectorAll('[data-code]').forEach(el=>el.onchange=e=>{
+      const i=Number(e.target.dataset.code), id=Number(e.target.value)||'';
+      if(!entries[i]) entries[i]={id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''};
+      entries[i].code_id=id;
       renderUserEntries();
     });
-    document.querySelectorAll('[data-code-hours]').forEach(el=>el.oninput=e=>{
-      const entry=entries.find(r=>Number(r.code_id)===Number(e.target.dataset.codeHours));
+    document.querySelectorAll('[data-hours]').forEach(el=>el.oninput=e=>{
+      const entry=entries[Number(e.target.dataset.hours)];
       if(entry) entry.hours=e.target.value;
       updateTotal();
     });
+    document.querySelectorAll('[data-del]').forEach(el=>el.onclick=e=>{
+      entries.splice(Number(e.target.dataset.del),1);
+      renderUserEntries();
+    });
+    $('addEntry').disabled=!can || entries.some(r=>!r.code_id) || !monthCodes.some(c=>c.active && !entries.some(r=>Number(r.code_id)===Number(c.id)));
     $('saveEntries').disabled=!can;
     $('submitMonth').classList.toggle('hidden',!!submission);
     $('submitMonth').disabled=!currentMonthRec()?.is_open;
@@ -605,6 +618,13 @@
   }
 
   function updateTotal(){ $('userTotal').textContent=`${fmt(entries.reduce((a,r)=>a+parseH(r.hours),0))} h`; }
+
+  $('addEntry').onclick=()=>{
+    if(!canEditOwn()) return;
+    entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''});
+    renderUserEntries();
+    $('entryCode'+(entries.length-1)).focus();
+  };
 
   async function saveEntries(showOk=true){
     if(!canEditOwn()) return false;
