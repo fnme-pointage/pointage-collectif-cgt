@@ -199,7 +199,7 @@
           <div class="smallfield"><label for="userExportYear">Année des exports CSV</label><input id="userExportYear" type="number" min="1900" max="9999" step="1"></div>
         </div>
         <p class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Tout nouveau compte arrive dans ADMIN. La colonne « Unité demandée » indique son choix à l’inscription : utilise « Modifier » pour choisir son unité affectée, puis active-le.</p>
-        <p class="muted small">Le bouton « Exporter CSV » extrait le détail annuel de la personne pour l’année indiquée ci-dessus, dans son unité.</p>
+        <p class="muted small">Le bouton « Exporter CSV » extrait le récapitulatif annuel par code de la personne pour l’année indiquée ci-dessus, dans son unité.</p>
         <div id="userExportMessage" aria-live="polite"></div>
         <div id="usersTable"></div>
       </div>
@@ -969,20 +969,20 @@
 
   $('userExportYear').value=curMonth().slice(0,4);
 
-  function individualCsvRows(person,unitName,codes,personEntries,submissions){
-    const codeById=new Map(codes.map(c=>[Number(c.id),c]));
-    const validated=new Set(submissions.map(s=>s.month_key));
-    const rows=[['Mois','Nom','E-mail','Unité','Code','Libellé','Accords de référence','Heures','Validé']];
-    const sorted=personEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key) ||
-      String(codeById.get(Number(a.code_id))?.code||'').localeCompare(String(codeById.get(Number(b.code_id))?.code||''),'fr',{numeric:true}));
-    let totalCents=0;
-    for(const entry of sorted){
-      const code=codeById.get(Number(entry.code_id));
-      totalCents+=Math.round(Number(entry.hours||0)*100);
-      rows.push([entry.month_key,person.full_name||'',person.email||'',unitName,code?.code||'',code?.label||'',referenceFor(code?.code),String(Number(entry.hours||0)).replace('.',','),validated.has(entry.month_key)?'Oui':'Non']);
+  function individualCsvRows(person,year,codes,personEntries){
+    const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
+    const totals=new Map();
+    for(const entry of personEntries){
+      const code=codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      totals.set(code,(totals.get(code)||0)+Math.round(Number(entry.hours||0)*100));
     }
-    rows.push(['TOTAL',person.full_name||'',person.email||'',unitName,'','','',String(totalCents/100).replace('.',','),'']);
-    return rows;
+    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const totalCents=[...totals.values()].reduce((sum,n)=>sum+n,0);
+    const decimal=cents=>String(cents/100).replace('.',',');
+    return [
+      ['Année','Utilisateur',...codeNames,'Total heures'],
+      [year,person.full_name||person.email||person.id,...codeNames.map(code=>decimal(totals.get(code)||0)),decimal(totalCents)]
+    ];
   }
 
   async function exportIndividual(userId,button){
@@ -994,23 +994,22 @@
       $('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');
       return;
     }
-    const unitId=person.unit_id, unitName=units.find(u=>u.id===unitId)?.name||'';
+    const unitId=person.unit_id;
     const start=year+'-01', end=String(Number(year)+1)+'-01';
     button.disabled=true;
     button.textContent='Export en cours…';
     $('userExportMessage').innerHTML='';
     try{
-      const [codes,personEntries,submissions]=await Promise.all([
+      const [codes,personEntries]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('submissions').select('user_id,month_key').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('month_key'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(!personEntries.length){
         $('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');
         return;
       }
       const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
-      csvDownload('pointage-individuel-'+name+'-'+year+'.csv',individualCsvRows(person,unitName,codes,personEntries,submissions));
+      csvDownload('pointage-individuel-'+name+'-'+year+'.csv',individualCsvRows(person,year,codes,personEntries));
       $('userExportMessage').innerHTML=msg('Export CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
     }catch(error){
       $('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');
