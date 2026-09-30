@@ -170,7 +170,7 @@
         </div>
         <p id="annualStats" class="muted small"></p>
         <div id="summaryTable"></div>
-        <div class="actions">
+        <div id="unitExportActions" class="actions hidden">
           <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
           <button id="exportRaw" class="secondary" disabled>Exporter le détail annuel CSV</button>
         </div>
@@ -552,6 +552,7 @@
     let yearMonths=months;
     const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('globalExportArea',globalView);
+    show('unitExportActions',!globalView);
     if(globalView){
       try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').order('unit_id').order('month_key'));}
       catch(error){$('globalExportMessage').innerHTML=msg('Impossible de charger les années de toutes les unités : '+error.message,'warn');}
