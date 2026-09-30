@@ -58,7 +58,6 @@
       <label>Mot de passe</label><input id="loginPassword" type="password" autocomplete="current-password">
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
       <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
-      <div class="actions"><button id="openSignupVerification" class="secondary" type="button">Confirmer mon adresse e-mail avec un code</button></div>
     </div>
     <div id="forgotForm" class="hidden">
       <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
@@ -428,7 +427,6 @@
     $('signupVerificationCode').value='';
     setAuthMode('verifySignup');
   }
-  $('openSignupVerification').onclick=()=>openSignupVerification($('loginEmail').value.trim());
   $('signupVerificationBack').onclick=()=>setAuthMode('login');
   $('resendSignupCode').onclick=async()=>{
     const email=$('signupVerificationEmail').value.trim();
