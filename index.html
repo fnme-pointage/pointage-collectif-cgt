@@ -77,7 +77,9 @@
       <div style="height:9px"></div>
       <label>Adresse e-mail</label><input id="signupEmail" type="email" autocomplete="email">
       <div style="height:9px"></div>
-      <label>Mot de passe</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password">
+      <label for="signupPassword">Mot de passe</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password">
+      <div style="height:9px"></div>
+      <label for="signupPasswordConfirm">Confirmer le mot de passe</label><input id="signupPasswordConfirm" type="password" minlength="8" autocomplete="new-password" required>
       <div style="height:9px"></div>
       <label for="signupUnit">Unité souhaitée</label><select id="signupUnit" required></select>
       <div class="actions"><button id="signupBtn">Créer mon compte</button></div>
@@ -506,11 +508,14 @@
     $('authMsg').innerHTML='';
     const name=$('signupName').value.trim(), email=$('signupEmail').value.trim(), password=$('signupPassword').value, unitId=$('signupUnit').value;
     if(!name||!email||password.length<8||!unitId||!units.some(u=>u.id===unitId)){$('authMsg').innerHTML=msg('Renseigne le nom, l’e-mail, l’unité et un mot de passe de 8 caractères minimum.','warn');return;}
+    const confirmation=$('signupPasswordConfirm').value;
+    if(!confirmation){$('authMsg').innerHTML=msg('Confirme ton mot de passe dans le second champ.','warn');$('signupPasswordConfirm').focus();return;}
+    if(password!==confirmation){$('authMsg').innerHTML=msg('Les deux mots de passe ne correspondent pas. Vérifie les deux saisies.','warn');$('signupPasswordConfirm').focus();return;}
     $('signupBtn').disabled=true;
     try{
       const {data,error}=await sb.auth.signUp({email,password,options:{data:{full_name:name,unit_id:unitId}}});
       if(error){$('authMsg').innerHTML=msg(error.message,'warn');return;}
-      $('signupPassword').value='';
+      $('signupPassword').value='';$('signupPasswordConfirm').value='';
       if(data?.session){session=data.session;await route();return;}
       openSignupVerification(email);
       $('authMsg').innerHTML=msg('Un code de confirmation a été envoyé par mail. Recopie-le ci-dessous. L’administrateur choisira ensuite ton unité et activera ton compte.','ok');
