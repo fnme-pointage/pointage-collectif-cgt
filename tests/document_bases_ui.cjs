@@ -22,6 +22,11 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
   });
   await page.goto('https://pointage.test/');await page.locator('#mainView').waitFor({state:'visible'});
   if(mode==='user'){
+   assert.equal(await page.locator('#monthSelect').isVisible(),false);
+   await page.locator('[data-space-month="2026-11"]').click();
+   await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2026-11');
+   await page.locator('[data-space-month="2026-10"]').click();
+   await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2026-10');
    assert.equal(await page.locator('#spaceYear').evaluate(e=>e.tagName),'SELECT');
    await page.locator('#entryHours0').fill('8,25');
    await page.locator('#spaceYear').selectOption('2027');await page.locator('#confirmCancel').click();
@@ -46,6 +51,7 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    await page.screenshot({path:'/tmp/documents-unit-mobile.png',fullPage:true});
    await page.locator('#userPointageTab').click();assert.equal(await page.locator('#documentsArea').isVisible(),false);
   }else{
+   assert.equal(await page.locator('#monthSelect').isVisible(),true);
    assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
    await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
    await page.locator('#adminUnit').selectOption('ulm');
