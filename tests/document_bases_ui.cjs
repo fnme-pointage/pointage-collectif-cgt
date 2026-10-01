@@ -51,10 +51,13 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    await page.screenshot({path:'/tmp/documents-unit-mobile.png',fullPage:true});
    await page.locator('#userPointageTab').click();assert.equal(await page.locator('#documentsArea').isVisible(),false);
   }else{
-   assert.equal(await page.locator('#monthSelect').isVisible(),true);
+   assert.equal(await page.locator('#monthSelect').isVisible(),false);
    assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
    await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
    await page.locator('#adminUnit').selectOption('ulm');
+   await page.locator('[data-space-month="2026-11"]').click();
+   await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2026-11');
+   assert.equal(await page.locator('#monthSelect').isVisible(),false);
    await page.locator('[data-admin-tab="unit-documents"]').click();await page.getByText('Document ULM',{exact:true}).waitFor();
    await page.locator('#adminUnit').selectOption('ufpi');await page.getByText('Document UFPI',{exact:true}).waitFor();
    assert.match(await page.locator('#documentsTitle').textContent(),/UFPI/);

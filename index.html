@@ -566,7 +566,6 @@
     show('userNav',!profile.is_admin);
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
-    show('adminMonthField',profile.is_admin);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
       if(ue){alert(ue.message);return;}
