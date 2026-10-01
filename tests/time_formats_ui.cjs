@@ -13,7 +13,9 @@ stub=stub.replace('window.calls.push({name,args});',`window.calls.push({name,arg
   await page.goto('https://pointage.test/');await page.locator('#entryHours0').waitFor();
   assert.equal(await page.locator('#entryHours0').inputValue(),'7,5');
   assert.equal(await page.locator('#timeInputMode').count(),0);
-  assert.match(await page.locator('#timeInputHelp').locator('..').textContent(),/Merci de reporter les éléments de vos CRI/);
+  assert.match(await page.locator('.entry-reference').first().textContent(),/Accords de référence[\s\S]*Saisis des heures décimales/);
+  assert.equal(await page.getByText('Les deux formats sont convertis automatiquement', {exact:false}).count(),0);
+  assert.match(await page.locator('#entryList').locator('..').textContent(),/Merci de reporter les éléments de vos CRI/);
   await page.locator('#entryHours0').fill('7:30');await page.locator('#saveEntries').click();assert.match(await page.locator('#userNotice').textContent(),/heures décimales valides/);
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.name==='pointage_save_entries').length),0);
   await page.locator('#entryHours0').fill('7,50');await page.locator('#saveEntries').click();await page.waitForFunction(()=>document.querySelector('#userNotice').textContent.includes('Tes données sont enregistrées'));

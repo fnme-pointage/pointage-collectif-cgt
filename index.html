@@ -177,7 +177,6 @@
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures.</p>
       <p class="muted small">Merci de reporter les éléments de vos CRI.</p>
-      <p id="timeInputHelp" class="muted small"></p>
       <div id="entryList"></div>
       <div class="actions">
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
@@ -185,7 +184,6 @@
       </div>
       <p id="entryCorrectionHelp" class="muted small">En cas d’erreur sur une saisie déjà enregistrée, corrige la ligne concernée, puis clique à nouveau sur « Enregistrer mes données » pour sauvegarder la correction.</p>
       <div class="notice warn">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
-      <p class="muted small">Les deux formats sont convertis automatiquement dans une durée commune pour les totaux et les exports.</p>
     </div>
   </div>
 
@@ -841,7 +839,6 @@
   function renderUserEntries(){
     const can=canEditOwn();
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
-    $('timeInputHelp').textContent=timeInputMode==='clock'?'Saisis heures:minutes, par exemple 7:30 pour 7 h 30 min.':'Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
@@ -855,7 +852,7 @@
               return `<tr><td>${esc(c.label)}${c.active?'':' (inactif)'}</td><td><button class="code-choice" type="button" data-pick-entry="${i}" data-pick-code="${c.id}" aria-label="Choisir ${esc(c.code)} — ${esc(c.label)}" ${used?'disabled':''}>${esc(c.code)}${Number(c.id)===Number(r.code_id)?' ✓':''}</button></td><td>${esc(referenceFor(c))}</td></tr>`;
             })}</div>
           </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
-          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}</div>
+          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}<p class="muted small">Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.</p></div>
         </div>
         <div><label for="entryHours${i}">${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
