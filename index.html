@@ -358,9 +358,9 @@
     const text=String(value??'').trim();if(!text)return null;
     let seconds;
     if(mode==='clock'){
-      const parts=text.match(/^(\d+):([0-5]\d)(?::([0-5]\d))?$/);
+      const parts=text.match(/^(\d+):([0-5]\d)$/);
       if(!parts)return null;
-      seconds=Number(parts[1])*3600+Number(parts[2])*60+Number(parts[3]||0);
+      seconds=Number(parts[1])*3600+Number(parts[2])*60;
     }else{
       if(!/^\d+(?:[.,]\d{1,6})?$/.test(text))return null;
       seconds=Math.round(Number(text.replace(',','.'))*3600);
@@ -377,7 +377,11 @@
   }
   function inputDuration(seconds,mode=timeInputMode){
     if(mode==='decimal')return decimalCsv(seconds);
-    const clock=clockDuration(seconds);return seconds%60?clock:clock.slice(0,-3);
+    return clockDuration(Math.round(seconds/60)*60).slice(0,-3);
+  }
+  function rowDuration(row){
+    if(row.duration_seconds!=null && String(row.hours)===inputDuration(Number(row.duration_seconds)))return Number(row.duration_seconds);
+    return parseDuration(row.hours);
   }
   function durationCell(seconds){return fmt(seconds/3600)+'<br><span class="muted small">'+clockDuration(seconds)+'</span>';}
   // End duration helpers.
@@ -842,7 +846,7 @@
     const can=canEditOwn();
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
     $('timeInputMode').value=timeInputMode;
-    $('timeInputHelp').textContent=timeInputMode==='clock'?'Saisis heures:minutes, par exemple 7:30 pour 7 h 30 min. Les secondes peuvent être indiquées avec heures:minutes:secondes.':'Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.';
+    $('timeInputHelp').textContent=timeInputMode==='clock'?'Saisis heures:minutes, par exemple 7:30 pour 7 h 30 min.':'Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
@@ -876,7 +880,7 @@
     });
     document.querySelectorAll('[data-hours]').forEach(el=>el.oninput=e=>{
       const entry=entries[Number(e.target.dataset.hours)];
-      if(entry) entry.hours=e.target.value;
+      if(entry){entry.hours=e.target.value;entry.duration_seconds=null;}
       updateEntrySaveState();updateTotal();
     });
     document.querySelectorAll('[data-del]').forEach(el=>el.onclick=e=>{
@@ -892,17 +896,17 @@
   }
 
   function updateTotal(){
-    const seconds=entries.reduce((total,r)=>total+(parseDuration(r.hours)??0),0);
+    const seconds=entries.reduce((total,r)=>total+(rowDuration(r)??0),0);
     $('userTotal').textContent=decimalCsv(seconds)+' h';
     $('userTotalDuration').textContent=clockDuration(seconds)+' (h:min:s)';
   }
   $('timeInputMode').onchange=()=>{
     const next=$('timeInputMode').value;
     if(savingEntries){$('timeInputMode').value=timeInputMode;return;}
-    const durations=entries.map(r=>String(r.hours??'').trim()===''?'':parseDuration(r.hours));
+    const durations=entries.map(r=>String(r.hours??'').trim()===''?'':rowDuration(r));
     if(durations.some(d=>d===null)){$('timeInputMode').value=timeInputMode;$('userNotice').innerHTML=msg('Corrige les durées invalides avant de changer de format.','warn');return;}
     timeInputMode=next==='clock'?'clock':'decimal';
-    entries.forEach((r,i)=>{r.hours=durations[i]===''?'':inputDuration(durations[i]);});
+    entries.forEach((r,i)=>{r.duration_seconds=durations[i]===''?null:durations[i];r.hours=durations[i]===''?'':inputDuration(durations[i]);});
     try{localStorage.setItem('pointage-time-format:'+profile.id,timeInputMode);}catch{}
     renderUserEntries();
   };
@@ -915,7 +919,7 @@
   };
 
   function entryState(){
-    return JSON.stringify(entries.map(r=>({code_id:Number(r.code_id)||'',duration:String(r.hours??'').trim()===''?'':(parseDuration(r.hours)??{invalid:String(r.hours)})})));
+    return JSON.stringify(entries.map(r=>({code_id:Number(r.code_id)||'',duration:String(r.hours??'').trim()===''?'':(rowDuration(r)??{invalid:String(r.hours)})})));
   }
   function updateEntrySaveState(){
     entriesDirty=entryState()!==savedEntriesState;
@@ -938,7 +942,7 @@
     if(!canSaveOwn() || savingEntries)return false;
     const incomplete=entries.some(r=>(r.code_id && String(r.hours??'').trim()==='') || (!r.code_id && String(r.hours??'').trim()!==''));
     if(incomplete){$('userNotice').innerHTML=msg('Renseigne les heures pour chaque code choisi, ou retire la ligne avant d’enregistrer.','warn');return false;}
-    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>{const seconds=parseDuration(r.hours);return {code_id:Number(r.code_id),duration_seconds:seconds,hours:seconds===null?null:decimalHours(seconds)};});
+    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>{const seconds=rowDuration(r);return {code_id:Number(r.code_id),duration_seconds:seconds,hours:seconds===null?null:decimalHours(seconds)};});
     if(clean.some(r=>r.duration_seconds===null)){$('userNotice').innerHTML=msg(timeInputMode==='clock'?'Indique une durée valide au format heures:minutes, avec des minutes de 00 à 59.':'Indique des heures décimales valides, positives ou nulles (six décimales maximum).','warn');return false;}
     if(new Set(clean.map(r=>r.code_id)).size!==clean.length){$('userNotice').innerHTML=msg('Un même code ne peut apparaître qu’une fois dans le mois.','warn');return false;}
     const savedState=entryState();
