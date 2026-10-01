@@ -172,10 +172,12 @@
           <h2>Mon pointage</h2>
           <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
         </div>
-        <div class="big" id="userTotal">0,00 h</div>
+        <div><div class="big" id="userTotal">0,00 h</div><div id="userTotalDuration" class="muted small"></div></div>
       </div>
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures.</p>
+      <div class="row" style="margin-bottom:12px"><div class="grow"><label for="timeInputMode">Format de saisie des durées</label><select id="timeInputMode"><option value="decimal">Heures décimales — ex. 7,50</option><option value="clock">Heures et minutes — ex. 7:30</option></select></div></div>
+      <p id="timeInputHelp" class="muted small"></p>
       <div id="entryList"></div>
       <div class="actions">
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
@@ -183,7 +185,7 @@
       </div>
       <p id="entryCorrectionHelp" class="muted small">En cas d’erreur sur une saisie déjà enregistrée, corrige la ligne concernée, puis clique à nouveau sur « Enregistrer mes données » pour sauvegarder la correction.</p>
       <div class="notice warn">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
-      <p class="muted small">Saisie en décimal/quantième : 7,25 ; 7,50 ; 7,75 ; etc.</p>
+      <p class="muted small">Les deux formats sont convertis automatiquement dans une durée commune pour les totaux et les exports.</p>
     </div>
   </div>
 
@@ -341,6 +343,7 @@
   function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
   let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
+  let timeInputMode='decimal',timeModeUser='';
   let contactSending=false;
   let documentsScope='national',documentBusy=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
@@ -349,7 +352,36 @@
   const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
   const fmt = n => Number(n||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const parseH = v => { const n=parseFloat(String(v??'').replace(',','.')); return Number.isFinite(n)?Math.round(n*100)/100:0; };
+  // Duration helpers: one second is the common unit for all calculations.
+  const MAX_ENTRY_SECONDS=3599999964;
+  function parseDuration(value,mode=timeInputMode){
+    const text=String(value??'').trim();if(!text)return null;
+    let seconds;
+    if(mode==='clock'){
+      const parts=text.match(/^(\d+):([0-5]\d)(?::([0-5]\d))?$/);
+      if(!parts)return null;
+      seconds=Number(parts[1])*3600+Number(parts[2])*60+Number(parts[3]||0);
+    }else{
+      if(!/^\d+(?:[.,]\d{1,6})?$/.test(text))return null;
+      seconds=Math.round(Number(text.replace(',','.'))*3600);
+    }
+    return Number.isSafeInteger(seconds)&&seconds>=0&&seconds<=MAX_ENTRY_SECONDS?seconds:null;
+  }
+  function entryDurationSeconds(entry){
+    return entry.duration_seconds!=null?Number(entry.duration_seconds):Math.round(Number(entry.hours||0)*3600);
+  }
+  function decimalHours(seconds){return Number((seconds/3600).toFixed(6));}
+  function decimalCsv(seconds){return String(decimalHours(seconds)).replace('.',',');}
+  function clockDuration(seconds){
+    return Math.floor(seconds/3600)+':'+String(Math.floor(seconds%3600/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+  }
+  function inputDuration(seconds,mode=timeInputMode){
+    if(mode==='decimal')return decimalCsv(seconds);
+    const clock=clockDuration(seconds);return seconds%60?clock:clock.slice(0,-3);
+  }
+  function durationCell(seconds){return fmt(seconds/3600)+'<br><span class="muted small">'+clockDuration(seconds)+'</span>';}
+  // End duration helpers.
+
   const curMonth = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
   const monthLabel = m => { const [y,mo]=m.split('-').map(Number); return new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(y,mo-1,1)); };
   const msg = (text,type='') => `<div class="notice ${type}">${esc(text)}</div>`;
@@ -572,6 +604,10 @@
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
+    if(timeModeUser!==profile.id){
+      timeModeUser=profile.id;
+      try{timeInputMode=localStorage.getItem('pointage-time-format:'+profile.id)==='clock'?'clock':'decimal';}catch{timeInputMode='decimal';}
+    }
     if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
     if(!profile.active && !profile.is_admin){
       show('authView',false);show('pendingView',true);
@@ -735,7 +771,7 @@
     if(ce){alert(ce.message);return;} monthCodes=orderedCodes(codes||[]);
     const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',unitId).eq('month_key',key).eq('user_id',session.user.id).order('id');
     if(request!==monthRequest)return;
-    if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:String(x.hours)}));
+    if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:inputDuration(entryDurationSeconds(x))}));
     savedEntriesState=entryState();entriesDirty=false;
     renderUserEntries();
     if(profile.is_admin){
@@ -805,6 +841,8 @@
   function renderUserEntries(){
     const can=canEditOwn();
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
+    $('timeInputMode').value=timeInputMode;
+    $('timeInputHelp').textContent=timeInputMode==='clock'?'Saisis heures:minutes, par exemple 7:30 pour 7 h 30 min. Les secondes peuvent être indiquées avec heures:minutes:secondes.':'Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
@@ -820,7 +858,7 @@
           </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
           <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}</div>
         </div>
-        <div><label for="entryHours${i}">Heures</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="decimal" placeholder="Ex. 7,50" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
+        <div><label for="entryHours${i}">${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
       </div>`;
     }).join(''):'<div class="muted small">Aucune saisie pour ce mois.</div>';
@@ -853,7 +891,21 @@
     renderMaintenance();
   }
 
-  function updateTotal(){ $('userTotal').textContent=`${fmt(entries.reduce((a,r)=>a+parseH(r.hours),0))} h`; }
+  function updateTotal(){
+    const seconds=entries.reduce((total,r)=>total+(parseDuration(r.hours)??0),0);
+    $('userTotal').textContent=decimalCsv(seconds)+' h';
+    $('userTotalDuration').textContent=clockDuration(seconds)+' (h:min:s)';
+  }
+  $('timeInputMode').onchange=()=>{
+    const next=$('timeInputMode').value;
+    if(savingEntries){$('timeInputMode').value=timeInputMode;return;}
+    const durations=entries.map(r=>String(r.hours??'').trim()===''?'':parseDuration(r.hours));
+    if(durations.some(d=>d===null)){$('timeInputMode').value=timeInputMode;$('userNotice').innerHTML=msg('Corrige les durées invalides avant de changer de format.','warn');return;}
+    timeInputMode=next==='clock'?'clock':'decimal';
+    entries.forEach((r,i)=>{r.hours=durations[i]===''?'':inputDuration(durations[i]);});
+    try{localStorage.setItem('pointage-time-format:'+profile.id,timeInputMode);}catch{}
+    renderUserEntries();
+  };
 
   $('addEntry').onclick=()=>{
     if(!canSaveOwn()) return;
@@ -863,7 +915,7 @@
   };
 
   function entryState(){
-    return JSON.stringify(entries.map(r=>({code_id:Number(r.code_id)||'',hours:String(r.hours??'')})));
+    return JSON.stringify(entries.map(r=>({code_id:Number(r.code_id)||'',duration:String(r.hours??'').trim()===''?'':(parseDuration(r.hours)??{invalid:String(r.hours)})})));
   }
   function updateEntrySaveState(){
     entriesDirty=entryState()!==savedEntriesState;
@@ -886,8 +938,8 @@
     if(!canSaveOwn() || savingEntries)return false;
     const incomplete=entries.some(r=>(r.code_id && String(r.hours??'').trim()==='') || (!r.code_id && String(r.hours??'').trim()!==''));
     if(incomplete){$('userNotice').innerHTML=msg('Renseigne les heures pour chaque code choisi, ou retire la ligne avant d’enregistrer.','warn');return false;}
-    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({code_id:Number(r.code_id),hours:Number(String(r.hours).trim().replace(',','.'))}));
-    if(clean.some(r=>!Number.isFinite(r.hours)||r.hours<0)){$('userNotice').innerHTML=msg('Indique un nombre d’heures valide, positif ou nul.','warn');return false;}
+    const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>{const seconds=parseDuration(r.hours);return {code_id:Number(r.code_id),duration_seconds:seconds,hours:seconds===null?null:decimalHours(seconds)};});
+    if(clean.some(r=>r.duration_seconds===null)){$('userNotice').innerHTML=msg(timeInputMode==='clock'?'Indique une durée valide au format heures:minutes, avec des minutes de 00 à 59.':'Indique des heures décimales valides, positives ou nulles (six décimales maximum).','warn');return false;}
     if(new Set(clean.map(r=>r.code_id)).size!==clean.length){$('userNotice').innerHTML=msg('Un même code ne peut apparaître qu’une fois dans le mois.','warn');return false;}
     const savedState=entryState();
     savingEntries=true;$('saveEntries').disabled=true;$('saveEntries').textContent='Enregistrement en cours…';
@@ -896,7 +948,7 @@
       if(error) throw error;
       // Garder les éventuelles modifications saisies pendant la requête.
       savedEntriesState=savedState;
-      if(entryState()===savedState){const {data:fresh}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');if(fresh && entryState()===savedState){entries=fresh.map(e=>({...e,hours:String(e.hours)}));savedEntriesState=entryState();renderUserEntries();}}
+      if(entryState()===savedState){const {data:fresh}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');if(fresh && entryState()===savedState){entries=fresh.map(e=>({...e,hours:inputDuration(entryDurationSeconds(e))}));savedEntriesState=entryState();renderUserEntries();}}
       updateEntrySaveState();
       $('userNotice').innerHTML=msg(entriesDirty?'Enregistrement terminé. De nouvelles modifications restent à enregistrer.':'Tes données sont enregistrées. Tu peux quitter l’outil.','ok');
       return true;
@@ -1164,7 +1216,7 @@
     try {
       const [codes,ents]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
@@ -1187,9 +1239,9 @@
     for(const e of annualEntries){
       const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
       if(!code) continue;
-      const cents=Math.round(Number(e.hours||0)*100), key=`${e.user_id}\u0000${code}`;
-      amounts.set(key,(amounts.get(key)||0)+cents);
-      codeTotals.set(code,(codeTotals.get(code)||0)+cents);
+      const seconds=entryDurationSeconds(e), key=`${e.user_id}\u0000${code}`;
+      amounts.set(key,(amounts.get(key)||0)+seconds);
+      codeTotals.set(code,(codeTotals.get(code)||0)+seconds);
     }
     return {people,codeNames,amounts,codeTotals,codeById};
   }
@@ -1211,13 +1263,13 @@
     people.forEach(p=>{
       let total=0;
       html+=`<tr><td><strong>${esc(p.full_name||p.email)}</strong><br><span class="muted small">${esc(p.email)}</span></td>`;
-      codeNames.forEach(code=>{const cents=amounts.get(`${p.id}\u0000${code}`)||0;total+=cents;html+=`<td class="num">${cents?fmt(cents/100):'—'}</td>`;});
-      html+=`<td class="num"><strong>${fmt(total/100)}</strong></td></tr>`;
+      codeNames.forEach(code=>{const seconds=amounts.get(`${p.id}\u0000${code}`)||0;total+=seconds;html+=`<td class="num">${seconds?durationCell(seconds):'—'}</td>`;});
+      html+=`<td class="num"><strong>${durationCell(total)}</strong></td></tr>`;
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     html+='<tr><th>Total par code</th>';
-    codeNames.forEach(code=>html+=`<th class="num">${fmt((codeTotals.get(code)||0)/100)}</th>`);
-    html+=`<th class="num">${fmt(grandTotal/100)}</th></tr></tbody></table></div>`;
+    codeNames.forEach(code=>html+=`<th class="num">${durationCell(codeTotals.get(code)||0)}</th>`);
+    html+=`<th class="num">${durationCell(grandTotal)}</th></tr></tbody></table></div>`;
     $('summaryTable').innerHTML=html;
   }
 
@@ -1336,14 +1388,14 @@
     const totals=new Map();
     for(const entry of personEntries){
       const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
-      totals.set(code,(totals.get(code)||0)+Math.round(Number(entry.hours||0)*100));
+      totals.set(code,(totals.get(code)||0)+entryDurationSeconds(entry));
     }
     const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const totalCents=[...totals.values()].reduce((sum,n)=>sum+n,0);
-    const decimal=cents=>String(cents/100).replace('.',',');
+    const totalSeconds=[...totals.values()].reduce((sum,n)=>sum+n,0);
+    const decimal=decimalCsv;
     return [
-      ['Année','Utilisateur',...codeNames,'Total heures'],
-      [year,person.full_name||person.email||person.id,...codeNames.map(code=>decimal(totals.get(code)||0)),decimal(totalCents)]
+      ['Année','Utilisateur',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)'],
+      [year,person.full_name||person.email||person.id,...codeNames.map(code=>decimal(totals.get(code)||0)),decimal(totalSeconds),...codeNames.map(code=>totals.get(code)||0),totalSeconds,clockDuration(totalSeconds)]
     ];
   }
 
@@ -1364,7 +1416,7 @@
     try{
       const [codes,personEntries]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(!personEntries.length){
         $('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');
@@ -1389,23 +1441,23 @@
     for(const entry of globalEntries){
       if(!userIds.has(entry.user_id)) continue;
       const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
-      const cents=Math.round(Number(entry.hours||0)*100);
+      const seconds=entryDurationSeconds(entry);
       if(!amounts.has(entry.user_id)) amounts.set(entry.user_id,new Map());
       const userAmounts=amounts.get(entry.user_id);
-      userAmounts.set(code,(userAmounts.get(code)||0)+cents);
-      totals.set(code,(totals.get(code)||0)+cents);
+      userAmounts.set(code,(userAmounts.get(code)||0)+seconds);
+      totals.set(code,(totals.get(code)||0)+seconds);
     }
     const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
     const unitName=id=>units.find(u=>u.id===id)?.name||'';
-    const decimal=cents=>String(cents/100).replace('.',',');
-    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total']];
+    const decimal=decimalCsv;
+    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
     users.sort((a,b)=>unitName(a.unit_id).localeCompare(unitName(b.unit_id),'fr') || String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
     for(const person of users){
       const userAmounts=amounts.get(person.id)||new Map();
       const total=[...userAmounts.values()].reduce((sum,n)=>sum+n,0);
-      rows.push([year,person.full_name||'',person.email||'',unitName(person.unit_id),...codeNames.map(code=>decimal(userAmounts.get(code)||0)),decimal(total)]);
+      rows.push([year,person.full_name||'',person.email||'',unitName(person.unit_id),...codeNames.map(code=>decimal(userAmounts.get(code)||0)),decimal(total),...codeNames.map(code=>userAmounts.get(code)||0),total,clockDuration(total)]);
     }
-    rows.push([year,'Total par code','','',...codeNames.map(code=>decimal(totals.get(code)||0)),decimal([...totals.values()].reduce((sum,n)=>sum+n,0))]);
+    rows.push([year,'Total par code','','',...codeNames.map(code=>decimal(totals.get(code)||0)),decimal([...totals.values()].reduce((sum,n)=>sum+n,0)),...codeNames.map(code=>totals.get(code)||0),[...totals.values()].reduce((sum,n)=>sum+n,0),clockDuration([...totals.values()].reduce((sum,n)=>sum+n,0))]);
     return rows;
   }
 
@@ -1419,7 +1471,7 @@
       const [people,codes,globalEntries]=await Promise.all([
         fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       const rows=globalSummaryRows(year,people,codes,globalEntries);
       csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
@@ -1437,26 +1489,26 @@
   }
   $('exportRaw').onclick=()=>{
     if(!annualReady) return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures']];
+    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',String(Number(e.hours)).replace('.',',')]);
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e)),entryDurationSeconds(e),clockDuration(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
   $('exportSummary').onclick=()=>{
     if(!annualReady) return;
     const {people,codeNames,amounts,codeTotals}=annualReport();
-    const rows=[['Année','Nom','E-mail',...codeNames,'Total']];
+    const rows=[['Année','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
     people.forEach(p=>{
       let total=0;
-      const vals=codeNames.map(code=>{const cents=amounts.get(`${p.id}\u0000${code}`)||0;total+=cents;return String(cents/100).replace('.',',');});
-      rows.push([annualYear,p.full_name||'',p.email||'',...vals,String(total/100).replace('.',',')]);
+      const vals=codeNames.map(code=>{const seconds=amounts.get(`${p.id}\u0000${code}`)||0;total+=seconds;return decimalCsv(seconds);});
+      rows.push([annualYear,p.full_name||'',p.email||'',...vals,decimalCsv(total),...codeNames.map(code=>amounts.get(`${p.id}\u0000${code}`)||0),total,clockDuration(total)]);
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
-    rows.push([annualYear,'Total par code','',...codeNames.map(code=>String((codeTotals.get(code)||0)/100).replace('.',',')),String(grandTotal/100).replace('.',',')]);
+    rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal),...codeNames.map(code=>codeTotals.get(code)||0),grandTotal,clockDuration(grandTotal)]);
     csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
 

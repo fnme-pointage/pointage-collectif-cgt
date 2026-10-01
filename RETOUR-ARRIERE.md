@@ -36,3 +36,12 @@ Pour revenir à la version avec l'onglet Mois, restaurer index.html depuis la br
 Les tables et les protections de maintenance restent compatibles avec l'ancienne interface. Aucune restauration des heures n'est nécessaire.
 
 Les tests d'interface couvrent aussi l'arrivée du blocage pendant une saisie, le refus côté serveur après l'ouverture du formulaire, la conservation des heures non enregistrées, la reprise et le bouton administrateur. Le fichier tests/maintenance_database.sql vérifie le refus des insertions, modifications et suppressions de pointages, l'impossibilité pour un utilisateur de débloquer l'application, la disponibilité du catalogue administrateur et la reprise des saisies, dans une transaction annulée.
+
+
+## Formats de durée — 1er octobre 2026
+
+La branche `backup/avant-formats-durees-20261001` conserve l’interface précédente. Les pointages précédant le changement sont sauvegardés dans la table privée `pointage_private.entries_before_time_formats_20261001` et l’ancienne fonction d’enregistrement dans `pointage_private.time_formats_rpc_backup`. Ces sauvegardes ne sont pas accessibles aux utilisateurs.
+
+Les durées exactes sont désormais stockées dans `entries.duration_seconds`. Le champ `hours` est conservé à deux décimales pour les anciens clients ; il ne doit plus être utilisé seul pour les totaux précis. Un ancien client qui renvoie une valeur décimale inchangée conserve la précision existante. Les exports de la nouvelle interface utilisent les secondes.
+
+Un retour à l’ancienne interface conserve les données, mais cette interface affichera et exportera les heures arrondies à deux décimales. Privilégier une correction de l’interface actuelle si des durées en minutes ont été saisies. Ne pas supprimer la colonne `duration_seconds` ni restaurer la table de sauvegarde sur les données actuelles : cela supprimerait les nouvelles saisies.
