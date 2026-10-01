@@ -844,7 +844,7 @@
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
       const code=currentCode && r.saved_code ? {...currentCode,code:r.saved_code,label:r.saved_label,document:r.saved_document} : currentCode;
       return `<div class="entry">
-        <div><label id="entryCodeLabel${i}">Libellé, code et accords</label>
+        <div><label id="entryCodeLabel${i}">Codes et libellés</label>
           ${can?`<details class="code-picker" data-picker="${i}">
             <summary id="entryCode${i}" aria-labelledby="entryCodeLabel${i} entryCode${i}">${code?`${esc(code.code)} — ${esc(code.label)}`:'Choisir un code…'}</summary>
             <div class="picker-panel">${codesTable(monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)),'',c=>{
