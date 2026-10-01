@@ -172,11 +172,11 @@
           <h2>Mon pointage</h2>
           <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
         </div>
-        <div><div class="big" id="userTotal">0,00 h</div><div id="userTotalDuration" class="muted small"></div></div>
+        <div><div class="big" id="userTotal">0,00 h</div></div>
       </div>
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures.</p>
-      <div class="row" style="margin-bottom:12px"><div class="grow"><label for="timeInputMode">Format de saisie des durées</label><select id="timeInputMode"><option value="decimal">Heures décimales — ex. 7,50</option><option value="clock">Heures et minutes — ex. 7:30</option></select></div></div>
+      <p class="muted small">Merci de reporter les éléments de vos CRI.</p>
       <p id="timeInputHelp" class="muted small"></p>
       <div id="entryList"></div>
       <div class="actions">
@@ -343,7 +343,7 @@
   function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
   let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
-  let timeInputMode='decimal',timeModeUser='';
+  const timeInputMode='decimal';
   let contactSending=false;
   let documentsScope='national',documentBusy=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
@@ -608,10 +608,6 @@
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
-    if(timeModeUser!==profile.id){
-      timeModeUser=profile.id;
-      try{timeInputMode=localStorage.getItem('pointage-time-format:'+profile.id)==='clock'?'clock':'decimal';}catch{timeInputMode='decimal';}
-    }
     if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
     if(!profile.active && !profile.is_admin){
       show('authView',false);show('pendingView',true);
@@ -845,7 +841,6 @@
   function renderUserEntries(){
     const can=canEditOwn();
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
-    $('timeInputMode').value=timeInputMode;
     $('timeInputHelp').textContent=timeInputMode==='clock'?'Saisis heures:minutes, par exemple 7:30 pour 7 h 30 min.':'Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
@@ -898,19 +893,7 @@
   function updateTotal(){
     const seconds=entries.reduce((total,r)=>total+(rowDuration(r)??0),0);
     $('userTotal').textContent=decimalCsv(seconds)+' h';
-    $('userTotalDuration').textContent=clockDuration(seconds)+' (h:min:s)';
   }
-  $('timeInputMode').onchange=()=>{
-    const next=$('timeInputMode').value;
-    if(savingEntries){$('timeInputMode').value=timeInputMode;return;}
-    const durations=entries.map(r=>String(r.hours??'').trim()===''?'':rowDuration(r));
-    if(durations.some(d=>d===null)){$('timeInputMode').value=timeInputMode;$('userNotice').innerHTML=msg('Corrige les durées invalides avant de changer de format.','warn');return;}
-    timeInputMode=next==='clock'?'clock':'decimal';
-    entries.forEach((r,i)=>{r.duration_seconds=durations[i]===''?null:durations[i];r.hours=durations[i]===''?'':inputDuration(durations[i]);});
-    try{localStorage.setItem('pointage-time-format:'+profile.id,timeInputMode);}catch{}
-    renderUserEntries();
-  };
-
   $('addEntry').onclick=()=>{
     if(!canSaveOwn()) return;
     entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''});
