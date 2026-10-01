@@ -131,7 +131,7 @@
       <div id="adminUnitField" class="monthfield hidden">
         <label for="adminUnit">Unité affichée</label><select id="adminUnit"></select>
       </div>
-      <div class="monthfield">
+      <div id="userYearField" class="monthfield hidden">
         <label for="spaceYear">Année</label>
         <select id="spaceYear"></select>
       </div>
@@ -139,7 +139,7 @@
         <label for="monthSelect">Mois</label>
         <select id="monthSelect"></select>
       </div>
-      <div class="grow">
+      <div id="userMonthStateField" class="grow hidden">
         <span id="monthState" class="pill"></span>
       </div>
     </div>
@@ -566,6 +566,9 @@
     show('userNav',!profile.is_admin);
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
+    show('userYearField',!profile.is_admin);
+    show('userMonthStateField',!profile.is_admin);
+    show('monthButtons',!profile.is_admin);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
       if(ue){alert(ue.message);return;}
