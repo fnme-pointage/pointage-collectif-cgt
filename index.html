@@ -188,7 +188,7 @@
       <button data-admin-tab="results" class="active">Suivi</button>
       <button data-admin-tab="codes">Catalogue des codes</button>
       <button data-admin-tab="users">Utilisateurs</button>
-      <button data-admin-tab="units">Unités</button>
+      <button data-admin-tab="units" class="hidden">Unités</button>
       <button data-admin-tab="documents">Base documentaire nationale</button>
       <button data-admin-tab="unit-documents" class="hidden">Base documentaire d’unité</button>
     </div>
@@ -606,6 +606,9 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
+    const unitsTab=document.querySelector('[data-admin-tab="units"]');
+    unitsTab.classList.toggle('hidden',!isAdminUnit);
+    if(!isAdminUnit && unitsTab.classList.contains('active'))document.querySelector('[data-admin-tab="results"]').click();
     nationalTab.classList.toggle('hidden',!isAdminUnit);
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
@@ -613,6 +616,7 @@
   }
   $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
+    if(!profile?.is_admin || units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
     const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
