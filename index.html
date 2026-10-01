@@ -562,7 +562,7 @@
     renderUserIdentity();
     $('userRole').textContent=profile.is_admin?'Administrateur':'Utilisateur';
     show('adminArea',profile.is_admin);
-    show('maintenanceAdmin',profile.is_admin);
+    show('maintenanceAdmin',false);
     show('userNav',!profile.is_admin);
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
@@ -607,6 +607,7 @@
   function renderAdminUnits(){
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    show('maintenanceAdmin',profile.is_admin && isAdminUnit);
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
     const unitsTab=document.querySelector('[data-admin-tab="units"]');

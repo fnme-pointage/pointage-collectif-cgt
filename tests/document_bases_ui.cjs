@@ -58,14 +58,17 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    assert.equal(await page.locator('#monthButtons').isVisible(),false);
    assert.equal(await page.locator('#annualYear').isVisible(),true);
    assert.equal(await page.locator('[data-admin-tab="units"]').isVisible(),true);
+   assert.equal(await page.locator('#maintenanceAdmin').isVisible(),true);
    await page.locator('[data-admin-tab="units"]').click();
    assert.equal(await page.locator('#admin-units').isVisible(),true);
    await page.locator('#adminUnit').selectOption('ulm');
    assert.equal(await page.locator('[data-admin-tab="units"]').isVisible(),false);
+   assert.equal(await page.locator('#maintenanceAdmin').isVisible(),false);
    assert.equal(await page.locator('#admin-units').isVisible(),false);
    assert.equal(await page.locator('#admin-results').isVisible(),true);
    await page.locator('#adminUnit').selectOption('adminunit');
    assert.equal(await page.locator('[data-admin-tab="units"]').isVisible(),true);
+   assert.equal(await page.locator('#maintenanceAdmin').isVisible(),true);
    assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
    await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
    await page.locator('#adminUnit').selectOption('ulm');
