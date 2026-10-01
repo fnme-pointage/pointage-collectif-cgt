@@ -29,6 +29,7 @@
     .login{max-width:470px;margin:8vh auto 0}.login h1{margin-top:0}.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}.notice{border-radius:12px;padding:10px 12px;background:#f2f4f7;font-size:.88rem;margin-bottom:10px}.notice.warn{background:var(--warnbg);color:#7a2e0e}.notice.ok{background:var(--okbg);color:#05603a}
     hr{border:0;border-top:1px solid #eef0f4;margin:14px 0}.checkbox{display:flex;align-items:center;gap:7px}.checkbox input{width:auto}
     .adminnav{display:flex;gap:7px;overflow:auto;padding-bottom:2px;margin-bottom:14px}.adminnav button{white-space:nowrap;background:#eef0f4;color:var(--text)}.adminnav button.active{background:var(--accent);color:#fff}
+    @media(max-width:620px){#userNav{flex-wrap:wrap;overflow:visible}#userNav button{width:100%;white-space:normal}}
     dialog{border:1px solid var(--border);border-radius:16px;padding:22px;width:min(440px,calc(100% - 28px));color:var(--text);box-shadow:0 16px 40px #0003}dialog::backdrop{background:#0008}dialog h2{margin:0 0 12px;font-size:1.1rem}dialog p{white-space:pre-line;line-height:1.5}dialog .actions{justify-content:flex-end}dialog .actions button{flex:0 1 auto;min-width:110px}
     .document-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #eef0f4}.document-row:last-child{border:0}.document-row>div:first-child{min-width:0;overflow-wrap:anywhere}.document-actions{display:flex;gap:8px;flex-shrink:0}#pdfReader{width:min(1100px,96vw);max-height:94vh;padding:16px}#pdfReader .reader-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.reader-scroll{overflow:auto;max-height:70vh;background:#e9edf2;border-radius:10px;padding:10px;text-align:center}.reader-scroll canvas{background:white;box-shadow:0 1px 8px #0002;max-width:none}#readerTitle{overflow-wrap:anywhere}@media print{#pdfReader{display:none!important}}
     @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
@@ -157,7 +158,8 @@
 
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
-    <button id="userDocumentsTab" type="button">Base documentaire</button>
+    <button id="userDocumentsTab" type="button">Base documentaire nationale</button>
+    <button id="userUnitDocumentsTab" type="button">Base documentaire d’unité</button>
   </div>
   <div id="userArea" class="hidden">
     <div class="card">
@@ -186,7 +188,8 @@
       <button data-admin-tab="codes">Catalogue des codes</button>
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="units">Unités</button>
-      <button data-admin-tab="documents">Base documentaire</button>
+      <button data-admin-tab="documents">Base documentaire nationale</button>
+      <button data-admin-tab="unit-documents" class="hidden">Base documentaire d’unité</button>
     </div>
 
     <section id="admin-results">
@@ -252,8 +255,8 @@
   </div>
   <section id="documentsArea" class="hidden">
     <div class="card">
-      <div class="sectiontitle"><h2>Base documentaire</h2><button id="refreshDocuments" class="secondary" type="button">Actualiser</button></div>
-      <p class="muted small">Documents PDF disponibles en consultation.</p>
+      <div class="sectiontitle"><h2 id="documentsTitle">Base documentaire nationale</h2><button id="refreshDocuments" class="secondary" type="button">Actualiser</button></div>
+      <p id="documentsDescription" class="muted small">Documents PDF disponibles pour toutes les unités.</p>
       <div id="documentAdminForm" class="hidden">
         <div class="row">
           <div class="grow"><label for="documentTitle">Titre du document</label><input id="documentTitle" maxlength="200" placeholder="Ex. Accord droit syndical"></div>
@@ -320,6 +323,7 @@
   function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
   let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
+  let documentsScope='national',documentBusy=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
   const $ = id => document.getElementById(id);
@@ -558,7 +562,7 @@
     show('adminArea',profile.is_admin);
     show('maintenanceAdmin',profile.is_admin);
     show('userNav',!profile.is_admin);
-    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');
+    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
@@ -597,9 +601,10 @@
 
   function renderAdminUnits(){
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    document.querySelector('[data-admin-tab="unit-documents"]').classList.toggle('hidden',units.find(u=>u.id===selectedUnit)?.name==='ADMIN');
     $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
-  $('adminUnit').onchange=async()=>{if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
+  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();if(!$('documentsArea').classList.contains('hidden')){if(documentsScope==='unit' && units.find(u=>u.id===selectedUnit)?.name==='ADMIN')document.querySelector('[data-admin-tab="documents"]').click();else openDocumentBase(documentsScope);}};
   $('createUnit').onclick=async()=>{
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
@@ -856,30 +861,47 @@
   }
   $('saveEntries').onclick=()=>saveEntries();
 
-  // Base documentaire commune à tous les comptes activés.
+  // Bases documentaires nationale et par unité.
   const DOCUMENT_BUCKET='pointage-documents';
   const PDF_ASSET_URL='https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/';
   const PDF_LIBRARY_URL=PDF_ASSET_URL+'legacy/build/';
   const canReadDocuments=()=>!!session && !!profile && (profile.is_admin || profile.active);
-  $('userPointageTab').onclick=()=>{
-    show('documentsArea',false);show('userArea',!profile.is_admin);
-    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');
-  };
-  $('userDocumentsTab').onclick=()=>{
+  const documentUnitId=()=>documentsScope==='unit'?(profile.is_admin?selectedUnit:profile.unit_id):null;
+  function openDocumentBase(scope){
+    if(documentBusy)return;
+    closePdfReader();documentsScope=scope;documents=[];
+    $('documentSearch').value='';$('documentTitle').value='';$('documentFile').value='';
+    const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
+    $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
+    $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
     show('userArea',false);show('documentsArea',true);
-    $('userPointageTab').classList.remove('active');$('userDocumentsTab').classList.add('active');
+    $('userPointageTab').classList.remove('active');
+    $('userDocumentsTab').classList.toggle('active',scope==='national');
+    $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
     loadDocuments();
+  }
+  $('userPointageTab').onclick=()=>{
+    if(documentBusy)return;
+    documentRequest++;closePdfReader();
+    show('documentsArea',false);show('userArea',!profile.is_admin);
+    $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
   };
+  $('userDocumentsTab').onclick=()=>openDocumentBase('national');
+  $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit');
   $('refreshDocuments').onclick=()=>loadDocuments();
   $('documentSearch').oninput=()=>renderDocuments();
   async function loadDocuments(){
     if(!canReadDocuments()) return;
-    const request=++documentRequest;
+    const request=++documentRequest,unitId=documentUnitId();
     show('documentAdminForm',profile.is_admin);
     $('documentMessage').innerHTML='';
     $('documentList').innerHTML='<p class="muted small">Chargement des documents…</p>';
     try{
-      const rows=await fetchAll(()=>sb.from('pointage_documents').select('*').order('title').order('id'));
+      const rows=await fetchAll(()=>{
+        let query=sb.from('pointage_documents').select('*');
+        query=unitId?query.eq('unit_id',unitId):query.is('unit_id',null);
+        return query.order('title').order('id');
+      });
       if(request!==documentRequest || !canReadDocuments()) return;
       documents=rows;renderDocuments();
     }catch(error){
@@ -896,43 +918,45 @@
       <div class="document-actions"><button type="button" class="secondary" data-view-document="${esc(d.id)}">Consulter</button>
       ${profile.is_admin?`<button type="button" class="danger" data-delete-document="${esc(d.id)}">Supprimer</button>`:''}</div>
     </div>`).join(''):'<p class="muted small">'+(search?'Aucun document ne correspond à cette recherche.':'Aucun document disponible pour le moment.')+'</p>';
-    $('documentStorage').textContent=documents.length+' PDF · '+fmt(documents.reduce((total,d)=>total+Number(d.file_size||0),0)/1048576)+' Mo de PDF enregistrés / quota gratuit de 1 Go.';
+    $('documentStorage').textContent=documents.length+' PDF · '+fmt(documents.reduce((total,d)=>total+Number(d.file_size||0),0)/1048576)+' Mo de PDF dans cette base.';
     document.querySelectorAll('[data-view-document]').forEach(button=>button.onclick=()=>openPdfDocument(button.dataset.viewDocument));
     document.querySelectorAll('[data-delete-document]').forEach(button=>button.onclick=()=>deleteDocument(button.dataset.deleteDocument,button));
   }
   $('addDocument').onclick=async()=>{
-    if(!profile?.is_admin) return;
+    if(!profile?.is_admin || documentBusy) return;
+    const unitId=documentUnitId();
     const title=$('documentTitle').value.trim(), file=$('documentFile').files[0];
     if(!title||!file){$('documentMessage').innerHTML=msg('Renseigne un titre et choisis un PDF.','warn');return;}
     if(file.size===0 || file.size>52428800){$('documentMessage').innerHTML=msg('Le PDF doit faire entre 1 octet et 50 Mo.','warn');return;}
     const header=new TextDecoder().decode(await file.slice(0,1024).arrayBuffer());
     if(!header.includes('%PDF-')){$('documentMessage').innerHTML=msg('Le fichier sélectionné ne semble pas être un PDF.','warn');return;}
     const button=$('addDocument'), id=crypto.randomUUID(), path=id+'.pdf';
+    documentBusy=true;$('adminUnit').disabled=true;
     button.disabled=true;button.textContent='Ajout en cours…';$('documentMessage').innerHTML='';
     let uploaded=false;
     try{
       const {error:uploadError}=await sb.storage.from(DOCUMENT_BUCKET).upload(path,file,{contentType:'application/pdf',cacheControl:'3600',upsert:false});
       if(uploadError) throw uploadError;
       uploaded=true;
-      const {error}=await sb.from('pointage_documents').insert({id,title,file_path:path,file_size:file.size});
+      const {error}=await sb.from('pointage_documents').insert({id,title,file_path:path,file_size:file.size,unit_id:unitId});
       if(error) throw error;
       uploaded=false;
       $('documentTitle').value='';$('documentFile').value='';
       await loadDocuments();
-      $('documentMessage').innerHTML=msg('Document ajouté. Les utilisateurs activés peuvent le consulter.','ok');
+      $('documentMessage').innerHTML=msg(unitId?'Document ajouté à la base de cette unité.':'Document ajouté à la base nationale.','ok');
     }catch(error){
       if(uploaded){
         const {error:cleanupError}=await sb.storage.from(DOCUMENT_BUCKET).remove([path]);
         if(cleanupError){$('documentMessage').innerHTML=msg('Ajout incomplet : '+error.message+'. Le fichier '+path+' reste à retirer du stockage.','warn');return;}
       }
       $('documentMessage').innerHTML=msg('Impossible d’ajouter le PDF : '+error.message,'warn');
-    }finally{button.disabled=false;button.textContent='Ajouter le PDF';}
+    }finally{documentBusy=false;$('adminUnit').disabled=false;button.disabled=false;button.textContent='Ajouter le PDF';}
   };
   async function deleteDocument(id,button){
-    if(!profile?.is_admin) return;
+    if(!profile?.is_admin || documentBusy) return;
     const documentInfo=documents.find(d=>d.id===id);
     if(!documentInfo || !await confirmAction('Supprimer le document « '+documentInfo.title+' » ?',{button:'Supprimer'})) return;
-    button.disabled=true;
+    documentBusy=true;$('adminUnit').disabled=true;button.disabled=true;
     try{
       const {error:storageError}=await sb.storage.from(DOCUMENT_BUCKET).remove([documentInfo.file_path]);
       if(storageError) throw storageError;
@@ -941,6 +965,7 @@
       await loadDocuments();
       $('documentMessage').innerHTML=msg('Document supprimé.','ok');
     }catch(error){$('documentMessage').innerHTML=msg('Suppression impossible : '+error.message,'warn');button.disabled=false;}
+    finally{documentBusy=false;$('adminUnit').disabled=false;}
   }
   function closePdfReader(){
     readerRequest++;
@@ -1009,12 +1034,12 @@
 
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
-    if(btn.classList.contains('hidden')) return;
+    if(btn.classList.contains('hidden') || documentBusy) return;
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
-    const docsTab=btn.dataset.adminTab==='documents';
-    show('documentsArea',docsTab);
-    if(docsTab) loadDocuments();
+    const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
+    documentRequest++;closePdfReader();show('documentsArea',docsTab);
+    if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national');
   });
 
   async function loadAdminData(){

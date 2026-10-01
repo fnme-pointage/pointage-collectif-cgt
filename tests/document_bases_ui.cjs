@@ -1,0 +1,59 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('node:path');
+const {chromium}=require('playwright');
+
+let stub=fs.readFileSync(path.join(__dirname,'catalogue_ui.cjs'),'utf8').match(/const stub = `([\s\S]*?)`;/)[1];
+stub=stub.replace('pointage_documents:[]',`pointage_documents:[{id:'nat',title:'Document national',unit_id:null,file_size:1},{id:'ulm-doc',title:'Document ULM',unit_id:'ulm',file_size:1},{id:'ufpi-doc',title:'Document UFPI',unit_id:'ufpi',file_size:1}]`);
+stub=stub.replace('gte(k,v){','is(k,v){return this.eq(k,v);}insert(row){db[this.t].push(row);window.lastInserted=row;return this;}gte(k,v){');
+stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()=>({upload:async()=>({error:null}),remove:async()=>({error:null})})},');
+(async()=>{
+ const options={headless:true};
+ if(process.env.CHROMIUM_EXECUTABLE)options.executablePath=process.env.CHROMIUM_EXECUTABLE;
+ if(process.env.CHROMIUM_ARGS)options.args=JSON.parse(process.env.CHROMIUM_ARGS);
+ const browser=await chromium.launch(options);
+ for(const mode of ['user','admin']){
+  const context=await browser.newContext({viewport:mode==='user'?{width:390,height:844}:{width:1440,height:1000}});
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.clock.install({time:new Date('2026-10-01T10:00:00Z')});
+  await page.route('**/supabase-js@2',r=>r.fulfill({contentType:'application/javascript',body:stub.replace('MODE',mode==='admin'?'true':'false')}));
+  await page.route('https://pointage.test/**',r=>{
+   const filename=new URL(r.request().url()).pathname.slice(1)||'index.html';
+   const target=path.resolve('app',filename);
+   return fs.existsSync(target)?r.fulfill({path:target}):r.fulfill({status:404,body:''});
+  });
+  await page.goto('https://pointage.test/');await page.locator('#mainView').waitFor({state:'visible'});
+  if(mode==='user'){
+   await page.locator('#userDocumentsTab').click();await page.getByText('Document national',{exact:true}).waitFor();
+   assert.equal(await page.locator('#documentList').textContent().then(t=>t.includes('Document ULM')),false);
+   await page.locator('#userUnitDocumentsTab').click();await page.getByText('Document ULM',{exact:true}).waitFor();
+   assert.equal(await page.locator('#documentList').textContent().then(t=>t.includes('Document national')||t.includes('Document UFPI')),false);
+   assert.equal(await page.locator('#documentAdminForm').isVisible(),false);
+   assert.match(await page.locator('#documentsTitle').textContent(),/ULM/);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+   await page.screenshot({path:'/tmp/documents-unit-mobile.png',fullPage:true});
+   await page.locator('#userPointageTab').click();assert.equal(await page.locator('#documentsArea').isVisible(),false);
+  }else{
+   assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
+   await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
+   await page.locator('#adminUnit').selectOption('ulm');
+   await page.locator('[data-admin-tab="unit-documents"]').click();await page.getByText('Document ULM',{exact:true}).waitFor();
+   await page.locator('#adminUnit').selectOption('ufpi');await page.getByText('Document UFPI',{exact:true}).waitFor();
+   assert.match(await page.locator('#documentsTitle').textContent(),/UFPI/);
+   await page.locator('#documentTitle').fill('Nouveau PDF UFPI');
+   await page.locator('#documentFile').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nTest')});
+   await page.locator('#addDocument').click();await page.getByText('Nouveau PDF UFPI',{exact:true}).waitFor();
+   assert.equal(await page.evaluate(()=>window.lastInserted.unit_id),'ufpi');
+   await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
+   assert.equal(await page.getByText('Nouveau PDF UFPI',{exact:true}).count(),0);
+   await page.locator('#documentTitle').fill('Nouveau PDF national');
+   await page.locator('#documentFile').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nTest')});
+   await page.locator('#addDocument').click();await page.getByText('Nouveau PDF national',{exact:true}).waitFor();
+   assert.equal(await page.evaluate(()=>window.lastInserted.unit_id),null);
+   await page.locator('[data-admin-tab="unit-documents"]').click();await page.getByText('Document UFPI',{exact:true}).waitFor();
+   await page.locator('#adminUnit').selectOption('adminunit');await page.getByText('Document national',{exact:true}).waitFor();
+   assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
+   await page.screenshot({path:'/tmp/documents-national-admin.png',fullPage:true});
+  }
+  assert.deepEqual(errors,[]);await context.close();
+ }
+ await browser.close();console.log('PASS: user national/local tabs, unit filtering, admin unit switching, national/local PDF uploads, ADMIN scope, mobile width, no JS errors.');
+})().catch(e=>{console.error(e);process.exit(1)});
