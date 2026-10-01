@@ -23,3 +23,16 @@ Les pointages enregistrés conservent le code, le libellé et le document du mom
 ## Vérifications
 
 `tests/catalogue_database.sql` vérifie dans une transaction annulée la création des douze mois, l'isolation des unités, l'accès administrateur, la propagation aux mois futurs, le rejet des doublons et la conservation des références historiques. `tests/catalogue_ui.cjs` vérifie l'interface mobile et administrateur avec des données simulées. Ces tests d'interface ne constituent pas une connexion réelle à un compte utilisateur.
+
+## Évolution du blocage pour maintenance
+
+Avant la suppression de l'onglet Mois, le commit 02cdb31e60924a7efac6fdca2c3d1f57e4ed3801 a été conservé dans la branche backup/2026-10-01-avant-maintenance. Les données concernées (heures, mois, codes et versions du catalogue) et les fonctions ont également été copiées dans le schéma privé pointage_backup_20261001_maintenance.
+
+Le bouton « Bloquer les saisies pour maintenance » est global, quelle que soit l'unité affichée. Son état est conservé en base. Il devient « Réactiver les saisies » une fois le blocage confirmé. Les utilisateurs gardent accès à la consultation et aux documents ; l'administrateur continue de modifier le catalogue et les autres paramètres.
+
+Les enregistrements sont protégés en base, via la fonction d'enregistrement et les écritures directes sur les tables de pointage. L'activation attend la fin des transactions d'enregistrement déjà engagées. L'interface vérifie le blocage toutes les 15 secondes, au retour sur la page et avant un enregistrement. Les modifications non enregistrées restent dans la page pendant le blocage ; elles ne sont pas une sauvegarde et il faut garder la page ouverte pour les reprendre après la maintenance.
+
+Pour revenir à la version avec l'onglet Mois, restaurer index.html depuis la branche backup/2026-10-01-avant-maintenance, renouveler le cache de sw.js et republier. Vérifier d'abord que le blocage est désactivé. Si nécessaire, l'administrateur peut le désactiver depuis le bouton actuel ou un administrateur de base peut exécuter : update public.pointage_maintenance set locked=false where id=true;
+Les tables et les protections de maintenance restent compatibles avec l'ancienne interface. Aucune restauration des heures n'est nécessaire.
+
+Les tests d'interface couvrent aussi l'arrivée du blocage pendant une saisie, le refus côté serveur après l'ouverture du formulaire, la conservation des heures non enregistrées, la reprise et le bouton administrateur. Le fichier tests/maintenance_database.sql vérifie le refus des insertions, modifications et suppressions de pointages, l'impossibilité pour un utilisateur de débloquer l'application, la disponibilité du catalogue administrateur et la reprise des saisies, dans une transaction annulée.

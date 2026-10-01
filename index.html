@@ -147,6 +147,14 @@
   <div id="monthButtons" class="month-grid" aria-label="Mois de l’année"></div>
   <div id="calendarMessage" aria-live="polite"></div>
 
+  <div id="maintenanceBanner" aria-live="polite"></div>
+  <div id="maintenanceAdmin" class="card hidden">
+    <div class="sectiontitle"><h2>Maintenance de l’application</h2><span id="maintenanceState" class="pill"></span></div>
+    <p class="muted small">Bloque les enregistrements de tous les utilisateurs, dans toutes les unités et pour tous les mois, pendant tes modifications. La consultation reste accessible.</p>
+    <button id="toggleMaintenance" type="button" disabled>Vérification du blocage…</button>
+    <div id="maintenanceAdminMessage" aria-live="polite" style="margin-top:10px"></div>
+  </div>
+
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
     <button id="userDocumentsTab" type="button">Base documentaire</button>
@@ -177,7 +185,6 @@
       <button data-admin-tab="results" class="active">Suivi</button>
       <button data-admin-tab="codes">Catalogue des codes</button>
       <button data-admin-tab="users">Utilisateurs</button>
-      <button data-admin-tab="months" class="hidden">Mois</button>
       <button data-admin-tab="units">Unités</button>
       <button data-admin-tab="documents">Base documentaire</button>
     </div>
@@ -231,45 +238,6 @@
       </div>
     </section>
 
-    <section id="admin-months" class="hidden">
-      <div class="card">
-        <div class="sectiontitle"><h2>Administration des mois</h2></div>
-        <div class="row">
-          <div class="monthfield"><label>Nouveau mois</label><input id="newMonth" type="month"></div>
-          <label class="checkbox"><input id="copyCodes" type="checkbox" checked> Copier les codes du mois affiché</label>
-          <button id="createMonth">Créer le mois</button>
-        </div>
-        <hr>
-        <div class="row">
-          <div class="smallfield"><label for="newYear">Année complète</label><input id="newYear" type="number" min="1900" max="9999" step="1"></div>
-          <label class="checkbox"><input id="copyYearCodes" type="checkbox" checked> Copier les codes du mois affiché</label>
-          <button id="createYear" type="button">Créer les 12 mois</button>
-        </div>
-        <p class="muted small">Création pour l’unité sélectionnée. Les mois existants sont conservés. Sans copie, la liste standard est utilisée. Les codes se gèrent dans « Catalogue des codes ».</p>
-        <div id="yearAdminMessage" aria-live="polite"></div>
-        <hr>
-        <div class="row">
-          <div class="grow">
-            <strong id="adminSelectedMonth"></strong><br>
-            <span class="muted small">Tu peux ouvrir/fermer, modifier ou supprimer le mois sélectionné.</span>
-          </div>
-          <button id="toggleMonthState"></button>
-        </div>
-
-        <hr>
-
-        <div class="row">
-          <div class="monthfield">
-            <label>Modifier le mois sélectionné</label>
-            <input id="editMonthKey" type="month">
-          </div>
-          <button id="renameMonth" class="secondary">Modifier le mois</button>
-          <button id="deleteMonth" class="danger">Supprimer le mois</button>
-        </div>
-
-        <div id="monthAdminMessage" style="margin-top:10px"></div>
-      </div>
-    </section>
     <section id="admin-units" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Unités</h2></div>
@@ -347,6 +315,7 @@
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
   let units=[], selectedUnit='', spaceYear=curYearInitial();
   let monthRequest=0;
+  let maintenanceLocked=false,maintenanceKnown=false,maintenanceTimer=null,maintenanceChecking=null,maintenanceChanging=false;
   let catalogueRows=[], catalogueOriginal=[], catalogueUnit='', catalogueRequest=0;
   function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
@@ -565,7 +534,7 @@
       else if($('recoveryForm').classList.contains('hidden')===false) $('recoveryMsg').innerHTML='';
       return;
     }
-    if(!session) return;
+    if(!session){if(maintenanceTimer)clearInterval(maintenanceTimer);maintenanceTimer=null;maintenanceKnown=false;return;}
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
@@ -579,6 +548,7 @@
     $('userName').textContent=profile.full_name||profile.email;
     $('userRole').textContent=profile.is_admin?'Administrateur':'Utilisateur';
     show('adminArea',profile.is_admin);
+    show('maintenanceAdmin',profile.is_admin);
     show('userNav',!profile.is_admin);
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');
     show('adminUnitField',profile.is_admin);
@@ -590,6 +560,8 @@
       renderAdminUnits();
     } else selectedUnit=profile.unit_id;
     show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);
+    await refreshMaintenance();
+    if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
   }
 
@@ -631,7 +603,6 @@
   };
 
   async function loadMonths(){
-    if(profile.is_admin)renderAdminNavigation();
     const {error:yearError}=await sb.rpc('pointage_ensure_year',{p_unit_id:selectedUnit,p_year:Number(spaceYear)});
     if(yearError){$('calendarMessage').innerHTML=msg('Impossible de charger l’année : '+yearError.message,'warn');return;}
     $('calendarMessage').innerHTML='';
@@ -646,12 +617,9 @@
     if(profile.is_admin) await renderAnnualYears();
     if(selectedMonth){await loadMonthData();return;}
     $('monthState').textContent='Aucun mois';
-    $('adminSelectedMonth').textContent='Aucun mois sélectionné';
-    $('editMonthKey').value='';
-    $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=true;
     monthCodes=[]; entries=[]; savedEntriesState='[]';entriesDirty=false;
     renderUserEntries();
-    $('userNotice').innerHTML=msg('Aucun mois disponible. Crée un mois pour commencer.','warn');
+    $('userNotice').innerHTML=msg('Aucun mois disponible pour cette unité.','warn');
     if(profile.is_admin){
       const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
       if(pe){alert(pe.message);return;}
@@ -698,13 +666,8 @@
   async function loadMonthData(){
     const request=++monthRequest,unitId=selectedUnit,key=selectedMonth;
     const mrec=currentMonthRec();
-    $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=false;
     $('monthState').textContent=mrec?.is_open?'Mois ouvert':'Mois fermé';
     $('monthState').className='pill '+(mrec?.is_open?'ok':'danger');
-    $('adminSelectedMonth').textContent=selectedMonth?monthLabel(selectedMonth):'';
-    $('editMonthKey').value=selectedMonth||'';
-    $('toggleMonthState').textContent=mrec?.is_open?'Fermer le mois':'Rouvrir le mois';
-    $('toggleMonthState').className=mrec?.is_open?'danger':'';
     const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',unitId).eq('month_key',key).order('code');
     if(request!==monthRequest)return;
     if(ce){alert(ce.message);return;} monthCodes=orderedCodes(codes||[]);
@@ -719,6 +682,63 @@
   }
 
   function canEditOwn(){return !profile.is_admin && selectedUnit===profile.unit_id && !!currentMonthRec()?.is_open ;}
+
+  function canSaveOwn(){return canEditOwn() && maintenanceKnown && !maintenanceLocked;}
+  function renderMaintenance(){
+    if(!profile)return;
+    const paused=!maintenanceKnown || maintenanceLocked;
+    const month=currentMonthRec();
+    $('monthState').textContent=!month?'Aucun mois':!maintenanceKnown?'Vérification en cours':maintenanceLocked?'Saisies bloquées':month.is_open?'Saisies autorisées':'Consultation uniquement';
+    $('monthState').className='pill '+(month?(paused||!month.is_open?'warn':'ok'):'');
+    $('maintenanceState').textContent=!maintenanceKnown?'Vérification indisponible':maintenanceLocked?'Saisies bloquées':'Saisies autorisées';
+    $('maintenanceState').className='pill '+(paused?'warn':'ok');
+    $('toggleMaintenance').disabled=!maintenanceKnown || maintenanceChanging;
+    $('toggleMaintenance').textContent=!maintenanceKnown?'Vérification du blocage…':maintenanceLocked?'Réactiver les saisies':'Bloquer les saisies pour maintenance';
+    $('toggleMaintenance').className=maintenanceLocked?'':'danger';
+    $('maintenanceBanner').innerHTML=!maintenanceKnown ? msg('Impossible de vérifier l’état de maintenance. Les enregistrements sont temporairement suspendus. Tes modifications restent dans cette page.','warn') : maintenanceLocked ? msg(profile.is_admin?'Maintenance active : les saisies de toutes les unités sont bloquées. Tu peux effectuer tes modifications.':'Maintenance en cours : les saisies sont temporairement bloquées. Tes données enregistrées sont conservées. Si tu avais des modifications non enregistrées, garde cette page ouverte : tu pourras les enregistrer après la reprise.','warn') : '';
+    if(profile.is_admin)return;
+    const can=canSaveOwn();
+    document.querySelectorAll('[data-hours]').forEach(el=>{const i=Number(el.dataset.hours);el.disabled=!can || !entries[i]?.code_id;});
+    document.querySelectorAll('[data-pick-code]').forEach(el=>{const i=Number(el.dataset.pickEntry),id=Number(el.dataset.pickCode);el.disabled=!can || entries.some((r,j)=>j!==i && Number(r.code_id)===id);});
+    document.querySelectorAll('[data-del]').forEach(el=>el.disabled=!can || !entries.length);
+    $('addEntry').disabled=!can || entries.some(r=>!r.code_id) || !monthCodes.some(c=>c.active && !entries.some(r=>Number(r.code_id)===Number(c.id)));
+    $('saveEntries').disabled=!can || savingEntries;
+  }
+  async function refreshMaintenance(){
+    if(maintenanceChecking)return maintenanceChecking;
+    maintenanceChecking=(async()=>{
+      const before=maintenanceLocked;
+      try{
+        const {data,error}=await sb.from('pointage_maintenance').select('locked').eq('id',true).single();
+        if(error || !data)throw error||new Error('État indisponible');
+        maintenanceLocked=data.locked;maintenanceKnown=true;
+        // Refresh codes after maintenance without replacing the user's unsaved hours.
+        if(before && !maintenanceLocked && !profile?.is_admin && selectedMonth){
+          const key=selectedMonth,unit=selectedUnit;
+          const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',unit).eq('month_key',key).order('code');
+          if(ce)throw ce;
+          if(key===selectedMonth && unit===selectedUnit){monthCodes=orderedCodes(codes||[]);renderUserEntries();}
+        }
+      }catch(error){maintenanceKnown=false;}
+      renderMaintenance();
+    })();
+    try{await maintenanceChecking;}finally{maintenanceChecking=null;}
+  }
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden && session && profile?.active)refreshMaintenance();});
+  $('toggleMaintenance').onclick=async()=>{
+    if(!profile?.is_admin || !maintenanceKnown || maintenanceChanging)return;
+    const next=!maintenanceLocked;
+    const message=next?'Bloquer les saisies de tous les utilisateurs, pour toutes les unités et tous les mois, afin d’effectuer la maintenance ? Les données déjà enregistrées sont conservées.':'Réactiver les saisies pour tous les utilisateurs ? Vérifie que tes modifications de maintenance sont terminées.';
+    if(!await confirmAction(message,{title:'Maintenance',button:next?'Bloquer les saisies':'Réactiver les saisies'}))return;
+    const button=$('toggleMaintenance');maintenanceChanging=true;button.disabled=true;$('maintenanceAdminMessage').innerHTML='';
+    try{
+      const {error}=await sb.rpc('pointage_set_maintenance',{p_locked:next});
+      if(error)throw error;
+      await refreshMaintenance();
+      $('maintenanceAdminMessage').innerHTML=msg(next?'Blocage confirmé pour toutes les unités. Tu peux effectuer la maintenance.':'Les utilisateurs peuvent à nouveau enregistrer leur pointage.','ok');
+    }catch(error){$('maintenanceAdminMessage').innerHTML=msg('Action impossible : '+error.message,'warn');}
+    finally{maintenanceChanging=false;renderMaintenance();}
+  };
 
   function renderUserEntries(){
     const can=canEditOwn();
@@ -744,7 +764,7 @@
     }).join(''):'<div class="muted small">Aucune saisie pour ce mois.</div>';
     document.querySelectorAll('[data-pick-code]').forEach(el=>el.onclick=e=>{
       const i=Number(e.currentTarget.dataset.pickEntry), id=Number(e.currentTarget.dataset.pickCode);
-      if(!canEditOwn() || entries.some((r,j)=>j!==i && Number(r.code_id)===id)) return;
+      if(!canSaveOwn() || entries.some((r,j)=>j!==i && Number(r.code_id)===id)) return;
       if(!entries[i]) entries[i]={id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''};
       if(Number(entries[i].code_id)!==id){delete entries[i].saved_code;delete entries[i].saved_label;delete entries[i].saved_document;}
       entries[i].code_id=id;
@@ -760,19 +780,21 @@
       updateEntrySaveState();updateTotal();
     });
     document.querySelectorAll('[data-del]').forEach(el=>el.onclick=e=>{
+      if(!canSaveOwn())return;
       entries.splice(Number(e.target.dataset.del),1);
       updateEntrySaveState();renderUserEntries();
     });
-    $('addEntry').disabled=!can || entries.some(r=>!r.code_id) || !monthCodes.some(c=>c.active && !entries.some(r=>Number(r.code_id)===Number(c.id)));
-    $('saveEntries').disabled=!can || savingEntries;
+    $('addEntry').disabled=!can || !maintenanceKnown || maintenanceLocked || entries.some(r=>!r.code_id) || !monthCodes.some(c=>c.active && !entries.some(r=>Number(r.code_id)===Number(c.id)));
+    $('saveEntries').disabled=!can || !maintenanceKnown || maintenanceLocked || savingEntries;
     updateEntrySaveState();
     updateTotal();
+    renderMaintenance();
   }
 
   function updateTotal(){ $('userTotal').textContent=`${fmt(entries.reduce((a,r)=>a+parseH(r.hours),0))} h`; }
 
   $('addEntry').onclick=()=>{
-    if(!canEditOwn()) return;
+    if(!canSaveOwn()) return;
     entries.push({id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''});
     updateEntrySaveState();renderUserEntries();
     $('entryCode'+(entries.length-1)).focus();
@@ -798,6 +820,8 @@
   });
   async function saveEntries(){
     if(!canEditOwn() || savingEntries) return false;
+    await refreshMaintenance();
+    if(!canSaveOwn() || savingEntries)return false;
     const incomplete=entries.some(r=>(r.code_id && String(r.hours??'').trim()==='') || (!r.code_id && String(r.hours??'').trim()!==''));
     if(incomplete){$('userNotice').innerHTML=msg('Renseigne les heures pour chaque code choisi, ou retire la ligne avant d’enregistrer.','warn');return false;}
     const clean=entries.filter(r=>r.code_id && String(r.hours).trim()!=='').map(r=>({code_id:Number(r.code_id),hours:Number(String(r.hours).trim().replace(',','.'))}));
@@ -815,10 +839,11 @@
       $('userNotice').innerHTML=msg(entriesDirty?'Enregistrement terminé. De nouvelles modifications restent à enregistrer.':'Tes données sont enregistrées. Tu peux quitter l’outil.','ok');
       return true;
     }catch(error){
+      await refreshMaintenance();
       $('userNotice').innerHTML=msg('Enregistrement impossible : '+error.message+'. Tes modifications restent à enregistrer.','warn');
       return false;
     }finally{
-      savingEntries=false;$('saveEntries').disabled=!canEditOwn();$('saveEntries').textContent='Enregistrer mes données';
+      savingEntries=false;$('saveEntries').disabled=!canSaveOwn();$('saveEntries').textContent='Enregistrer mes données';
     }
   }
   $('saveEntries').onclick=()=>saveEntries();
@@ -975,23 +1000,10 @@
   }
 
   // ADMIN
-  function renderAdminNavigation(){
-    const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    document.querySelectorAll('[data-admin-tab="months"]').forEach(btn=>{
-      btn.classList.toggle('hidden',isAdminUnit);
-    });
-    if(isAdminUnit){
-      const activeTab=document.querySelector('[data-admin-tab].active');
-      if(['months'].includes(activeTab?.dataset.adminTab)){
-        document.querySelector('[data-admin-tab="results"]').click();
-      }
-      show('admin-months',false);
-    }
-  }
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden')) return;
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-    ['results','codes','users','months','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    ['results','codes','users','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     const docsTab=btn.dataset.adminTab==='documents';
     show('documentsArea',docsTab);
     if(docsTab) loadDocuments();
@@ -1202,134 +1214,6 @@
       };
     });
   }
-
-  $('toggleMonthState').onclick=async()=>{
-    const rec=currentMonthRec(), next=!rec.is_open;
-    const warning=next?'Rouvrir ce mois ? Les utilisateurs pourront à nouveau modifier leur pointage.':'Fermer ce mois ? Les utilisateurs ne pourront plus modifier leur pointage.';
-    if(!await confirmAction(warning)) return;
-    const {error}=await sb.from('months').update({is_open:next}).eq('unit_id',selectedUnit).eq('month_key',selectedMonth);
-    if(error){alert(error.message);return;}
-    await loadMonths();
-  };
-
-  $('newYear').value=curMonth().slice(0,4);
-  $('createYear').onclick=async()=>{
-    if(!profile?.is_admin) return;
-    const year=$('newYear').value.trim(), unitId=selectedUnit;
-    if(!/^[1-9][0-9]{3}$/.test(year) || Number(year)<1900){
-      $('yearAdminMessage').innerHTML=msg('Indique une année valide à partir de 1900.','warn');return;
-    }
-    const unitName=units.find(u=>u.id===unitId)?.name||'';
-    const existing=months.filter(m=>m.month_key.startsWith(year+'-')).length;
-    if(existing===12){$('yearAdminMessage').innerHTML=msg('Les douze mois de '+year+' existent déjà pour '+unitName+'.','ok');return;}
-    let codes=$('copyYearCodes').checked?monthCodes.filter(c=>c.active).map(c=>({code:c.code,label:c.label})):[];
-    if(!codes.length) codes=STANDARD_CODES.map(c=>({code:c.code,label:c.label}));
-    if(!await confirmAction('Créer les '+(12-existing)+' mois manquants de '+year+' pour '+unitName+' avec '+codes.length+' codes par mois ? Les mois existants seront conservés.')) return;
-    const button=$('createYear');
-    button.disabled=true;button.textContent='Création en cours…';$('yearAdminMessage').innerHTML='';
-    try{
-      const {data,error}=await sb.rpc('pointage_create_year',{p_unit_id:unitId,p_year:Number(year),p_codes:codes});
-      if(error) throw error;
-      if(selectedUnit===unitId){
-        spaceYear=year;selectedMonth=year+'-01';
-        await loadMonths();
-      }
-      $('yearAdminMessage').innerHTML=msg(data.created+' mois créé(s) pour '+unitName+' en '+year+', '+data.existing+' mois déjà présent(s) conservé(s).','ok');
-    }catch(error){
-      $('yearAdminMessage').innerHTML=msg('Création impossible : '+error.message,'warn');
-    }finally{
-      button.disabled=false;button.textContent='Créer les 12 mois';
-    }
-  };
-
-  $('newMonth').value=curMonth();
-  $('createMonth').onclick=async()=>{
-    const m=$('newMonth').value; if(!m){alert('Choisis un mois.');return;}
-    if(months.some(x=>x.month_key===m)){alert('Ce mois existe déjà.');return;}
-    const {error}=await sb.from('months').insert({unit_id:selectedUnit,month_key:m,is_open:true});
-    if(error){alert(error.message);return;}
-    let src=[];
-    if($('copyCodes').checked && selectedMonth){
-      src=monthCodes.filter(c=>c.active).map(c=>({unit_id:selectedUnit,month_key:m,code:c.code,label:c.label,active:true}));
-    }
-    if(!src.length) src=standardRows(m).map(c=>({...c,unit_id:selectedUnit}));
-    if(src.length){
-      const {error:ce}=await sb.from('month_codes').insert(src);
-      if(ce){alert('Mois créé, mais erreur lors de l’ajout des codes : '+ce.message);}
-    }
-    selectedMonth=m; await loadMonths();
-  };
-
-
-  $('renameMonth').onclick=async()=>{
-    const oldKey=selectedMonth;
-    const newKey=$('editMonthKey').value;
-    $('monthAdminMessage').innerHTML='';
-
-    if(!oldKey || !newKey){
-      $('monthAdminMessage').innerHTML=msg('Choisis un mois valide.','warn');
-      return;
-    }
-    if(oldKey===newKey){
-      $('monthAdminMessage').innerHTML=msg('Le mois sélectionné porte déjà cette date.','warn');
-      return;
-    }
-    if(months.some(m=>m.month_key===newKey)){
-      $('monthAdminMessage').innerHTML=msg('Ce mois existe déjà.','warn');
-      return;
-    }
-
-    const entryCount=adminEntries.length;
-
-    let text=`Modifier ${monthLabel(oldKey)} en ${monthLabel(newKey)} ?`;
-    if(entryCount){
-      text += `\n\nLes ${entryCount} saisie(s) rattachées à ce mois seront conservées.`;
-    }
-
-    if(!await confirmAction(text)) return;
-
-    const {error}=await sb.from('months').update({month_key:newKey}).eq('unit_id',selectedUnit).eq('month_key',oldKey);
-
-    if(error){
-      $('monthAdminMessage').innerHTML=msg(
-        error.message + ' — Si ta base a été créée avec la V2, exécute migration_v3.sql dans Supabase.',
-        'warn'
-      );
-      return;
-    }
-
-    selectedMonth=newKey;
-    await loadMonths();
-    $('monthAdminMessage').innerHTML=msg('Mois modifié avec succès.','ok');
-  };
-
-  $('deleteMonth').onclick=async()=>{
-    const key=selectedMonth;
-    $('monthAdminMessage').innerHTML='';
-    if(!key) return;
-
-    const entryCount=adminEntries.length;
-
-    let warning=`Supprimer définitivement ${monthLabel(key)} ?`;
-    if(entryCount){
-      warning += `\n\nATTENTION : ce mois contient ${entryCount} saisie(s). Elles seront également supprimées.`;
-      warning += `\n\nCette opération est irréversible.`;
-    } else {
-      warning += `\n\nCe mois ne contient actuellement aucun pointage.`;
-    }
-
-    if(!await confirmAction(warning,{title:'Supprimer le mois',button:'Supprimer',expected:entryCount?key:''})) return;
-
-    const {error}=await sb.from('months').delete().eq('unit_id',selectedUnit).eq('month_key',key);
-    if(error){
-      $('monthAdminMessage').innerHTML=msg(error.message,'warn');
-      return;
-    }
-
-    selectedMonth='';
-    await loadMonths();
-    $('monthAdminMessage').innerHTML=msg('Mois supprimé.','ok');
-  };
 
   $('userExportYear').value=curMonth().slice(0,4);
 
