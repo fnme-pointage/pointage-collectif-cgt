@@ -126,7 +126,7 @@
     <div class="userbox">
       <strong id="userName"></strong><span id="userUnit" class="muted hidden"></span><br>
       <span id="userRole" class="muted"></span> · <a href="#" id="changePasswordLink">Changer mon mot de passe</a> · <a href="#" id="logoutLink">Déconnexion</a>
-      <div id="userContact" class="hidden"><a id="contactAdminLink" class="contact-admin" href="mailto:fnme.pointage@gmail.com?subject=Pointage%20collectif%20-%20Contact%20administrateur">Contacter l’administrateur</a></div>
+      <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter l’administrateur</button></div>
     </div>
   </div>
 
@@ -292,6 +292,18 @@
   <div id="readerScroll" class="reader-scroll"><canvas id="readerCanvas" aria-label="Page du document PDF"></canvas></div>
 </dialog>
 
+<dialog id="contactAdminDialog" aria-labelledby="contactAdminTitle">
+  <h2 id="contactAdminTitle">Contacter l’administrateur</h2>
+  <p class="muted small">Ton message sera envoyé à fnme.pointage@gmail.com. L’administrateur pourra répondre à l’adresse de ton compte.</p>
+  <form id="contactAdminForm">
+    <label for="contactSubject">Objet</label><input id="contactSubject" maxlength="160" required value="Demande concernant mon pointage">
+    <div style="height:12px"></div>
+    <label for="contactMessage">Message</label><textarea id="contactMessage" rows="7" maxlength="5000" required></textarea>
+    <div id="contactFeedback" aria-live="polite" style="margin-top:12px"></div>
+    <div class="actions"><button id="contactClose" class="secondary" type="button">Fermer</button><button id="contactSend" type="submit">Envoyer le message</button></div>
+  </form>
+</dialog>
+
 <dialog id="confirmDialog" aria-labelledby="confirmTitle">
   <h2 id="confirmTitle">Confirmation</h2>
   <p id="confirmMessage"></p>
@@ -329,6 +341,7 @@
   function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
   let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
+  let contactSending=false;
   let documentsScope='national',documentBusy=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
@@ -525,7 +538,7 @@
     finally{$('signupBtn').disabled=false;}
   };
 
-  async function logout(){if(!await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;closePdfReader();documents=[];await sb.auth.signOut();}
+  async function logout(){if(contactSending || !await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;$('contactAdminDialog').close();$('contactMessage').value='';$('contactFeedback').innerHTML='';closePdfReader();documents=[];await sb.auth.signOut();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
@@ -896,6 +909,38 @@
     }
   }
   $('saveEntries').onclick=()=>saveEntries();
+
+  $('contactAdminLink').onclick=()=>{
+    if(!session || !profile?.active || profile.is_admin)return;
+    if(!contactSending)$('contactFeedback').innerHTML='';
+    $('contactAdminDialog').showModal();
+  };
+  $('contactClose').onclick=()=>{if(!contactSending)$('contactAdminDialog').close();};
+  $('contactAdminDialog').addEventListener('cancel',event=>{if(contactSending)event.preventDefault();});
+  $('contactAdminForm').onsubmit=async(event)=>{
+    event.preventDefault();
+    if(contactSending || !session || !profile?.active || profile.is_admin)return;
+    const subject=$('contactSubject').value.trim(),message=$('contactMessage').value.trim();
+    if(!subject || subject.length>160 || /[\r\n]/.test(subject) || !message || message.length>5000){$('contactFeedback').innerHTML=msg('Renseigne un objet et un message valides.','warn');return;}
+    contactSending=true;
+    for(const id of ['contactSend','contactClose','contactSubject','contactMessage'])$(id).disabled=true;
+    $('contactSend').textContent='Envoi en cours…';$('contactFeedback').innerHTML='';
+    try{
+      const {data,error}=await sb.functions.invoke('contact-admin',{body:{subject,message}});
+      if(error){
+        let reason='';try{reason=(await error.context?.json())?.error||'';}catch{}
+        const text=reason==='RATE_LIMIT'?'Tu as atteint la limite de trois envois par heure. Réessaie plus tard : ton message est conservé.':
+          reason==='AUTH_REQUIRED' || reason==='ACCOUNT_NOT_ACTIVE'?'Ton compte ne permet pas cet envoi. Reconnecte-toi et réessaie : ton message est conservé.':
+          reason==='MAIL_UNAVAILABLE'?'Le service mail est temporairement indisponible. Ton message est conservé. Réessaie plus tard.':
+          'L’envoi n’a pas pu être confirmé. Ton message est conservé. Vérifie auprès de l’administrateur avant de le renvoyer.';
+        $('contactFeedback').innerHTML=msg(text,'warn');return;
+      }
+      if(!data?.sent)throw new Error('SEND_NOT_CONFIRMED');
+      $('contactMessage').value='';
+      $('contactFeedback').innerHTML=msg('Ton message a été envoyé à l’administrateur.','ok');
+    }catch{$('contactFeedback').innerHTML=msg('L’envoi n’a pas pu être confirmé. Ton message est conservé. Vérifie auprès de l’administrateur avant de le renvoyer.','warn');}
+    finally{contactSending=false;for(const id of ['contactSend','contactClose','contactSubject','contactMessage'])$(id).disabled=false;$('contactSend').textContent='Envoyer le message';}
+  };
 
   // Bases documentaires nationale et par unité.
   const DOCUMENT_BUCKET='pointage-documents';
