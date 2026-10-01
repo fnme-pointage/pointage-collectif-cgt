@@ -44,9 +44,9 @@ window.supabase={createClient:()=>({from:t=>new Query(t),auth:{getSession:async(
    await page.evaluate(()=>{window.testDb.pointage_maintenance[0].locked=false;document.dispatchEvent(new Event('visibilitychange'));});
    await page.waitForFunction(()=>!document.querySelector('#saveEntries').disabled);
    assert.equal(await page.locator('#entryHours0').inputValue(),'8,25');
-   await page.locator('#spaceYear').fill('2027');await page.locator('#spaceYear').press('Tab');
+   await page.locator('#spaceYear').selectOption('2027');await page.locator('#spaceYear').press('Tab');
    await page.locator('#confirmCancel').click();await page.waitForFunction(()=>document.querySelector('#spaceYear').value==='2026');assert.equal(await page.locator('#spaceYear').inputValue(),'2026');assert.equal(await page.locator('#entryHours0').inputValue(),'8,25');
-   await page.locator('#spaceYear').fill('2027');await page.locator('#spaceYear').press('Tab');await page.locator('#confirmAccept').click();
+   await page.locator('#spaceYear').selectOption('2027');await page.locator('#spaceYear').press('Tab');await page.locator('#confirmAccept').click();
    await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2027-01');assert.equal(await page.locator('[data-space-month]').count(),12);
    await page.locator('[data-space-month="2027-12"]').click();await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2027-12');
   }else{

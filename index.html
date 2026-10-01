@@ -133,7 +133,7 @@
       </div>
       <div class="monthfield">
         <label for="spaceYear">Année</label>
-        <input id="spaceYear" type="number" min="1900" max="9999" step="1">
+        <select id="spaceYear"></select>
       </div>
       <div class="monthfield">
         <label for="monthSelect">Mois</label>
@@ -318,6 +318,7 @@
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
   let units=[], selectedUnit='', spaceYear=curYearInitial();
+  let yearMenuStart=Math.max(1900,Number(spaceYear)-2),yearMenuEnd=Math.min(9999,Number(spaceYear)+10);
   let monthRequest=0;
   let maintenanceLocked=false,maintenanceKnown=false,maintenanceTimer=null,maintenanceChecking=null,maintenanceChanging=false;
   let catalogueRows=[], catalogueOriginal=[], catalogueUnit='', catalogueRequest=0;
@@ -665,8 +666,16 @@
     if(!await allowLeavePointage()){renderMonthSelect();return;}
     selectedMonth=nextMonth;renderMonthSelect();await loadMonthData();
   }
-  function renderMonthSelect(){
+  function renderYearSelect(){
+    const years=new Set([spaceYear,...months.map(m=>String(m.month_key).slice(0,4))]);
+    for(let year=yearMenuStart;year<=yearMenuEnd;year++)years.add(String(year));
+    $('spaceYear').innerHTML=(yearMenuStart>1900?'<option value="earlier">Années précédentes…</option>':'')+
+      [...years].filter(y=>/^[1-9][0-9]{3}$/.test(y)&&Number(y)>=1900).sort().map(y=>`<option value="${esc(y)}"${y===spaceYear?' selected':''}>${esc(y)}</option>`).join('')+
+      (yearMenuEnd<9999?'<option value="later">Années suivantes…</option>':'');
     $('spaceYear').value=spaceYear;
+  }
+  function renderMonthSelect(){
+    renderYearSelect();
     const available=months.filter(m=>m.month_key.startsWith(spaceYear+'-')).sort((a,b)=>a.month_key.localeCompare(b.month_key));
     $('monthSelect').innerHTML=available.map(m=>`<option value="${esc(m.month_key)}"${m.month_key===selectedMonth?' selected':''}>${esc(monthLabel(m.month_key))}</option>`).join('');
     $('monthSelect').onchange=()=>selectSpaceMonth($('monthSelect').value);
@@ -675,6 +684,11 @@
   }
   $('spaceYear').onchange=async()=>{
     const next=$('spaceYear').value;
+    if(next==='earlier' || next==='later'){
+      if(next==='earlier')yearMenuStart=Math.max(1900,yearMenuStart-10);
+      else yearMenuEnd=Math.min(9999,yearMenuEnd+10);
+      renderYearSelect();return;
+    }
     if(!/^[1-9][0-9]{3}$/.test(next)||Number(next)<1900){$('spaceYear').value=spaceYear;return;}
     if(!await allowLeavePointage() || (profile.is_admin && !await allowLeaveCatalogue())){$('spaceYear').value=spaceYear;return;}
     spaceYear=next;selectedMonth='';await loadMonths();

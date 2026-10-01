@@ -22,6 +22,20 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
   });
   await page.goto('https://pointage.test/');await page.locator('#mainView').waitFor({state:'visible'});
   if(mode==='user'){
+   assert.equal(await page.locator('#spaceYear').evaluate(e=>e.tagName),'SELECT');
+   await page.locator('#entryHours0').fill('8,25');
+   await page.locator('#spaceYear').selectOption('2027');await page.locator('#confirmCancel').click();
+   await page.waitForFunction(()=>document.querySelector('#spaceYear').value==='2026');
+   assert.equal(await page.locator('#spaceYear').inputValue(),'2026');
+   assert.equal(await page.locator('#entryHours0').inputValue(),'8,25');
+   for(let i=0;i<3;i++)await page.locator('#spaceYear').selectOption('later');
+   assert.equal(await page.locator('#spaceYear').inputValue(),'2026');
+   assert.equal(await page.locator('#entryHours0').inputValue(),'8,25');
+   await page.locator('#spaceYear').selectOption('2060');await page.locator('#confirmAccept').click();
+   await page.waitForFunction(()=>document.querySelector('#monthSelect').value==='2060-01');
+   assert.equal(await page.locator('[data-space-month]').count(),12);
+   await page.locator('#spaceYear').selectOption('2026');
+   await page.waitForFunction(()=>document.querySelector('#monthSelect').value.startsWith('2026-'));
    await page.locator('#userDocumentsTab').click();await page.getByText('Document national',{exact:true}).waitFor();
    assert.equal(await page.locator('#documentList').textContent().then(t=>t.includes('Document ULM')),false);
    await page.locator('#userUnitDocumentsTab').click();await page.getByText('Document ULM',{exact:true}).waitFor();
