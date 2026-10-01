@@ -22,6 +22,9 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
   });
   await page.goto('https://pointage.test/');await page.locator('#mainView').waitFor({state:'visible'});
   if(mode==='user'){
+   assert.equal(await page.locator('#contactAdminLink').isVisible(),true);
+   const contact=new URL(await page.locator('#contactAdminLink').getAttribute('href'));
+   assert.equal(contact.protocol,'mailto:');assert.equal(contact.pathname,'fnme.pointage@gmail.com');assert.equal(contact.searchParams.get('subject'),'Pointage collectif - Contact administrateur');
    assert.equal(await page.locator('#monthSelect').isVisible(),false);
    assert.equal(await page.locator('#spaceYear').isVisible(),true);
    assert.equal(await page.locator('#monthButtons').isVisible(),true);
@@ -46,6 +49,7 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    await page.locator('#userDocumentsTab').click();await page.getByText('Document national',{exact:true}).waitFor();
    assert.equal(await page.locator('#documentList').textContent().then(t=>t.includes('Document ULM')),false);
    await page.locator('#userUnitDocumentsTab').click();await page.getByText('Document ULM',{exact:true}).waitFor();
+   assert.equal(await page.locator('#contactAdminLink').isVisible(),true);
    assert.equal(await page.locator('#documentList').textContent().then(t=>t.includes('Document national')||t.includes('Document UFPI')),false);
    assert.equal(await page.locator('#documentAdminForm').isVisible(),false);
    assert.match(await page.locator('#documentsTitle').textContent(),/ULM/);
@@ -53,6 +57,7 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    await page.screenshot({path:'/tmp/documents-unit-mobile.png',fullPage:true});
    await page.locator('#userPointageTab').click();assert.equal(await page.locator('#documentsArea').isVisible(),false);
   }else{
+   assert.equal(await page.locator('#contactAdminLink').isVisible(),false);
    assert.equal(await page.locator('#monthSelect').isVisible(),false);
    assert.equal(await page.locator('#spaceYear').isVisible(),false);
    assert.equal(await page.locator('#monthButtons').isVisible(),false);
