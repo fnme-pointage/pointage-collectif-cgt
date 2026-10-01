@@ -14,7 +14,7 @@
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
     .row{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.grow{flex:1;min-width:180px}.smallfield{width:130px}.monthfield{width:190px}
     label{display:block;color:var(--muted);font-size:.82rem;margin-bottom:5px}
-    input,select,button{font:inherit} input,select{width:100%;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text)}
+    input,select,textarea,button{font:inherit} input,select,textarea{width:100%;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text)}
     button{border:0;border-radius:10px;padding:10px 13px;background:var(--accent);color:#fff;font-weight:650;cursor:pointer} button.secondary{background:#eef0f4;color:var(--text)} button.danger{background:var(--dangerbg);color:var(--danger)} button:disabled{opacity:.45;cursor:not-allowed}
     .pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:.78rem;background:#eef0f4}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.danger{background:var(--dangerbg);color:var(--danger)}
     .muted{color:var(--muted)} .small{font-size:.82rem}.big{font-size:1.9rem;font-weight:800}
@@ -33,6 +33,7 @@
     .document-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #eef0f4}.document-row:last-child{border:0}.document-row>div:first-child{min-width:0;overflow-wrap:anywhere}.document-actions{display:flex;gap:8px;flex-shrink:0}#pdfReader{width:min(1100px,96vw);max-height:94vh;padding:16px}#pdfReader .reader-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.reader-scroll{overflow:auto;max-height:70vh;background:#e9edf2;border-radius:10px;padding:10px;text-align:center}.reader-scroll canvas{background:white;box-shadow:0 1px 8px #0002;max-width:none}#readerTitle{overflow-wrap:anywhere}@media print{#pdfReader{display:none!important}}
     @media(max-width:620px){.entry{grid-template-columns:1fr 105px 42px}.app{padding:11px 11px 80px}.userbox{max-width:160px}.actions>*{min-width:100%}.monthfield{width:100%}.smallfield{width:100%}}
     .brand{display:flex;align-items:center;gap:12px;min-width:0}.brand-logo{display:block;width:42px;height:auto;flex:0 0 auto}.brand h1{margin:0;font-size:1.35rem;line-height:1.25}.login .brand{margin-bottom:18px}.login .brand-logo{width:48px}.top .brand{flex:1}@media(max-width:620px){.top{flex-wrap:wrap}.top .brand-logo{width:36px}.top .brand h1{font-size:1.15rem}.top .userbox{max-width:none;width:100%;text-align:left}.login .brand-logo{width:42px}}
+  .month-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px}.month-grid button{background:#fff;color:#222;border:1px solid #ddd;padding:12px 6px}.month-grid button.active{background:#bd1522;color:#fff}.month-grid small{display:block;font-size:11px}.catalogue-units{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}@media(max-width:620px){.month-grid{grid-template-columns:repeat(3,1fr)}}
   </style>
 </head>
 <body>
@@ -130,7 +131,11 @@
         <label for="adminUnit">Unité affichée</label><select id="adminUnit"></select>
       </div>
       <div class="monthfield">
-        <label>Mois</label>
+        <label for="spaceYear">Année</label>
+        <input id="spaceYear" type="number" min="1900" max="9999" step="1">
+      </div>
+      <div class="monthfield">
+        <label for="monthSelect">Mois</label>
         <select id="monthSelect"></select>
       </div>
       <div class="grow">
@@ -138,6 +143,9 @@
       </div>
     </div>
   </div>
+
+  <div id="monthButtons" class="month-grid" aria-label="Mois de l’année"></div>
+  <div id="calendarMessage" aria-live="polite"></div>
 
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
@@ -167,7 +175,7 @@
   <div id="adminArea" class="hidden">
     <div class="adminnav">
       <button data-admin-tab="results" class="active">Suivi</button>
-      <button data-admin-tab="codes" class="hidden">Codes du mois</button>
+      <button data-admin-tab="codes">Catalogue des codes</button>
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="months" class="hidden">Mois</button>
       <button data-admin-tab="units">Unités</button>
@@ -195,17 +203,19 @@
 
     <section id="admin-codes" class="hidden">
       <div class="card">
-        <div class="sectiontitle">
-          <h2>Codes disponibles pour ce mois</h2>
-          <div>
-            <button id="loadStandardCodes" class="secondary">Liste standard</button>
-            <button id="addAdminCode" class="secondary">+ Code</button>
-          </div>
+        <div class="sectiontitle"><h2>Catalogue des codes</h2><button id="addAdminCode" class="secondary" type="button">+ Code</button></div>
+        <div class="row">
+          <div class="monthfield"><label for="catalogueSourceUnit">Catalogue de l’unité</label><select id="catalogueSourceUnit"></select></div>
+          <div class="monthfield"><label for="catalogueEffective">Applicable à partir de</label><input id="catalogueEffective" type="month"></div>
         </div>
+        <p class="muted small">Les modifications s’appliquent aux mois ouverts à partir de cette date, y compris aux années futures. Les mois fermés et les pointages déjà enregistrés conservent leurs références d’origine.</p>
         <div id="adminCodes" class="tablewrap"></div>
-        <div class="actions"><button id="saveAdminCodes">Enregistrer les codes</button></div>
-        <div id="codeAdminMessage" style="margin-top:10px"></div>
-      <p class="muted small">Désactiver un code le retire de la liste de saisie sans effacer les pointages déjà enregistrés.</p>
+        <p><strong>Appliquer les modifications aux unités :</strong></p>
+        <label class="checkbox"><input id="catalogueAllUnits" type="checkbox"> Toutes les unités actuelles</label>
+        <div id="catalogueUnits" class="catalogue-units"></div>
+        <div class="actions"><button id="saveAdminCodes" type="button">Enregistrer les modifications</button></div>
+        <div id="codeAdminMessage" aria-live="polite"></div>
+        <p class="muted small">Décoche « Actif » pour retirer un code des nouvelles saisies. Pour corriger un libellé, modifie sa ligne avec la date d’application souhaitée.</p>
       </div>
     </section>
 
@@ -235,7 +245,7 @@
           <label class="checkbox"><input id="copyYearCodes" type="checkbox" checked> Copier les codes du mois affiché</label>
           <button id="createYear" type="button">Créer les 12 mois</button>
         </div>
-        <p class="muted small">Création pour l’unité sélectionnée. Les mois existants sont conservés. Sans copie, la liste standard est utilisée. Tu peux ensuite ajouter ou modifier un code dans « Codes du mois ».</p>
+        <p class="muted small">Création pour l’unité sélectionnée. Les mois existants sont conservés. Sans copie, la liste standard est utilisée. Les codes se gèrent dans « Catalogue des codes ».</p>
         <div id="yearAdminMessage" aria-live="polite"></div>
         <hr>
         <div class="row">
@@ -333,9 +343,12 @@
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
-  let allProfiles=[], adminUserProfiles=[], adminEntries=[], editableAdminCodes=[];
+  let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
-  let units=[], selectedUnit='';
+  let units=[], selectedUnit='', spaceYear=curYearInitial();
+  let monthRequest=0;
+  let catalogueRows=[], catalogueOriginal=[], catalogueUnit='', catalogueRequest=0;
+  function curYearInitial(){return String(new Date().getFullYear());}
   let recoveryVerifying=false;
   let entriesDirty=false, savedEntriesState='[]', savingEntries=false;
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
@@ -401,11 +414,10 @@
 
   const standardRows = monthKey => STANDARD_CODES.map(c=>({month_key:monthKey,code:c.code,label:c.label,active:true}));
   const standardOrder = new Map(STANDARD_CODES.map((c,i)=>[c.code,i]));
-  const referenceFor = code => STANDARD_CODES.find(c=>c.code===String(code||'').trim().toUpperCase())?.document||'—';
+  const referenceFor = code => (typeof code==='object' && code?.document!=null && code.document!=='') ? code.document : STANDARD_CODES.find(c=>c.code===String(typeof code==='object'?code?.code:code||'').trim().toUpperCase())?.document||'—';
   function orderedCodes(codes){
     return codes.slice().sort((a,b)=>(standardOrder.get(String(a.code).trim().toUpperCase())??Infinity)-(standardOrder.get(String(b.code).trim().toUpperCase())??Infinity));
   }
-  function orderAdminCodes(){ editableAdminCodes=orderedCodes(editableAdminCodes); }
 
   // Structure commune aux deux écrans : même catalogue et mêmes références.
   function codesTable(rows,extraHeaders,renderRow){
@@ -523,7 +535,7 @@
     finally{$('signupBtn').disabled=false;}
   };
 
-  async function logout(){if(!await allowLeavePointage()) return;closePdfReader();documents=[];await sb.auth.signOut();}
+  async function logout(){if(!await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;closePdfReader();documents=[];await sb.auth.signOut();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
@@ -607,24 +619,29 @@
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
-  $('adminUnit').onchange=async()=>{selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
+  $('adminUnit').onchange=async()=>{if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
     const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
     if(error){$('unitMessage').innerHTML=msg(error.message,'warn');return;}
     units.push(data); units.sort((a,b)=>a.name.localeCompare(b.name,'fr'));
-    selectedUnit=data.id; $('newUnitName').value='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();
+    selectedUnit=data.id; catalogueUnit=data.id; $('newUnitName').value='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();
     $('unitMessage').innerHTML=msg('Unité créée. Elle est disponible lors des inscriptions.','ok');
   };
 
   async function loadMonths(){
-    if(profile.is_admin) renderAdminNavigation();
+    if(profile.is_admin)renderAdminNavigation();
+    const {error:yearError}=await sb.rpc('pointage_ensure_year',{p_unit_id:selectedUnit,p_year:Number(spaceYear)});
+    if(yearError){$('calendarMessage').innerHTML=msg('Impossible de charger l’année : '+yearError.message,'warn');return;}
+    $('calendarMessage').innerHTML='';
+    if(profile.is_admin)await loadCatalogue();
     const {data,error}=await sb.from('months').select('*').eq('unit_id',selectedUnit).order('month_key',{ascending:false});
     if(error){alert(error.message);return;}
     months=data||[];
-    selectedMonth = months.some(m=>m.month_key===selectedMonth) ? selectedMonth :
-                    (months.find(m=>m.month_key===curMonth())?.month_key || months[0]?.month_key || '');
+    const yearMonths=months.filter(m=>m.month_key.startsWith(spaceYear+'-')).sort((a,b)=>a.month_key.localeCompare(b.month_key));
+    selectedMonth = yearMonths.some(m=>m.month_key===selectedMonth) ? selectedMonth :
+                    (yearMonths.find(m=>m.month_key===curMonth())?.month_key || yearMonths[0]?.month_key || '');
     renderMonthSelect();
     if(profile.is_admin) await renderAnnualYears();
     if(selectedMonth){await loadMonthData();return;}
@@ -632,8 +649,8 @@
     $('adminSelectedMonth').textContent='Aucun mois sélectionné';
     $('editMonthKey').value='';
     $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=true;
-    monthCodes=[]; entries=[]; savedEntriesState='[]';entriesDirty=false;editableAdminCodes=[];
-    renderUserEntries(); renderAdminCodes();
+    monthCodes=[]; entries=[]; savedEntriesState='[]';entriesDirty=false;
+    renderUserEntries();
     $('userNotice').innerHTML=msg('Aucun mois disponible. Crée un mois pour commencer.','warn');
     if(profile.is_admin){
       const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
@@ -657,18 +674,29 @@
   }
   $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
 
-  function renderMonthSelect(){
-    $('monthSelect').innerHTML=months.map(m=>`<option value="${esc(m.month_key)}"${m.month_key===selectedMonth?' selected':''}>${esc(monthLabel(m.month_key))}</option>`).join('');
-    $('monthSelect').onchange=async()=>{
-      const nextMonth=$('monthSelect').value;
-      if(!await allowLeavePointage()){$('monthSelect').value=selectedMonth;return;}
-      selectedMonth=nextMonth;await loadMonthData();
-    };
+  async function selectSpaceMonth(nextMonth){
+    if(!await allowLeavePointage()){renderMonthSelect();return;}
+    selectedMonth=nextMonth;renderMonthSelect();await loadMonthData();
   }
+  function renderMonthSelect(){
+    $('spaceYear').value=spaceYear;
+    const available=months.filter(m=>m.month_key.startsWith(spaceYear+'-')).sort((a,b)=>a.month_key.localeCompare(b.month_key));
+    $('monthSelect').innerHTML=available.map(m=>`<option value="${esc(m.month_key)}"${m.month_key===selectedMonth?' selected':''}>${esc(monthLabel(m.month_key))}</option>`).join('');
+    $('monthSelect').onchange=()=>selectSpaceMonth($('monthSelect').value);
+    $('monthButtons').innerHTML=available.map(m=>`<button type="button" data-space-month="${esc(m.month_key)}" class="${m.month_key===selectedMonth?'active':''}" aria-pressed="${m.month_key===selectedMonth}">${esc(monthLabel(m.month_key).replace(' '+spaceYear,''))}${m.is_open?'':'<small>Fermé</small>'}</button>`).join('');
+    document.querySelectorAll('[data-space-month]').forEach(b=>b.onclick=()=>selectSpaceMonth(b.dataset.spaceMonth));
+  }
+  $('spaceYear').onchange=async()=>{
+    const next=$('spaceYear').value;
+    if(!/^[1-9][0-9]{3}$/.test(next)||Number(next)<1900){$('spaceYear').value=spaceYear;return;}
+    if(!await allowLeavePointage() || (profile.is_admin && !await allowLeaveCatalogue())){$('spaceYear').value=spaceYear;return;}
+    spaceYear=next;selectedMonth='';await loadMonths();
+  };
 
   function currentMonthRec(){return months.find(m=>m.month_key===selectedMonth);}
 
   async function loadMonthData(){
+    const request=++monthRequest,unitId=selectedUnit,key=selectedMonth;
     const mrec=currentMonthRec();
     $('toggleMonthState').disabled=$('renameMonth').disabled=$('deleteMonth').disabled=false;
     $('monthState').textContent=mrec?.is_open?'Mois ouvert':'Mois fermé';
@@ -677,16 +705,15 @@
     $('editMonthKey').value=selectedMonth||'';
     $('toggleMonthState').textContent=mrec?.is_open?'Fermer le mois':'Rouvrir le mois';
     $('toggleMonthState').className=mrec?.is_open?'danger':'';
-    const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).order('code');
+    const {data:codes,error:ce}=await sb.from('month_codes').select('*').eq('unit_id',unitId).eq('month_key',key).order('code');
+    if(request!==monthRequest)return;
     if(ce){alert(ce.message);return;} monthCodes=orderedCodes(codes||[]);
-    const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');
+    const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',unitId).eq('month_key',key).eq('user_id',session.user.id).order('id');
+    if(request!==monthRequest)return;
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:String(x.hours)}));
     savedEntriesState=entryState();entriesDirty=false;
     renderUserEntries();
     if(profile.is_admin){
-      editableAdminCodes=monthCodes.map(x=>({...x}));
-      orderAdminCodes();
-      renderAdminCodes();
       await loadAdminData();
     }
   }
@@ -698,17 +725,18 @@
     $('userNotice').innerHTML = !currentMonthRec()?.is_open ? msg('Ce mois est fermé. Consultation uniquement.','warn') : '';
     const rows=entries.length?entries:(can?[{code_id:'',hours:''}]:[]);
     $('entryList').innerHTML=rows.length?rows.map((r,i)=>{
-      const code=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
+      const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
+      const code=currentCode && r.saved_code ? {...currentCode,code:r.saved_code,label:r.saved_label,document:r.saved_document} : currentCode;
       return `<div class="entry">
         <div><label id="entryCodeLabel${i}">Libellé, code et accords</label>
           ${can?`<details class="code-picker" data-picker="${i}">
             <summary id="entryCode${i}" aria-labelledby="entryCodeLabel${i} entryCode${i}">${code?`${esc(code.code)} — ${esc(code.label)}`:'Choisir un code…'}</summary>
             <div class="picker-panel">${codesTable(monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)),'',c=>{
               const used=entries.some((other,j)=>j!==i && Number(other.code_id)===Number(c.id));
-              return `<tr><td>${esc(c.label)}${c.active?'':' (inactif)'}</td><td><button class="code-choice" type="button" data-pick-entry="${i}" data-pick-code="${c.id}" aria-label="Choisir ${esc(c.code)} — ${esc(c.label)}" ${used?'disabled':''}>${esc(c.code)}${Number(c.id)===Number(r.code_id)?' ✓':''}</button></td><td>${esc(referenceFor(c.code))}</td></tr>`;
+              return `<tr><td>${esc(c.label)}${c.active?'':' (inactif)'}</td><td><button class="code-choice" type="button" data-pick-entry="${i}" data-pick-code="${c.id}" aria-label="Choisir ${esc(c.code)} — ${esc(c.label)}" ${used?'disabled':''}>${esc(c.code)}${Number(c.id)===Number(r.code_id)?' ✓':''}</button></td><td>${esc(referenceFor(c))}</td></tr>`;
             })}</div>
           </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
-          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code.code))}`:'Les accords seront affichés après le choix du code.'}</div>
+          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}</div>
         </div>
         <div><label for="entryHours${i}">Heures</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="decimal" placeholder="Ex. 7,50" value="${esc(r.hours)}" ${can && code?'':'disabled'}></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
@@ -718,6 +746,7 @@
       const i=Number(e.currentTarget.dataset.pickEntry), id=Number(e.currentTarget.dataset.pickCode);
       if(!canEditOwn() || entries.some((r,j)=>j!==i && Number(r.code_id)===id)) return;
       if(!entries[i]) entries[i]={id:null,user_id:session.user.id,unit_id:selectedUnit,month_key:selectedMonth,code_id:'',hours:''};
+      if(Number(entries[i].code_id)!==id){delete entries[i].saved_code;delete entries[i].saved_label;delete entries[i].saved_document;}
       entries[i].code_id=id;
       updateEntrySaveState();renderUserEntries();
       $('entryCode'+i).focus();
@@ -765,7 +794,7 @@
     return leave;
   }
   window.addEventListener('beforeunload',event=>{
-    if(entriesDirty || savingEntries){event.preventDefault();event.returnValue='';}
+    if(entriesDirty || savingEntries || (profile?.is_admin && catalogueState(catalogueRows)!==catalogueState(catalogueOriginal))){event.preventDefault();event.returnValue='';}
   });
   async function saveEntries(){
     if(!canEditOwn() || savingEntries) return false;
@@ -781,6 +810,7 @@
       if(error) throw error;
       // Garder les éventuelles modifications saisies pendant la requête.
       savedEntriesState=savedState;
+      if(entryState()===savedState){const {data:fresh}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');if(fresh && entryState()===savedState){entries=fresh.map(e=>({...e,hours:String(e.hours)}));savedEntriesState=entryState();renderUserEntries();}}
       updateEntrySaveState();
       $('userNotice').innerHTML=msg(entriesDirty?'Enregistrement terminé. De nouvelles modifications restent à enregistrer.':'Tes données sont enregistrées. Tu peux quitter l’outil.','ok');
       return true;
@@ -947,15 +977,14 @@
   // ADMIN
   function renderAdminNavigation(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    document.querySelectorAll('[data-admin-tab="codes"], [data-admin-tab="months"]').forEach(btn=>{
+    document.querySelectorAll('[data-admin-tab="months"]').forEach(btn=>{
       btn.classList.toggle('hidden',isAdminUnit);
     });
     if(isAdminUnit){
       const activeTab=document.querySelector('[data-admin-tab].active');
-      if(['codes','months'].includes(activeTab?.dataset.adminTab)){
+      if(['months'].includes(activeTab?.dataset.adminTab)){
         document.querySelector('[data-admin-tab="results"]').click();
       }
-      show('admin-codes',false);
       show('admin-months',false);
     }
   }
@@ -1009,7 +1038,7 @@
     try {
       const [codes,ents]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
@@ -1026,11 +1055,11 @@
 
   function annualReport(){
     const codeById=new Map(annualCodes.map(c=>[Number(c.id),c]));
-    const codeNames=[...new Set(annualCodes.map(c=>c.code))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const codeNames=[...new Set([...annualCodes.map(c=>c.code),...annualEntries.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
     const people=allProfiles.filter(p=>!p.is_admin && p.unit_id===selectedUnit && (p.active || annualEntries.some(e=>e.user_id===p.id)));
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of annualEntries){
-      const code=codeById.get(Number(e.code_id))?.code;
+      const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
       if(!code) continue;
       const cents=Math.round(Number(e.hours||0)*100), key=`${e.user_id}\u0000${code}`;
       amounts.set(key,(amounts.get(key)||0)+cents);
@@ -1066,57 +1095,65 @@
     $('summaryTable').innerHTML=html;
   }
 
-  function renderAdminCodes(){
-    $('adminCodes').innerHTML=codesTable(editableAdminCodes,'<th>Actif</th><th></th>',(c,i)=>`
-      <tr>
-        <td><input data-alabel="${i}" aria-label="Libellé" value="${esc(c.label)}" placeholder="Libellé"></td>
-        <td><input data-acode="${i}" aria-label="Code" value="${esc(c.code)}" placeholder="Code"></td>
-        <td data-areference="${i}">${esc(referenceFor(c.code))}</td>
-        <td><label class="checkbox"><input data-aactive="${i}" type="checkbox" ${c.active?'checked':''}> Actif</label></td>
-        <td><button class="icon" aria-label="Retirer le code" data-aremove="${i}" ${c.id?'disabled title="Désactive le code au lieu de le supprimer"':''}>×</button></td>
-      </tr>`);
-    document.querySelectorAll('[data-acode]').forEach(el=>el.oninput=e=>{
-      editableAdminCodes[+e.target.dataset.acode].code=e.target.value;
-      document.querySelector(`[data-areference="${e.target.dataset.acode}"]`).textContent=referenceFor(e.target.value);
-    });
-    document.querySelectorAll('[data-alabel]').forEach(el=>el.oninput=e=>editableAdminCodes[+e.target.dataset.alabel].label=e.target.value);
-    document.querySelectorAll('[data-aactive]').forEach(el=>el.onchange=e=>editableAdminCodes[+e.target.dataset.aactive].active=e.target.checked);
-    document.querySelectorAll('[data-aremove]').forEach(el=>el.onclick=e=>{editableAdminCodes.splice(+e.target.dataset.aremove,1);renderAdminCodes();});
+  function catalogueState(rows){return JSON.stringify(rows.map(c=>({catalogue_id:c.catalogue_id||null,code:c.code,label:c.label,document:c.document||'',active:c.active})));}
+  async function allowLeaveCatalogue(){
+    if(catalogueState(catalogueRows)===catalogueState(catalogueOriginal)) return true;
+    return confirmAction('Les modifications du catalogue ne sont pas enregistrées. Quitter sans les enregistrer ?',{button:'Quitter sans enregistrer'});
   }
-  $('loadStandardCodes').onclick=()=>{
-    let updated=0;
-    const hasDP=editableAdminCodes.some(c=>String(c.code||'').trim().toUpperCase()==='DP');
-    editableAdminCodes.forEach(c=>{
-      const previousCode=c.code, previousLabel=c.label;
-      if(!hasDP && String(c.code||'').trim().toUpperCase()==='DEP') c.code='DP';
-      const standard=STANDARD_CODES.find(item=>item.code===String(c.code||'').trim().toUpperCase());
-      if(standard) c.label=standard.label;
-      if(c.code!==previousCode || c.label!==previousLabel) updated++;
-    });
-    const existing=new Set(editableAdminCodes.map(c=>String(c.code||'').trim().toUpperCase()));
-    const missing=STANDARD_CODES.filter(c=>!existing.has(c.code.toUpperCase()));
-    if(!missing.length && !updated){$('codeAdminMessage').innerHTML=msg('Tous les codes de la liste standard sont déjà présents.','ok');return;}
-    editableAdminCodes.push(...missing.map(c=>({id:null,unit_id:selectedUnit,month_key:selectedMonth,code:c.code,label:c.label,active:true})));
-    orderAdminCodes();
-    renderAdminCodes();
-    $('codeAdminMessage').innerHTML=msg(`${missing.length} code(s) ajouté(s), ${updated} code(s) modifié(s). Clique sur « Enregistrer les codes » pour confirmer.`,'ok');
-  };
-  $('addAdminCode').onclick=()=>{editableAdminCodes.push({id:null,unit_id:selectedUnit,month_key:selectedMonth,code:'',label:'',active:true});renderAdminCodes();};
+  async function loadCatalogue(){
+    $('codeAdminMessage').innerHTML='';
+    const choices=units.filter(u=>u.active && u.name!=='ADMIN');
+    if(!choices.some(u=>u.id===catalogueUnit)) catalogueUnit=choices.find(u=>u.id===selectedUnit)?.id||choices[0]?.id||'';
+    $('catalogueSourceUnit').innerHTML=choices.map(u=>`<option value="${esc(u.id)}"${u.id===catalogueUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    $('catalogueEffective').min=curMonth();
+    if(!$('catalogueEffective').value) $('catalogueEffective').value=curMonth();
+    $('catalogueUnits').innerHTML=choices.map(u=>`<label class="checkbox"><input type="checkbox" data-catalogue-unit="${esc(u.id)}" ${u.id===catalogueUnit?'checked':''}> ${esc(u.name)}</label>`).join('');
+    $('catalogueAllUnits').checked=false;
+    if(!catalogueUnit){catalogueRows=[];catalogueOriginal=[];renderCatalogue();return;}
+    const request=++catalogueRequest;
+    const {data,error}=await sb.from('pointage_code_versions').select('*').eq('unit_id',catalogueUnit).lte('effective_month',$('catalogueEffective').value).order('effective_month',{ascending:false}).order('id',{ascending:false});
+    if(request!==catalogueRequest)return;
+    if(error){$('codeAdminMessage').innerHTML=msg(error.message,'warn');return;}
+    const latest=new Map();for(const c of data||[])if(!latest.has(c.catalogue_id))latest.set(c.catalogue_id,c);
+    catalogueRows=orderedCodes([...latest.values()]);catalogueOriginal=structuredClone(catalogueRows);renderCatalogue();
+  }
+  function renderCatalogue(){
+    $('adminCodes').innerHTML=codesTable(catalogueRows,'<th>Actif</th><th></th>',(c,i)=>`<tr>
+      <td><input data-clabel="${i}" aria-label="Libellé" maxlength="300" value="${esc(c.label)}"></td>
+      <td><input data-ccode="${i}" aria-label="Code" maxlength="30" value="${esc(c.code)}"></td>
+      <td><textarea data-cdocument="${i}" aria-label="Document de référence" maxlength="2000" rows="3">${esc(c.document||'')}</textarea></td>
+      <td><label class="checkbox"><input data-cactive="${i}" type="checkbox" ${c.active?'checked':''}> Actif</label></td>
+      <td>${c.catalogue_id?`<span class="muted small">Depuis ${esc(c.effective_month==='1900-01'?'l’origine':monthLabel(c.effective_month))}</span>`:`<button class="icon" type="button" data-cremove="${i}" aria-label="Retirer ce nouveau code">×</button>`}</td></tr>`);
+    for(const field of ['code','label','document'])document.querySelectorAll(`[data-c${field}]`).forEach(el=>el.oninput=()=>{catalogueRows[Number(el.dataset['c'+field])][field]=el.value;});
+    document.querySelectorAll('[data-cactive]').forEach(el=>el.onchange=()=>catalogueRows[Number(el.dataset.cactive)].active=el.checked);
+    document.querySelectorAll('[data-cremove]').forEach(el=>el.onclick=()=>{catalogueRows.splice(Number(el.dataset.cremove),1);renderCatalogue();});
+  }
+  $('catalogueSourceUnit').onchange=async()=>{if(!await allowLeaveCatalogue()){$('catalogueSourceUnit').value=catalogueUnit;return;}catalogueUnit=$('catalogueSourceUnit').value;await loadCatalogue();};
+  let catalogueDate='';
+  $('catalogueEffective').onfocus=()=>{catalogueDate=$('catalogueEffective').value;};
+  $('catalogueEffective').onchange=async()=>{if(!$('catalogueEffective').value || $('catalogueEffective').value<curMonth()){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
+  $('catalogueAllUnits').onchange=()=>document.querySelectorAll('[data-catalogue-unit]').forEach(el=>el.checked=$('catalogueAllUnits').checked);
+  $('addAdminCode').onclick=()=>{catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
   $('saveAdminCodes').onclick=async()=>{
-    const clean=editableAdminCodes.map(c=>({...c,code:c.code.trim(),label:c.label.trim()}));
-    if(clean.some(c=>!c.code||!c.label)){alert('Chaque code doit avoir un code et un libellé.');return;}
-    const lc=clean.map(c=>c.code.toLowerCase()); if(new Set(lc).size!==lc.length){alert('Deux codes identiques sont présents.');return;}
-    for(const c of clean){
-      if(c.id){
-        const {error}=await sb.from('month_codes').update({code:c.code,label:c.label,active:c.active}).eq('unit_id',selectedUnit).eq('id',c.id);
-        if(error){alert(error.message);return;}
-      } else {
-        const {error}=await sb.from('month_codes').insert({unit_id:selectedUnit,month_key:selectedMonth,code:c.code,label:c.label,active:c.active});
-        if(error){alert(error.message);return;}
-      }
-    }
-    await loadMonthData();
-    $('codeAdminMessage').innerHTML=msg('Codes enregistrés.','ok');
+    if(!profile?.is_admin)return;
+    const clean=catalogueRows.map(c=>({...c,code:c.code.trim().toUpperCase(),label:c.label.trim(),document:(c.document||'').trim()}));
+    if(clean.some(c=>!c.code||!c.label)){ $('codeAdminMessage').innerHTML=msg('Chaque code doit avoir un code et un libellé.','warn');return;}
+    if(new Set(clean.map(c=>c.code)).size!==clean.length){$('codeAdminMessage').innerHTML=msg('Deux codes identiques sont présents.','warn');return;}
+    const changes=clean.filter(c=>{const old=catalogueOriginal.find(o=>o.catalogue_id===c.catalogue_id);return !old||catalogueState([c])!==catalogueState([old]);});
+    const targets=[...document.querySelectorAll('[data-catalogue-unit]:checked')].map(el=>el.dataset.catalogueUnit);
+    const effective=$('catalogueEffective').value;
+    if(!changes.length){$('codeAdminMessage').innerHTML=msg('Aucune modification à enregistrer.','ok');return;}
+    if(!targets.length||effective<curMonth()){ $('codeAdminMessage').innerHTML=msg('Choisis au moins une unité et le mois en cours ou un mois futur.','warn');return;}
+    const names=units.filter(u=>targets.includes(u.id)).map(u=>u.name).join(', ');
+    if(!await confirmAction(`Appliquer ${changes.length} modification(s) à ${names} à partir de ${monthLabel(effective)} ? Les pointages enregistrés et les mois fermés seront conservés.`))return;
+    const button=$('saveAdminCodes');button.disabled=true;
+    try{
+      const {error}=await sb.rpc('pointage_save_catalogue',{p_units:targets,p_effective:effective,p_changes:changes.map(c=>({catalogue_id:c.catalogue_id,code:c.code,label:c.label,document:c.document,active:c.active}))});
+      if(error)throw error;
+      await loadCatalogue();if(selectedMonth)await loadMonthData();
+      $('codeAdminMessage').innerHTML=msg('Modifications enregistrées pour '+names+' à partir de '+monthLabel(effective)+'.','ok');
+    }catch(error){$('codeAdminMessage').innerHTML=msg('Enregistrement impossible : '+error.message,'warn');}
+    finally{button.disabled=false;}
   };
 
   function renderUsers(){
@@ -1194,7 +1231,7 @@
       const {data,error}=await sb.rpc('pointage_create_year',{p_unit_id:unitId,p_year:Number(year),p_codes:codes});
       if(error) throw error;
       if(selectedUnit===unitId){
-        selectedMonth=year+'-01';
+        spaceYear=year;selectedMonth=year+'-01';
         await loadMonths();
       }
       $('yearAdminMessage').innerHTML=msg(data.created+' mois créé(s) pour '+unitName+' en '+year+', '+data.existing+' mois déjà présent(s) conservé(s).','ok');
@@ -1300,7 +1337,7 @@
     const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
     const totals=new Map();
     for(const entry of personEntries){
-      const code=codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
       totals.set(code,(totals.get(code)||0)+Math.round(Number(entry.hours||0)*100));
     }
     const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
@@ -1329,7 +1366,7 @@
     try{
       const [codes,personEntries]=await Promise.all([
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       if(!personEntries.length){
         $('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');
@@ -1353,7 +1390,7 @@
     const amounts=new Map(), totals=new Map();
     for(const entry of globalEntries){
       if(!userIds.has(entry.user_id)) continue;
-      const code=codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
       const cents=Math.round(Number(entry.hours||0)*100);
       if(!amounts.has(entry.user_id)) amounts.set(entry.user_id,new Map());
       const userAmounts=amounts.get(entry.user_id);
@@ -1384,7 +1421,7 @@
       const [people,codes,globalEntries]=await Promise.all([
         fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours').gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       const rows=globalSummaryRows(year,people,codes,globalEntries);
       csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
@@ -1407,7 +1444,7 @@
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',c?.code||'',c?.label||'',String(Number(e.hours)).replace('.',',')]);
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',String(Number(e.hours)).replace('.',',')]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
