@@ -42,13 +42,15 @@ stub=stub.replace('from:t=>new Query(t),','from:t=>new Query(t),storage:{from:()
    await page.locator('#documentFile').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nTest')});
    await page.locator('#addDocument').click();await page.getByText('Nouveau PDF UFPI',{exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>window.lastInserted.unit_id),'ufpi');
-   await page.locator('[data-admin-tab="documents"]').click();await page.getByText('Document national',{exact:true}).waitFor();
+   assert.equal(await page.locator('[data-admin-tab="documents"]').isVisible(),false);
+   await page.locator('#adminUnit').selectOption('adminunit');await page.getByText('Document national',{exact:true}).waitFor();
    assert.equal(await page.getByText('Nouveau PDF UFPI',{exact:true}).count(),0);
    await page.locator('#documentTitle').fill('Nouveau PDF national');
    await page.locator('#documentFile').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nTest')});
    await page.locator('#addDocument').click();await page.getByText('Nouveau PDF national',{exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>window.lastInserted.unit_id),null);
-   await page.locator('[data-admin-tab="unit-documents"]').click();await page.getByText('Document UFPI',{exact:true}).waitFor();
+   await page.locator('#adminUnit').selectOption('ufpi');await page.getByText('Document UFPI',{exact:true}).waitFor();
+   assert.equal(await page.locator('[data-admin-tab="documents"]').isVisible(),false);
    await page.locator('#adminUnit').selectOption('adminunit');await page.getByText('Document national',{exact:true}).waitFor();
    assert.equal(await page.locator('[data-admin-tab="unit-documents"]').isVisible(),false);
    await page.screenshot({path:'/tmp/documents-national-admin.png',fullPage:true});

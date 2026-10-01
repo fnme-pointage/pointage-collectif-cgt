@@ -601,10 +601,15 @@
 
   function renderAdminUnits(){
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
-    document.querySelector('[data-admin-tab="unit-documents"]').classList.toggle('hidden',units.find(u=>u.id===selectedUnit)?.name==='ADMIN');
+    const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const nationalTab=document.querySelector('[data-admin-tab="documents"]');
+    const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
+    nationalTab.classList.toggle('hidden',!isAdminUnit);
+    unitTab.classList.toggle('hidden',isAdminUnit);
+    if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
     $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
-  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();if(!$('documentsArea').classList.contains('hidden')){if(documentsScope==='unit' && units.find(u=>u.id===selectedUnit)?.name==='ADMIN')document.querySelector('[data-admin-tab="documents"]').click();else openDocumentBase(documentsScope);}};
+  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
