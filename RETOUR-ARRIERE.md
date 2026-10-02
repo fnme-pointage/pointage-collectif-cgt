@@ -45,3 +45,10 @@ La branche `backup/avant-formats-durees-20261001` conserve l’interface précé
 Les durées exactes sont désormais stockées dans `entries.duration_seconds`. Le champ `hours` est conservé à deux décimales pour les anciens clients ; il ne doit plus être utilisé seul pour les totaux précis. Un ancien client qui renvoie une valeur décimale inchangée conserve la précision existante. Les exports de la nouvelle interface utilisent les secondes.
 
 Un retour à l’ancienne interface conserve les données, mais cette interface affichera et exportera les heures arrondies à deux décimales. Privilégier une correction de l’interface actuelle si des durées en minutes ont été saisies. Ne pas supprimer la colonne `duration_seconds` ni restaurer la table de sauvegarde sur les données actuelles : cela supprimerait les nouvelles saisies.
+
+
+## Liste type indépendante — 2 octobre 2026
+
+ADMIN > Catalogue des codes contient une liste type modifiable pour les futures unités. Les 26 codes d’origine ont été copiés dans `pointage_code_template`. Chaque création d’unité copie la liste type dans les versions propres à cette unité, dans la même transaction. Modifier la liste type ne modifie pas les unités existantes ; leurs catalogues restent indépendants. La lecture et l’enregistrement sont réservés à l’administrateur et une révision empêche l’écrasement d’une modification concurrente.
+
+La définition antérieure de l’initialisation des années et la liste d’origine sont conservées dans `pointage_private.code_template_initial_backup`, inaccessible aux utilisateurs. Le commit précédent conserve l’interface sans l’éditeur de liste type. En cas de retour de l’interface, conserver les nouvelles tables et le déclencheur pour que les nouvelles unités continuent de recevoir la liste type enregistrée. Ne pas restaurer les catalogues ou les pointages depuis une ancienne sauvegarde.

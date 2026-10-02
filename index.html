@@ -232,6 +232,14 @@
     </section>
 
     <section id="admin-codes" class="hidden">
+      <div id="codeTemplateCard" class="card hidden">
+        <div class="sectiontitle"><h2>Liste type des nouvelles unités</h2><button id="addTemplateCode" class="secondary" type="button">+ Code</button></div>
+        <div class="notice" style="margin-bottom:12px">Cette liste type est la liste par défaut utilisée lors de la création d’une nouvelle unité. Dans chaque onglet d’unité, le catalogue des codes permet ensuite de modifier la liste propre à cette unité. Les modifications de la liste type s’appliquent uniquement aux futures unités : elles ne changent pas les catalogues des unités déjà créées.</div>
+        <div id="templateCodes" class="tablewrap"></div>
+        <p class="muted small">Modifie les codes, les libellés ou les documents de référence. Décoche « Actif » pour exclure un code des nouvelles saisies des futures unités.</p>
+        <div class="actions"><button id="saveCodeTemplate" type="button" disabled>Enregistrer la liste type</button><button id="reloadCodeTemplate" class="secondary" type="button">Recharger la liste type</button></div>
+        <div id="templateMessage" aria-live="polite"></div>
+      </div>
       <div class="card">
         <div class="sectiontitle"><h2>Catalogue des codes</h2><button id="addAdminCode" class="secondary" type="button">+ Code</button></div>
         <div class="row">
@@ -348,6 +356,7 @@
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
+  let templateRows=[],templateOriginal=[],templateRevision=null,templateLoaded=false,templateBusy=false;
   let monthlyYear='', monthlyMonth='', monthlyUnit='', monthlyEntries=[], monthlyCodes=[], monthlyReady=false, monthlyRequest=0;
   let units=[], selectedUnit='', spaceYear=curYearInitial();
   let yearMenuStart=Math.max(1900,Number(spaceYear)-2),yearMenuEnd=Math.min(9999,Number(spaceYear)+10);
@@ -679,6 +688,7 @@
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
+    show('codeTemplateCard',profile.is_admin && isAdminUnit);
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
     const unitsTab=document.querySelector('[data-admin-tab="units"]');
@@ -692,6 +702,7 @@
   $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
     if(!profile?.is_admin || units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;
+    if(!await allowLeaveCatalogue())return;
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
     const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
@@ -1318,13 +1329,56 @@
     return html;
   }
 
+  async function loadCodeTemplate(){
+    if(!profile?.is_admin || templateBusy)return;
+    templateBusy=true;renderCodeTemplate();
+    try{
+      const {data,error}=await sb.rpc('pointage_get_code_template');if(error)throw error;
+      templateRows=orderedCodes(data.codes||[]);templateOriginal=structuredClone(templateRows);templateRevision=data.revision;templateLoaded=true;
+      $('templateMessage').innerHTML='';
+    }catch(error){$('templateMessage').innerHTML=msg('Impossible de charger la liste type : '+error.message,'warn');}
+    finally{templateBusy=false;renderCodeTemplate();}
+  }
+  function renderCodeTemplate(){
+    $('templateCodes').innerHTML=codesTable(templateRows,'<th>Actif</th><th></th>',(c,i)=>`<tr>
+      <td><input data-tlabel="${i}" aria-label="Libellé de la liste type" maxlength="300" value="${esc(c.label)}" ${templateBusy?'disabled':''}></td>
+      <td><input data-tcode="${i}" aria-label="Code de la liste type" maxlength="30" value="${esc(c.code)}" ${templateBusy?'disabled':''}></td>
+      <td><textarea data-tdocument="${i}" aria-label="Document de la liste type" maxlength="2000" rows="3" ${templateBusy?'disabled':''}>${esc(c.document||'')}</textarea></td>
+      <td><label class="checkbox"><input data-tactive="${i}" type="checkbox" ${c.active?'checked':''} ${templateBusy?'disabled':''}> Actif</label></td>
+      <td>${!c.catalogue_id?`<button class="icon" type="button" data-tremove="${i}" aria-label="Retirer ce nouveau code" ${templateBusy?'disabled':''}>×</button>`:''}</td></tr>`);
+    for(const field of ['code','label','document'])document.querySelectorAll(`[data-t${field}]`).forEach(el=>el.oninput=()=>templateRows[Number(el.dataset['t'+field])][field]=el.value);
+    document.querySelectorAll('[data-tactive]').forEach(el=>el.onchange=()=>templateRows[Number(el.dataset.tactive)].active=el.checked);
+    document.querySelectorAll('[data-tremove]').forEach(el=>el.onclick=()=>{templateRows.splice(Number(el.dataset.tremove),1);renderCodeTemplate();});
+    $('saveCodeTemplate').disabled=!templateLoaded||templateBusy;$('reloadCodeTemplate').disabled=templateBusy;$('addTemplateCode').disabled=!templateLoaded||templateBusy;
+  }
+  $('addTemplateCode').onclick=()=>{if(templateBusy)return;templateRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCodeTemplate();};
+  $('reloadCodeTemplate').onclick=async()=>{if(catalogueState(templateRows)!==catalogueState(templateOriginal) && !await confirmAction('Recharger la liste type et abandonner les modifications non enregistrées ?'))return;await loadCodeTemplate();};
+  $('saveCodeTemplate').onclick=async()=>{
+    if(!profile?.is_admin || templateBusy || !templateLoaded)return;
+    const clean=templateRows.map(c=>({catalogue_id:c.catalogue_id||null,code:c.code.trim().toUpperCase(),label:c.label.trim(),document:(c.document||'').trim(),active:c.active}));
+    if(clean.some(c=>!c.code||!c.label)){$('templateMessage').innerHTML=msg('Chaque code doit avoir un code et un libellé.','warn');return;}
+    if(new Set(clean.map(c=>c.code)).size!==clean.length){$('templateMessage').innerHTML=msg('Deux codes identiques sont présents.','warn');return;}
+    if(!clean.length){$('templateMessage').innerHTML=msg('Conserve au moins un code dans la liste type.','warn');return;}
+    templateBusy=true;renderCodeTemplate();
+    try{
+      const {data,error}=await sb.rpc('pointage_save_code_template',{p_revision:templateRevision,p_codes:clean});if(error)throw error;
+      templateRows=orderedCodes(data.codes);templateOriginal=structuredClone(templateRows);templateRevision=data.revision;
+      $('templateMessage').innerHTML=msg('Liste type enregistrée. Elle sera utilisée pour les prochaines unités créées. Les unités existantes sont conservées.','ok');
+    }catch(error){$('templateMessage').innerHTML=msg('Enregistrement impossible : '+error.message,'warn');}
+    finally{templateBusy=false;renderCodeTemplate();}
+  };
+
   function catalogueState(rows){return JSON.stringify(rows.map(c=>({catalogue_id:c.catalogue_id||null,code:c.code,label:c.label,document:c.document||'',active:c.active})));}
   async function allowLeaveCatalogue(){
-    if(catalogueState(catalogueRows)===catalogueState(catalogueOriginal)) return true;
-    return confirmAction('Les modifications du catalogue ne sont pas enregistrées. Quitter sans les enregistrer ?',{button:'Quitter sans enregistrer'});
+    if(templateBusy)return false;
+    if(catalogueState(catalogueRows)===catalogueState(catalogueOriginal) && catalogueState(templateRows)===catalogueState(templateOriginal)) return true;
+    const leave=await confirmAction('Les modifications du catalogue ou de la liste type ne sont pas enregistrées. Quitter sans les enregistrer ?',{button:'Quitter sans enregistrer'});
+    if(leave){templateRows=structuredClone(templateOriginal);renderCodeTemplate();}
+    return leave;
   }
   async function loadCatalogue(){
     $('codeAdminMessage').innerHTML='';
+    if(profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name==='ADMIN' && !templateLoaded)await loadCodeTemplate();
     const choices=units.filter(u=>u.active && u.name!=='ADMIN');
     if(!choices.some(u=>u.id===catalogueUnit)) catalogueUnit=choices.find(u=>u.id===selectedUnit)?.id||choices[0]?.id||'';
     $('catalogueSourceUnit').innerHTML=choices.map(u=>`<option value="${esc(u.id)}"${u.id===catalogueUnit?' selected':''}>${esc(u.name)}</option>`).join('');
