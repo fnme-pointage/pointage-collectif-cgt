@@ -16,6 +16,9 @@ stub=stub.replace('window.calls.push({name,args});',`window.calls.push({name,arg
   assert.match(await page.locator('#entryHours0').locator('..').textContent(),/Saisis des heures décimales/);
   assert.doesNotMatch(await page.locator('.entry-reference').first().textContent(),/Saisis des heures décimales/);
   const inputBox=await page.locator('#entryHours0').boundingBox(),helpBox=await page.locator('#entryHoursHelp0').boundingBox();assert.ok(helpBox.y>=inputBox.y+inputBox.height);
+  const referenceBox=await page.locator('.entry-reference').first().boundingBox(),correctionBox=await page.locator('.entry-correction').first().boundingBox();
+  assert.ok(correctionBox.y>=helpBox.y+helpBox.height && correctionBox.y>=referenceBox.y+referenceBox.height);
+  assert.ok(inputBox.width>=(width===390?125:200));
   assert.equal(await page.getByText('Les deux formats sont convertis automatiquement', {exact:false}).count(),0);
   assert.match(await page.locator('#entryList').locator('..').textContent(),/Merci de reporter les éléments indiqués sur vos CRI/);
   await page.locator('#entryHours0').fill('7:30');await page.locator('#saveEntries').click();assert.match(await page.locator('#userNotice').textContent(),/heures décimales valides/);
