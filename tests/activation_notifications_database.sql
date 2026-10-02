@@ -1,0 +1,38 @@
+BEGIN;
+UPDATE pointage_private.notification_config SET enabled=false;
+SELECT set_config('test.user',(SELECT p.id::text FROM public.profiles p JOIN auth.users a ON a.id=p.id JOIN public.units u ON u.id=p.unit_id WHERE p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL AND upper(u.name)<>'ADMIN' LIMIT 1),true);
+DO $$DECLARE uid uuid:=current_setting('test.user')::uuid;token text;job record;BEGIN
+ IF uid IS NULL THEN RAISE EXCEPTION 'Confirmed test user required'; END IF;
+ IF EXISTS(SELECT 1 FROM pointage_private.activation_notifications) THEN RAISE EXCEPTION 'Unexpected preexisting queue'; END IF;
+ UPDATE public.profiles SET full_name=full_name WHERE id=uid;
+ IF EXISTS(SELECT 1 FROM pointage_private.activation_notifications) THEN RAISE EXCEPTION 'Unrelated update queued mail';END IF;
+ UPDATE public.profiles SET active=false WHERE id=uid;
+ UPDATE public.profiles SET active=true WHERE id=uid;
+ IF (SELECT count(*) FROM pointage_private.activation_notifications WHERE user_id=uid)<>1 THEN RAISE EXCEPTION 'Activation not queued once';END IF;
+ UPDATE public.profiles SET active=false WHERE id=uid;
+ SELECT c.token INTO token FROM pointage_private.notification_config c;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Inactive user claimed';END IF;
+ UPDATE public.profiles SET active=true WHERE id=uid;
+ SELECT * INTO job FROM public.pointage_claim_activation_notifications(token);
+ IF job.email IS DISTINCT FROM (SELECT email FROM auth.users WHERE id=uid) THEN RAISE EXCEPTION 'Recipient not authoritative';END IF;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Sending job reclaimed early';END IF;
+ PERFORM public.pointage_finish_activation_notification(token,job.id,gen_random_uuid(),true,'');
+ IF EXISTS(SELECT 1 FROM pointage_private.activation_notifications WHERE status='sent') THEN RAISE EXCEPTION 'Wrong claim accepted';END IF;
+ PERFORM public.pointage_finish_activation_notification(token,job.id,job.claim_id,false,'ETIMEDOUT');
+ IF NOT EXISTS(SELECT 1 FROM pointage_private.activation_notifications WHERE status='pending' AND last_error='ETIMEDOUT' AND next_attempt_at>now()) THEN RAISE EXCEPTION 'Failure not retried';END IF;
+ UPDATE pointage_private.activation_notifications SET next_attempt_at=now();
+ SELECT * INTO job FROM public.pointage_claim_activation_notifications(token);
+ PERFORM public.pointage_finish_activation_notification(token,job.id,job.claim_id,true,'');
+ UPDATE public.profiles SET active=false WHERE id=uid;
+ UPDATE public.profiles SET active=true WHERE id=uid;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Reactivation resent mail';END IF;
+ BEGIN PERFORM public.pointage_claim_activation_notifications('wrong');RAISE EXCEPTION 'Bad token accepted';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+END;$$;
+SET LOCAL ROLE authenticated;
+DO $$BEGIN
+ BEGIN PERFORM public.pointage_claim_activation_notifications('wrong');RAISE EXCEPTION 'Member RPC exposed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ BEGIN PERFORM 1 FROM pointage_private.activation_notifications;RAISE EXCEPTION 'Private queue exposed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+END;$$;
+RESET ROLE;
+ROLLBACK;
+SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/retries, reactivation deduplication, member denied; rolled back without mail' result;
