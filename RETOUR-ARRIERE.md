@@ -52,3 +52,10 @@ Un retour à l’ancienne interface conserve les données, mais cette interface 
 ADMIN > Catalogue des codes contient une liste type modifiable pour les futures unités. Les 26 codes d’origine ont été copiés dans `pointage_code_template`. Chaque création d’unité copie la liste type dans les versions propres à cette unité, dans la même transaction. Modifier la liste type ne modifie pas les unités existantes ; leurs catalogues restent indépendants. La lecture et l’enregistrement sont réservés à l’administrateur et une révision empêche l’écrasement d’une modification concurrente.
 
 La définition antérieure de l’initialisation des années et la liste d’origine sont conservées dans `pointage_private.code_template_initial_backup`, inaccessible aux utilisateurs. Le commit précédent conserve l’interface sans l’éditeur de liste type. En cas de retour de l’interface, conserver les nouvelles tables et le déclencheur pour que les nouvelles unités continuent de recevoir la liste type enregistrée. Ne pas restaurer les catalogues ou les pointages depuis une ancienne sauvegarde.
+
+
+## Ajouts nationaux à toutes les unités — 2 octobre 2026
+
+ADMIN > Catalogue des codes propose la liste type et l’application des seuls codes ajoutés ou modifiés à toutes les unités actives, à partir du mois choisi. Les modifications individuelles restent dans les onglets d’unité. `pointage_save_national_codes` enregistre la liste type et les versions des unités dans une transaction unique. Un conflit annule toute l’opération. Les codes locaux non concernés et les pointages restent conservés ; les mois fermés ne sont pas synchronisés.
+
+La case d’application à toutes les unités est cochée par défaut. Décochée, elle limite l’enregistrement à la liste type des futures unités. L’ancien éditeur de liste type reste compatible avec les tables : revenir à un ancien commit d’interface ne supprime pas les codes nationaux déjà ajoutés ni leurs données.

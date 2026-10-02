@@ -236,16 +236,19 @@
         <div class="sectiontitle"><h2>Catalogue des codes</h2></div>
         <div id="catalogueSourceField" class="grow" style="margin-bottom:12px"><label for="catalogueSourceUnit">Catalogue à modifier</label><select id="catalogueSourceUnit"></select></div>
       <div id="codeTemplateCard" class="hidden">
-        <div class="sectiontitle"><h2>Liste type des nouvelles unités</h2><button id="addTemplateCode" class="secondary" type="button">+ Code</button></div>
-        <div class="notice" style="margin-bottom:12px">Cette liste type est la liste par défaut utilisée lors de la création d’une nouvelle unité. Dans chaque onglet d’unité, le catalogue des codes permet ensuite de modifier la liste propre à cette unité. Les modifications de la liste type s’appliquent uniquement aux futures unités : elles ne changent pas les catalogues des unités déjà créées.</div>
+        <div class="sectiontitle"><h2>Liste type et codes nationaux</h2><button id="addTemplateCode" class="secondary" type="button">+ Code</button></div>
+        <div class="notice" style="margin-bottom:12px">Cette liste type sert de base aux nouvelles unités. Depuis ADMIN, tu peux aussi appliquer les codes ajoutés ou modifiés à toutes les unités actives en une seule fois, à partir du mois choisi. Les autres codes propres aux unités, les heures déjà saisies et les références des pointages enregistrés sont conservés. Les mois fermés ne sont pas modifiés. Dans chaque onglet d’unité, tu peux adapter uniquement son propre catalogue.</div>
         <div id="templateCodes" class="tablewrap"></div>
-        <p class="muted small">Modifie les codes, les libellés ou les documents de référence. Décoche « Actif » pour exclure un code des nouvelles saisies des futures unités.</p>
-        <div class="actions"><button id="saveCodeTemplate" type="button" disabled>Enregistrer la liste type</button><button id="reloadCodeTemplate" class="secondary" type="button">Recharger la liste type</button></div>
+        <p class="muted small">Modifie les codes, les libellés ou les documents de référence. Décoche « Actif » pour retirer un code des nouvelles saisies, selon le périmètre choisi ci-dessous.</p>
+        <label class="checkbox"><input id="applyNationalToUnits" type="checkbox" checked> Appliquer les codes ajoutés ou modifiés à toutes les unités actives</label>
+        <div id="nationalEffectiveField" class="monthfield" style="margin-top:10px"><label for="nationalEffective">Applicable à partir de</label><input id="nationalEffective" type="month"></div>
+        <p class="muted small">Si tu décoches cette option, seule la liste type des futures unités est modifiée. Les listes des unités existantes ne sont pas remplacées.</p>
+        <div class="actions"><button id="saveCodeTemplate" type="button" disabled>Enregistrer les modifications nationales</button><button id="reloadCodeTemplate" class="secondary" type="button">Recharger la liste type</button></div>
         <div id="templateMessage" aria-live="polite"></div>
       </div>
       <div id="unitCataloguePanel">
         <div class="sectiontitle"><h2>Catalogue de l’unité</h2><button id="addAdminCode" class="secondary" type="button">+ Code</button></div>
-        <div id="unitCatalogueHelp" class="notice hidden" style="margin-bottom:12px">Le catalogue de chaque unité est initialisé à partir de la liste type. Tu peux ensuite adapter les codes, les libellés et les documents aux besoins de ton unité. Sa liste en vigueur est proposée à tous ses utilisateurs, y compris aux nouveaux inscrits, selon le mois choisi. Depuis cet onglet, les modifications concernent uniquement cette unité et ne changent ni la liste type ni les autres unités. Pour choisir une autre unité à modifier, ouvre l’onglet ADMIN.</div>
+        <div id="unitCatalogueHelp" class="notice hidden" style="margin-bottom:12px">Le catalogue de chaque unité est initialisé à partir de la liste type. Tu peux ensuite adapter les codes, les libellés et les documents aux besoins de ton unité. Sa liste en vigueur est proposée à tous ses utilisateurs, y compris aux nouveaux inscrits, selon le mois choisi. Depuis cet onglet, les modifications concernent uniquement cette unité et ne changent ni la liste type ni les autres unités. Les ajouts ou modifications de codes nationaux pour toutes les unités se font depuis ADMIN.</div>
         <div id="adminCatalogueHelp" class="notice hidden" style="margin-bottom:12px">Depuis ADMIN, sélectionne l’unité dont tu souhaites modifier le catalogue. Les modifications s’appliquent aux unités cochées ci-dessous. Pour modifier la liste de départ des futures unités, choisis « Liste type des nouvelles unités » dans le même menu. Cette liste type est indépendante des catalogues des unités existantes.</div>
         <div class="row">
           <div class="monthfield"><label for="catalogueEffective">Applicable à partir de</label><input id="catalogueEffective" type="month"></div>
@@ -363,7 +366,6 @@
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
-  let templateEditor=true;
   let templateRows=[],templateOriginal=[],templateRevision=null,templateLoaded=false,templateBusy=false;
   let monthlyYear='', monthlyMonth='', monthlyUnit='', monthlyEntries=[], monthlyCodes=[], monthlyReady=false, monthlyRequest=0;
   let units=[], selectedUnit='', spaceYear=curYearInitial();
@@ -1343,6 +1345,7 @@
     try{
       const {data,error}=await sb.rpc('pointage_get_code_template');if(error)throw error;
       templateRows=orderedCodes(data.codes||[]);templateOriginal=structuredClone(templateRows);templateRevision=data.revision;templateLoaded=true;
+      $('nationalEffective').min=curMonth();if(!$('nationalEffective').value)$('nationalEffective').value=curMonth();
       $('templateMessage').innerHTML='';
     }catch(error){$('templateMessage').innerHTML=msg('Impossible de charger la liste type : '+error.message,'warn');}
     finally{templateBusy=false;renderCodeTemplate();}
@@ -1357,8 +1360,10 @@
     for(const field of ['code','label','document'])document.querySelectorAll(`[data-t${field}]`).forEach(el=>el.oninput=()=>templateRows[Number(el.dataset['t'+field])][field]=el.value);
     document.querySelectorAll('[data-tactive]').forEach(el=>el.onchange=()=>templateRows[Number(el.dataset.tactive)].active=el.checked);
     document.querySelectorAll('[data-tremove]').forEach(el=>el.onclick=()=>{templateRows.splice(Number(el.dataset.tremove),1);renderCodeTemplate();});
+    $('applyNationalToUnits').disabled=templateBusy;$('nationalEffective').disabled=templateBusy;
     $('saveCodeTemplate').disabled=!templateLoaded||templateBusy;$('reloadCodeTemplate').disabled=templateBusy;$('addTemplateCode').disabled=!templateLoaded||templateBusy;
   }
+  $('applyNationalToUnits').onchange=()=>show('nationalEffectiveField',$('applyNationalToUnits').checked);
   $('addTemplateCode').onclick=()=>{if(templateBusy)return;templateRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCodeTemplate();};
   $('reloadCodeTemplate').onclick=async()=>{if(catalogueState(templateRows)!==catalogueState(templateOriginal) && !await confirmAction('Recharger la liste type et abandonner les modifications non enregistrées ?'))return;await loadCodeTemplate();};
   $('saveCodeTemplate').onclick=async()=>{
@@ -1367,11 +1372,15 @@
     if(clean.some(c=>!c.code||!c.label)){$('templateMessage').innerHTML=msg('Chaque code doit avoir un code et un libellé.','warn');return;}
     if(new Set(clean.map(c=>c.code)).size!==clean.length){$('templateMessage').innerHTML=msg('Deux codes identiques sont présents.','warn');return;}
     if(!clean.length){$('templateMessage').innerHTML=msg('Conserve au moins un code dans la liste type.','warn');return;}
+    const apply=$('applyNationalToUnits').checked,effective=$('nationalEffective').value;
+    if(apply && (!effective || effective<curMonth())){$('templateMessage').innerHTML=msg('Choisis le mois en cours ou un mois futur.','warn');return;}
+    if(catalogueState(clean)===catalogueState(templateOriginal)){$('templateMessage').innerHTML=msg('Aucune modification à enregistrer.','ok');return;}
+    if(apply && !await confirmAction('Appliquer les codes ajoutés ou modifiés à toutes les unités actives à partir de '+monthLabel(effective)+' ? Les codes propres aux unités et les heures déjà enregistrées seront conservés.'))return;
     templateBusy=true;renderCodeTemplate();
     try{
-      const {data,error}=await sb.rpc('pointage_save_code_template',{p_revision:templateRevision,p_codes:clean});if(error)throw error;
+      const {data,error}=await sb.rpc('pointage_save_national_codes',{p_revision:templateRevision,p_codes:clean,p_apply_units:apply,p_effective:effective});if(error)throw error;
       templateRows=orderedCodes(data.codes);templateOriginal=structuredClone(templateRows);templateRevision=data.revision;
-      $('templateMessage').innerHTML=msg('Liste type enregistrée. Elle sera utilisée pour les prochaines unités créées. Les unités existantes sont conservées.','ok');
+      $('templateMessage').innerHTML=msg(apply?'Liste type enregistrée et '+data.changed_codes+' code(s) ajouté(s) ou modifié(s) appliqué(s) à '+data.applied_units+' unité(s) à partir de '+monthLabel(effective)+'. Les pointages et les autres codes sont conservés.':'Liste type enregistrée pour les prochaines unités. Les unités existantes sont conservées.','ok');
     }catch(error){$('templateMessage').innerHTML=msg('Enregistrement impossible : '+error.message,'warn');}
     finally{templateBusy=false;renderCodeTemplate();}
   };
@@ -1386,9 +1395,9 @@
   }
   function renderCataloguePanels(){
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const typeView=adminScope && templateEditor;
-    show('catalogueSourceField',adminScope);show('codeTemplateCard',typeView);show('unitCataloguePanel',!typeView);
-    show('unitCatalogueHelp',!adminScope);show('adminCatalogueHelp',adminScope && !typeView);show('catalogueTargetFields',adminScope && !typeView);
+    const typeView=adminScope;
+    show('catalogueSourceField',false);show('codeTemplateCard',typeView);show('unitCataloguePanel',!typeView);
+    show('unitCatalogueHelp',!adminScope);show('adminCatalogueHelp',false);show('catalogueTargetFields',false);
   }
   let catalogueLoadedUnit='';
   async function loadCatalogue(){
@@ -1399,9 +1408,10 @@
     const choices=units.filter(u=>u.active && u.name!=='ADMIN' && (adminScope || u.id===selectedUnit));
     if(!adminScope)catalogueUnit=selectedUnit;
     if(!choices.some(u=>u.id===catalogueUnit)) catalogueUnit=choices.find(u=>u.id===selectedUnit)?.id||choices[0]?.id||'';
-    $('catalogueSourceUnit').innerHTML=(adminScope?'<option value="template">Liste type des nouvelles unités</option>':'')+choices.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
-    $('catalogueSourceUnit').value=adminScope && templateEditor?'template':catalogueUnit;
+    $('catalogueSourceUnit').innerHTML=(adminScope?'<option value="template">Liste type des nouvelles unités</option>':'')+(adminScope?[]:choices).map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+    $('catalogueSourceUnit').value=adminScope?'template':catalogueUnit;
     renderCataloguePanels();
+    if(adminScope){catalogueRows=[];catalogueOriginal=[];return;}
     $('catalogueEffective').min=curMonth();
     if(!$('catalogueEffective').value) $('catalogueEffective').value=curMonth();
     $('catalogueUnits').innerHTML=choices.map(u=>`<label class="checkbox"><input type="checkbox" data-catalogue-unit="${esc(u.id)}" ${u.id===catalogueUnit?'checked':''}> ${esc(u.name)}</label>`).join('');
@@ -1425,7 +1435,7 @@
     document.querySelectorAll('[data-cactive]').forEach(el=>el.onchange=()=>catalogueRows[Number(el.dataset.cactive)].active=el.checked);
     document.querySelectorAll('[data-cremove]').forEach(el=>el.onclick=()=>{catalogueRows.splice(Number(el.dataset.cremove),1);renderCatalogue();});
   }
-  $('catalogueSourceUnit').onchange=async()=>{if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN'){$('catalogueSourceUnit').value=selectedUnit;return;}const next=$('catalogueSourceUnit').value;if(!await allowLeaveCatalogue()){$('catalogueSourceUnit').value=templateEditor?'template':catalogueUnit;return;}templateEditor=next==='template';if(!templateEditor)catalogueUnit=next;await loadCatalogue();};
+  $('catalogueSourceUnit').onchange=()=>{$('catalogueSourceUnit').value=units.find(u=>u.id===selectedUnit)?.name==='ADMIN'?'template':selectedUnit;};
   let catalogueDate='';
   $('catalogueEffective').onfocus=()=>{catalogueDate=$('catalogueEffective').value;};
   $('catalogueEffective').onchange=async()=>{if(!$('catalogueEffective').value || $('catalogueEffective').value<curMonth()){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
@@ -1434,12 +1444,12 @@
   $('saveAdminCodes').onclick=async()=>{
     if(!profile?.is_admin || catalogueLoadedUnit!==catalogueUnit || !catalogueLoadedUnit)return;
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    if(!adminScope && catalogueUnit!==selectedUnit)return;
+    if(adminScope || catalogueUnit!==selectedUnit)return;
     const clean=catalogueRows.map(c=>({...c,code:c.code.trim().toUpperCase(),label:c.label.trim(),document:(c.document||'').trim()}));
     if(clean.some(c=>!c.code||!c.label)){ $('codeAdminMessage').innerHTML=msg('Chaque code doit avoir un code et un libellé.','warn');return;}
     if(new Set(clean.map(c=>c.code)).size!==clean.length){$('codeAdminMessage').innerHTML=msg('Deux codes identiques sont présents.','warn');return;}
     const changes=clean.filter(c=>{const old=catalogueOriginal.find(o=>o.catalogue_id===c.catalogue_id);return !old||catalogueState([c])!==catalogueState([old]);});
-    const targets=adminScope?[...document.querySelectorAll('[data-catalogue-unit]:checked')].map(el=>el.dataset.catalogueUnit):[selectedUnit];
+    const targets=[selectedUnit];
     const effective=$('catalogueEffective').value;
     if(!changes.length){$('codeAdminMessage').innerHTML=msg('Aucune modification à enregistrer.','ok');return;}
     if(!targets.length||effective<curMonth()){ $('codeAdminMessage').innerHTML=msg('Choisis au moins une unité et le mois en cours ou un mois futur.','warn');return;}
