@@ -13,6 +13,8 @@ stub=stub.replace('window.calls.push({name,args});',`window.calls.push({name,arg
   await page.goto('https://pointage.test/');await page.locator('#entryHours0').waitFor();
   assert.equal(await page.locator('#entryHours0').inputValue(),'7,5');
   assert.equal(await page.locator('#timeInputMode').count(),0);
+  const titleStyles=await page.locator('#entryCodeLabel0 strong, label[for="entryHours0"] strong, .entry-reference>strong').evaluateAll(nodes=>nodes.map(n=>({size:getComputedStyle(n).fontSize,weight:getComputedStyle(n).fontWeight})));
+  assert.equal(titleStyles.length,3);assert.deepEqual(titleStyles[0],titleStyles[1]);assert.deepEqual(titleStyles[0],titleStyles[2]);
   assert.match(await page.locator('#entryHours0').locator('..').textContent(),/Saisis des heures décimales/);
   assert.doesNotMatch(await page.locator('.entry-reference').first().textContent(),/Saisis des heures décimales/);
   const inputBox=await page.locator('#entryHours0').boundingBox(),helpBox=await page.locator('#entryHoursHelp0').boundingBox();assert.ok(helpBox.y>=inputBox.y+inputBox.height);
