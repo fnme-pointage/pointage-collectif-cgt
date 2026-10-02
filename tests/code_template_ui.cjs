@@ -27,9 +27,15 @@ Query.prototype.insert=function(value){const unit={id:'newunit-'+db.units.length
   await page.locator('[data-clabel="0"]').fill('DS personnalisé unité');await page.locator('#saveAdminCodes').click();await page.locator('#confirmAccept').click();await page.getByText(/Modifications enregistrées pour/).waitFor();
   assert.equal(await page.evaluate(()=>window.templateSnapshot.codes[0].label),'DS modèle modifié');
   const unitSave=await page.evaluate(()=>window.calls.filter(c=>c.name==='pointage_save_catalogue').at(-1));assert.equal(unitSave.args.p_units.length,1);assert.match(unitSave.args.p_units[0],/^newunit-/);
-  await page.locator('#adminUnit').selectOption('adminunit');await page.locator('[data-tlabel="0"]').waitFor();assert.equal(await page.locator('#catalogueSourceField').isVisible(),true);assert.equal(await page.locator('#catalogueTargetFields').isVisible(),true);assert.equal(await page.locator('#adminCatalogueHelp').isVisible(),true);assert.equal(await page.locator('[data-tlabel="0"]').inputValue(),'DS modèle modifié');
+  await page.locator('#adminUnit').selectOption('adminunit');await page.locator('[data-tlabel="0"]').waitFor();assert.equal(await page.locator('#catalogueSourceField').isVisible(),true);assert.equal(await page.locator('#catalogueTargetFields').isVisible(),false);assert.equal(await page.locator('#unitCataloguePanel').isVisible(),false);assert.equal(await page.locator('[data-tlabel="0"]').inputValue(),'DS modèle modifié');
   await page.evaluate(()=>{window.templateSnapshot.revision++;});await page.locator('[data-tlabel="0"]').fill('Conflit');await page.locator('#saveCodeTemplate').click();await page.getByText(/modifiée ailleurs/).waitFor();assert.equal(await page.locator('[data-tlabel="0"]').inputValue(),'Conflit');
   await page.locator('#reloadCodeTemplate').click();await page.locator('#confirmAccept').click();await page.waitForFunction(()=>document.querySelector('[data-tlabel="0"]').value==='DS modèle modifié');
+  assert.equal(await page.locator('#catalogueSourceUnit').inputValue(),'template');
+  await page.locator('#catalogueSourceUnit').selectOption('ulm');await page.locator('[data-clabel="0"]').waitFor();assert.equal(await page.locator('#codeTemplateCard').isVisible(),false);assert.equal(await page.locator('#catalogueTargetFields').isVisible(),true);
+  await page.locator('[data-clabel="0"]').fill('DS appliqué sélectivement');await page.locator('[data-catalogue-unit="ufpi"]').check();await page.locator('#saveAdminCodes').click();await page.locator('#confirmAccept').click();await page.getByText(/Modifications enregistrées pour/).waitFor();
+  const selective=await page.evaluate(()=>window.calls.filter(c=>c.name==='pointage_save_catalogue').at(-1));assert.deepEqual(selective.args.p_units.sort(),['ufpi','ulm']);assert.equal(await page.evaluate(()=>window.templateSnapshot.codes[0].label),'DS modèle modifié');
+  await page.screenshot({path:'/tmp/catalogue-selective-'+width+'.png',fullPage:true});
+  await page.locator('#catalogueSourceUnit').selectOption('template');await page.locator('[data-tlabel="0"]').waitFor();assert.equal(await page.locator('#unitCataloguePanel').isVisible(),false);
   await page.screenshot({path:'/tmp/code-template-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);
   await context.close();
  }
