@@ -244,6 +244,11 @@
         <div id="nationalEffectiveField" class="monthfield" style="margin-top:10px"><label for="nationalEffective">Applicable à partir de</label><input id="nationalEffective" type="month"></div>
         <p class="muted small">Si tu décoches cette option, seule la liste type des futures unités est modifiée. Les listes des unités existantes ne sont pas remplacées.</p>
         <div class="actions"><button id="saveCodeTemplate" type="button" disabled>Enregistrer les modifications nationales</button><button id="reloadCodeTemplate" class="secondary" type="button">Recharger la liste type</button></div>
+        <div id="templateButtonsHelp" class="muted small" style="margin-top:12px;line-height:1.5">
+          <p><strong>Enregistrer les modifications nationales</strong> sauvegarde tes changements et les applique aux unités si l’option correspondante est cochée.</p>
+          <p><strong>Recharger la liste type</strong> affiche la dernière version enregistrée. Exemple : si ton compte est ouvert sur ton ordinateur et ton téléphone, une modification enregistrée sur le téléphone n’apparaît pas automatiquement dans la page déjà ouverte sur l’ordinateur. Clique sur « Recharger la liste type » pour la récupérer. Cela peut aussi arriver entre deux onglets du même navigateur.</p>
+          <p>Si tu essaies d’enregistrer une ancienne version, l’application bloque l’enregistrement pour éviter d’écraser une modification plus récente et te demande de recharger. Si tu as des modifications non enregistrées, une confirmation apparaît avant de les abandonner. Recharger ne remet pas la liste d’origine et ne modifie pas les catalogues des unités.</p>
+        </div>
         <div id="templateMessage" aria-live="polite"></div>
       </div>
       <div id="unitCataloguePanel">
