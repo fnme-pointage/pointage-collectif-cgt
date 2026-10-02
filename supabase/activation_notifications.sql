@@ -12,9 +12,9 @@ REVOKE ALL ON pointage_private.activation_notifications FROM PUBLIC,anon,authent
 GRANT SELECT,UPDATE ON pointage_private.activation_notifications TO service_role;
 CREATE INDEX activation_notifications_due ON pointage_private.activation_notifications(next_attempt_at) WHERE status IN('pending','sending');
 
-CREATE FUNCTION public.pointage_claim_activation_notifications(p_token text)
+CREATE FUNCTION pointage_private.claim_activation_notifications(p_token text)
 RETURNS TABLE(id uuid,user_id uuid,claim_id uuid,full_name text,email text,unit_name text)
-LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
  IF NOT public.pointage_notification_authorized(p_token) THEN RAISE EXCEPTION 'Unauthorized' USING ERRCODE='42501'; END IF;
  RETURN QUERY WITH due AS (
@@ -32,6 +32,14 @@ BEGIN
  ) SELECT c.id,c.user_id,c.claim_id,p.full_name,a.email::text,u.name FROM claimed c
  JOIN public.profiles p ON p.id=c.user_id JOIN auth.users a ON a.id=c.user_id JOIN public.units u ON u.id=p.unit_id;
 END;
+$$;
+REVOKE ALL ON FUNCTION pointage_private.claim_activation_notifications(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION pointage_private.claim_activation_notifications(text) TO service_role;
+
+CREATE FUNCTION public.pointage_claim_activation_notifications(p_token text)
+RETURNS TABLE(id uuid,user_id uuid,claim_id uuid,full_name text,email text,unit_name text)
+LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+ SELECT * FROM pointage_private.claim_activation_notifications(p_token);
 $$;
 REVOKE ALL ON FUNCTION public.pointage_claim_activation_notifications(text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pointage_claim_activation_notifications(text) TO service_role;

@@ -34,5 +34,9 @@ DO $$BEGIN
  BEGIN PERFORM 1 FROM pointage_private.activation_notifications;RAISE EXCEPTION 'Private queue exposed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END;$$;
 RESET ROLE;
+DO $$BEGIN PERFORM set_config('test.notification_token',(SELECT token FROM pointage_private.notification_config),true); END;$$;
+SET LOCAL ROLE service_role;
+SELECT count(*) AS service_role_claims FROM public.pointage_claim_activation_notifications(current_setting('test.notification_token'));
+RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/retries, reactivation deduplication, member denied; rolled back without mail' result;
