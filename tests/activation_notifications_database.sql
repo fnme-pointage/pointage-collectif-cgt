@@ -26,16 +26,16 @@ DO $$DECLARE uid uuid:=current_setting('test.user')::uuid;token text;job record;
  UPDATE public.profiles SET active=false WHERE id=uid;
  UPDATE public.profiles SET active=true WHERE id=uid;
  IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Reactivation resent mail';END IF;
- -- Vérifie la borne : un envoi initial, trois reprises, puis arrêt.
+ -- Vérifie la borne : un envoi initial, une reprise, puis arrêt.
  UPDATE pointage_private.activation_notifications SET attempts=0,status='pending',sent_at=NULL,next_attempt_at=now();
- FOR i IN 1..4 LOOP
+ FOR i IN 1..2 LOOP
   SELECT * INTO job FROM public.pointage_claim_activation_notifications(token);
   IF job.id IS NULL THEN RAISE EXCEPTION 'Attempt % denied early',i;END IF;
   PERFORM public.pointage_finish_activation_notification(token,job.id,job.claim_id,false,'SMTP_ERROR');
   UPDATE pointage_private.activation_notifications SET next_attempt_at=now();
  END LOOP;
- IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Fourth retry allowed';END IF;
- IF (SELECT attempts FROM pointage_private.activation_notifications WHERE user_id=uid)<>4 THEN RAISE EXCEPTION 'Attempt limit incorrect';END IF;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Second retry allowed';END IF;
+ IF (SELECT attempts FROM pointage_private.activation_notifications WHERE user_id=uid)<>2 THEN RAISE EXCEPTION 'Attempt limit incorrect';END IF;
  BEGIN PERFORM public.pointage_claim_activation_notifications('wrong');RAISE EXCEPTION 'Bad token accepted';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END;$$;
 SET LOCAL ROLE authenticated;
@@ -49,4 +49,4 @@ SET LOCAL ROLE service_role;
 SELECT count(*) AS service_role_claims FROM public.pointage_claim_activation_notifications(current_setting('test.notification_token'));
 RESET ROLE;
 ROLLBACK;
-SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/three retries maximum, reactivation deduplication, member denied; rolled back without mail' result;
+SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/one retry maximum, reactivation deduplication, member denied; rolled back without mail' result;

@@ -22,7 +22,7 @@ BEGIN
   JOIN public.profiles p ON p.id=q.user_id
   JOIN auth.users a ON a.id=q.user_id
   JOIN public.units u ON u.id=p.unit_id
-  WHERE q.status IN('pending','sending') AND q.next_attempt_at<=now() AND q.attempts<4
+  WHERE q.status IN('pending','sending') AND q.next_attempt_at<=now() AND q.attempts<2
    AND p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL AND a.email IS NOT NULL AND upper(u.name)<>'ADMIN'
   ORDER BY q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT 3
  ), claimed AS (
@@ -64,7 +64,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE cfg pointage_private.notification_config;
 BEGIN
  SELECT * INTO cfg FROM pointage_private.notification_config WHERE singleton;
- IF NOT cfg.enabled OR NOT EXISTS(SELECT 1 FROM pointage_private.activation_notifications q JOIN public.profiles p ON p.id=q.user_id JOIN auth.users a ON a.id=q.user_id WHERE q.status IN('pending','sending') AND q.attempts<4 AND q.next_attempt_at<=now() AND p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL) THEN RETURN; END IF;
+ IF NOT cfg.enabled OR NOT EXISTS(SELECT 1 FROM pointage_private.activation_notifications q JOIN public.profiles p ON p.id=q.user_id JOIN auth.users a ON a.id=q.user_id WHERE q.status IN('pending','sending') AND q.attempts<2 AND q.next_attempt_at<=now() AND p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL) THEN RETURN; END IF;
  PERFORM net.http_post(
   url:='https://gzdqqqdeiladltxfajbm.supabase.co/functions/v1/notify-user-activation',
   headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer '||cfg.anon_key,'x-pointage-notification-token',cfg.token),

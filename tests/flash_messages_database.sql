@@ -40,15 +40,15 @@ UPDATE public.pointage_flash_messages SET starts_at=now()-interval '1 minute' WH
 UPDATE pointage_private.flash_email_notifications SET next_attempt_at=now(),status=CASE WHEN user_id=current_setting('test.user')::uuid THEN 'pending' ELSE 'skipped' END WHERE message_id=current_setting('test.flash_future')::uuid;
 SET LOCAL ROLE service_role;
 DO $$DECLARE job record;i integer;BEGIN
- FOR i IN 1..4 LOOP
+ FOR i IN 1..2 LOOP
   SELECT * INTO job FROM public.pointage_claim_flash_notifications(current_setting('test.token'));
   IF job.id IS NULL OR job.email IS NULL OR job.title<>'Programmé' THEN RAISE EXCEPTION 'Verified job absent';END IF;
   IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Job claimed twice';END IF;
   PERFORM public.pointage_finish_flash_notification(current_setting('test.token'),job.id,job.claim_id,false,'SMTP_ERROR');
   UPDATE pointage_private.flash_email_notifications SET next_attempt_at=now() WHERE id=job.id;
  END LOOP;
- IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Fourth retry allowed';END IF;
- IF NOT EXISTS(SELECT 1 FROM pointage_private.flash_email_notifications WHERE id=job.id AND status='failed' AND attempts=4) THEN RAISE EXCEPTION 'Final failure not recorded';END IF;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Second retry allowed';END IF;
+ IF NOT EXISTS(SELECT 1 FROM pointage_private.flash_email_notifications WHERE id=job.id AND status='failed' AND attempts=2) THEN RAISE EXCEPTION 'Final failure not recorded';END IF;
 END;$$;
 RESET ROLE;
 SELECT set_config('request.jwt.claim.sub',current_setting('test.admin'),true);
@@ -64,4 +64,4 @@ SET LOCAL ROLE anon;
 DO $$BEGIN BEGIN PERFORM public.pointage_get_flash_messages();RAISE EXCEPTION 'Anonymous read allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;END;$$;
 RESET ROLE;
 ROLLBACK;
-SELECT 'PASS: admin only, schedule/visibility, idempotency, optional verified recipients, server clock, private queue, three retries, cancellation and anonymous denial; no real mail, rolled back' result;
+SELECT 'PASS: admin only, schedule/visibility, idempotency, optional verified recipients, server clock, private queue, one retry, cancellation and anonymous denial; no real mail, rolled back' result;
