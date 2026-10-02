@@ -196,9 +196,22 @@
     </div>
 
     <section id="admin-results">
+      <div id="monthlyFollowup" class="card hidden">
+        <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
+        <div class="row">
+          <div class="monthfield"><label for="monthlyMonth">Mois</label><select id="monthlyMonth"></select></div>
+          <div class="smallfield"><label for="monthlyYear">Année</label><select id="monthlyYear"></select></div>
+        </div>
+        <p id="monthlyStats" class="muted small"></p>
+        <div id="monthlySummaryTable"></div>
+        <div class="actions">
+          <button id="exportMonthlySummary" class="secondary" disabled>Exporter le récapitulatif mensuel CSV</button>
+          <button id="exportMonthlyRaw" class="secondary" disabled>Exporter le détail mensuel CSV</button>
+        </div>
+      </div>
       <div class="card">
-        <div class="sectiontitle">
-          <h2>Suivi annuel</h2>
+        <div class="sectiontitle"><h2>Suivi annuel</h2></div>
+        <div class="row">
           <div class="smallfield"><label for="annualYear">Année</label><select id="annualYear"></select></div>
         </div>
         <p id="annualStats" class="muted small"></p>
@@ -210,19 +223,6 @@
         <div id="globalExportArea" class="hidden">
           <div class="actions"><button id="exportGlobalSummary" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
           <div id="globalExportMessage" aria-live="polite"></div>
-        </div>
-      </div>
-      <div id="monthlyFollowup" class="card hidden">
-        <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
-        <div class="row">
-          <div class="smallfield"><label for="monthlyYear">Année</label><select id="monthlyYear"></select></div>
-          <div class="monthfield"><label for="monthlyMonth">Mois</label><select id="monthlyMonth"></select></div>
-        </div>
-        <p id="monthlyStats" class="muted small"></p>
-        <div id="monthlySummaryTable"></div>
-        <div class="actions">
-          <button id="exportMonthlySummary" class="secondary" disabled>Exporter le récapitulatif mensuel CSV</button>
-          <button id="exportMonthlyRaw" class="secondary" disabled>Exporter le détail mensuel CSV</button>
         </div>
       </div>
     </section>
