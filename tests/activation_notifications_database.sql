@@ -1,7 +1,7 @@
 BEGIN;
 UPDATE pointage_private.notification_config SET enabled=false;
 SELECT set_config('test.user',(SELECT p.id::text FROM public.profiles p JOIN auth.users a ON a.id=p.id JOIN public.units u ON u.id=p.unit_id WHERE p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL AND upper(u.name)<>'ADMIN' LIMIT 1),true);
-DO $$DECLARE uid uuid:=current_setting('test.user')::uuid;token text;job record;BEGIN
+DO $$DECLARE uid uuid:=current_setting('test.user')::uuid;token text;job record;i integer;BEGIN
  IF uid IS NULL THEN RAISE EXCEPTION 'Confirmed test user required'; END IF;
  IF EXISTS(SELECT 1 FROM pointage_private.activation_notifications) THEN RAISE EXCEPTION 'Unexpected preexisting queue'; END IF;
  UPDATE public.profiles SET full_name=full_name WHERE id=uid;
@@ -26,6 +26,16 @@ DO $$DECLARE uid uuid:=current_setting('test.user')::uuid;token text;job record;
  UPDATE public.profiles SET active=false WHERE id=uid;
  UPDATE public.profiles SET active=true WHERE id=uid;
  IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Reactivation resent mail';END IF;
+ -- Vérifie la borne : un envoi initial, trois reprises, puis arrêt.
+ UPDATE pointage_private.activation_notifications SET attempts=0,status='pending',sent_at=NULL,next_attempt_at=now();
+ FOR i IN 1..4 LOOP
+  SELECT * INTO job FROM public.pointage_claim_activation_notifications(token);
+  IF job.id IS NULL THEN RAISE EXCEPTION 'Attempt % denied early',i;END IF;
+  PERFORM public.pointage_finish_activation_notification(token,job.id,job.claim_id,false,'SMTP_ERROR');
+  UPDATE pointage_private.activation_notifications SET next_attempt_at=now();
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_activation_notifications(token)) THEN RAISE EXCEPTION 'Fourth retry allowed';END IF;
+ IF (SELECT attempts FROM pointage_private.activation_notifications WHERE user_id=uid)<>4 THEN RAISE EXCEPTION 'Attempt limit incorrect';END IF;
  BEGIN PERFORM public.pointage_claim_activation_notifications('wrong');RAISE EXCEPTION 'Bad token accepted';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END;$$;
 SET LOCAL ROLE authenticated;
@@ -39,4 +49,4 @@ SET LOCAL ROLE service_role;
 SELECT count(*) AS service_role_claims FROM public.pointage_claim_activation_notifications(current_setting('test.notification_token'));
 RESET ROLE;
 ROLLBACK;
-SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/retries, reactivation deduplication, member denied; rolled back without mail' result;
+SELECT 'PASS: first activation, no retroactivity, inactive denied, authoritative email, claims/three retries maximum, reactivation deduplication, member denied; rolled back without mail' result;
