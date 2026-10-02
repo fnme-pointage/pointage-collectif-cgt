@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync('app/index.html','utf8');
 const helpers=html.slice(html.indexOf('  // Duration helpers:'),html.indexOf('  // End duration helpers.'));
-const functions=[['  function annualReport(){','  function renderAnnualSummary(){'],['  function individualCsvRows(','  async function exportIndividual('],['  function globalSummaryRows(','  $(\'exportGlobalSummary\')']].map(([a,b])=>html.slice(html.indexOf(a),html.indexOf(b,html.indexOf(a)))).join('\n');
+const functions=[['  function annualReport(','  function renderAnnualSummary(){'],['  function individualCsvRows(','  async function exportIndividual('],['  function globalSummaryRows(','  $(\'exportGlobalSummary\')']].map(([a,b])=>html.slice(html.indexOf(a),html.indexOf(b,html.indexOf(a)))).join('\n');
 const ctx={timeInputMode:'decimal',fmt:x=>String(x),units:[{id:'ulm',name:'ULM'}],selectedUnit:'ulm',allProfiles:[{id:'u',unit_id:'ulm',active:true}],annualCodes:[{id:1,code:'D4'},{id:2,code:'N7'}],annualEntries:[{user_id:'u',code_id:1,hours:1.5},{user_id:'u',code_id:2,hours:0.02,duration_seconds:60,saved_code:'N7'}]};
 vm.createContext(ctx);vm.runInContext(helpers+functions,ctx);
 assert.equal(ctx.parseDuration('1,50'),5400);assert.equal(ctx.parseDuration('1:30','clock'),5400);

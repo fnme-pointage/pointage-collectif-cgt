@@ -212,6 +212,19 @@
           <div id="globalExportMessage" aria-live="polite"></div>
         </div>
       </div>
+      <div id="monthlyFollowup" class="card hidden">
+        <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
+        <div class="row">
+          <div class="smallfield"><label for="monthlyYear">Année</label><select id="monthlyYear"></select></div>
+          <div class="monthfield"><label for="monthlyMonth">Mois</label><select id="monthlyMonth"></select></div>
+        </div>
+        <p id="monthlyStats" class="muted small"></p>
+        <div id="monthlySummaryTable"></div>
+        <div class="actions">
+          <button id="exportMonthlySummary" class="secondary" disabled>Exporter le récapitulatif mensuel CSV</button>
+          <button id="exportMonthlyRaw" class="secondary" disabled>Exporter le détail mensuel CSV</button>
+        </div>
+      </div>
     </section>
 
     <section id="admin-codes" class="hidden">
@@ -331,6 +344,7 @@
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
+  let monthlyYear='', monthlyMonth='', monthlyUnit='', monthlyEntries=[], monthlyCodes=[], monthlyReady=false, monthlyRequest=0;
   let units=[], selectedUnit='', spaceYear=curYearInitial();
   let yearMenuStart=Math.max(1900,Number(spaceYear)-2),yearMenuEnd=Math.min(9999,Number(spaceYear)+10);
   let monthRequest=0;
@@ -671,7 +685,7 @@
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
     $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
-  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
+  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
     if(!profile?.is_admin || units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;
     const name=$('newUnitName').value.trim();
@@ -704,7 +718,7 @@
     if(profile.is_admin){
       const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
       if(pe){alert(pe.message);return;}
-      allProfiles=people||[];adminEntries=[];await loadAdminUsers();await loadAnnualData();
+      allProfiles=people||[];adminEntries=[];await loadAdminUsers();await loadAnnualData();await loadMonthlyData();
     }
   }
 
@@ -713,6 +727,7 @@
     const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('globalExportArea',globalView);
     show('unitExportActions',!globalView);
+    renderMonthlyMenus();
     if(globalView){
       try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').order('unit_id').order('month_key'));}
       catch(error){$('globalExportMessage').innerHTML=msg('Impossible de charger les années de toutes les unités : '+error.message,'warn');}
@@ -722,6 +737,41 @@
     $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
   }
   $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
+
+  function monthlyAvailable(){return profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name!=='ADMIN';}
+  function renderMonthlyMenus(){
+    const visible=monthlyAvailable();show('monthlyFollowup',visible);
+    if(!visible){monthlyReady=false;monthlyRequest++;return;}
+    const years=[...new Set([...months.map(m=>m.month_key.slice(0,4)),curMonth().slice(0,4)])].sort().reverse();
+    if(monthlyUnit!==selectedUnit){monthlyUnit=selectedUnit;monthlyYear=curMonth().slice(0,4);monthlyMonth=curMonth().slice(5,7);}
+    if(!years.includes(monthlyYear))monthlyYear=years[0];
+    $('monthlyYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===monthlyYear?' selected':''}>${esc(y)}</option>`).join('');
+    $('monthlyMonth').innerHTML=Array.from({length:12},(_,i)=>{const value=String(i+1).padStart(2,'0'),label=new Date(2000,i,1).toLocaleString('fr-FR',{month:'long'});return `<option value="${value}"${value===monthlyMonth?' selected':''}>${esc(label)}</option>`;}).join('');
+  }
+  $('monthlyYear').onchange=async()=>{monthlyYear=$('monthlyYear').value;await loadMonthlyData();};
+  $('monthlyMonth').onchange=async()=>{monthlyMonth=$('monthlyMonth').value;await loadMonthlyData();};
+  async function loadMonthlyData(){
+    const request=++monthlyRequest,unitId=selectedUnit,key=monthlyYear+'-'+monthlyMonth;
+    monthlyReady=false;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;
+    if(!monthlyAvailable())return;
+    $('monthlyStats').textContent='';$('monthlySummaryTable').innerHTML='<div class="muted small">Chargement du suivi mensuel…</div>';
+    try{
+      const [codes,ents]=await Promise.all([
+        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).eq('month_key',key).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('month_key',key).order('id'))
+      ]);
+      if(request!==monthlyRequest || unitId!==selectedUnit || key!==monthlyYear+'-'+monthlyMonth)return;
+      const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
+      monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));monthlyReady=true;
+      const report=annualReport(monthlyCodes,monthlyEntries);
+      $('monthlyStats').textContent=`${units.find(u=>u.id===unitId)?.name||''} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} utilisateurs · ${monthlyEntries.length} saisies`;
+      $('monthlySummaryTable').innerHTML=reportTable(report);
+      $('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=false;
+    }catch(error){
+      if(request!==monthlyRequest || unitId!==selectedUnit)return;
+      $('monthlySummaryTable').innerHTML=msg('Impossible de charger le suivi mensuel : '+error.message,'warn');
+    }
+  }
 
   async function selectSpaceMonth(nextMonth){
     if(!await allowLeavePointage()){renderMonthSelect();return;}
@@ -1167,6 +1217,7 @@
     allProfiles=(p.data||[]); adminEntries=e.data||[];
     await loadAdminUsers();
     await loadAnnualData();
+    await loadMonthlyData();
   }
 
   async function loadAdminUsers(){
@@ -1214,12 +1265,12 @@
     }
   }
 
-  function annualReport(){
-    const codeById=new Map(annualCodes.map(c=>[Number(c.id),c]));
-    const codeNames=[...new Set([...annualCodes.map(c=>c.code),...annualEntries.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const people=allProfiles.filter(p=>!p.is_admin && p.unit_id===selectedUnit && (p.active || annualEntries.some(e=>e.user_id===p.id)));
+  function annualReport(codes=annualCodes,ents=annualEntries){
+    const codeById=new Map(codes.map(c=>[Number(c.id),c]));
+    const codeNames=[...new Set([...codes.map(c=>c.code),...ents.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const people=allProfiles.filter(p=>!p.is_admin && p.unit_id===selectedUnit && (p.active || ents.some(e=>e.user_id===p.id)));
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
-    for(const e of annualEntries){
+    for(const e of ents){
       const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
       if(!code) continue;
       const seconds=entryDurationSeconds(e), key=`${e.user_id}\u0000${code}`;
@@ -1240,6 +1291,10 @@
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
     $('annualStats').textContent=`${units.find(u=>u.id===selectedUnit)?.name||''} · ${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
+    $('summaryTable').innerHTML=reportTable({people,codeNames,amounts,codeTotals});
+  }
+
+  function reportTable({people,codeNames,amounts,codeTotals}){
     let html='<div class="tablewrap"><table><thead><tr><th>Collègue</th>';
     codeNames.forEach(code=>html+=`<th class="num">${esc(code)}</th>`);
     html+='<th class="num">Total</th></tr></thead><tbody>';
@@ -1253,7 +1308,7 @@
     html+='<tr><th>Total par code</th>';
     codeNames.forEach(code=>html+=`<th class="num">${durationCell(codeTotals.get(code)||0)}</th>`);
     html+=`<th class="num">${durationCell(grandTotal)}</th></tr></tbody></table></div>`;
-    $('summaryTable').innerHTML=html;
+    return html;
   }
 
   function catalogueState(rows){return JSON.stringify(rows.map(c=>({catalogue_id:c.catalogue_id||null,code:c.code,label:c.label,document:c.document||'',active:c.active})));}
@@ -1493,6 +1548,31 @@
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal),...codeNames.map(code=>codeTotals.get(code)||0),grandTotal,clockDuration(grandTotal)]);
     csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
+  };
+
+  $('exportMonthlyRaw').onclick=()=>{
+    if(!monthlyReady || !monthlyAvailable()) return;
+    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
+    const profiles=new Map(allProfiles.map(p=>[p.id,p]));
+    const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
+    monthlyEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
+      const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e)),entryDurationSeconds(e),clockDuration(entryDurationSeconds(e))]);
+    });
+    csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
+  };
+  $('exportMonthlySummary').onclick=()=>{
+    if(!monthlyReady || !monthlyAvailable()) return;
+    const {people,codeNames,amounts,codeTotals}=annualReport(monthlyCodes,monthlyEntries);
+    const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    people.forEach(p=>{
+      let total=0;
+      const vals=codeNames.map(code=>{const seconds=amounts.get(`${p.id}\u0000${code}`)||0;total+=seconds;return decimalCsv(seconds);});
+      rows.push([monthlyYear+'-'+monthlyMonth,p.full_name||'',p.email||'',...vals,decimalCsv(total),...codeNames.map(code=>amounts.get(`${p.id}\u0000${code}`)||0),total,clockDuration(total)]);
+    });
+    const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
+    rows.push([monthlyYear+'-'+monthlyMonth,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal),...codeNames.map(code=>codeTotals.get(code)||0),grandTotal,clockDuration(grandTotal)]);
+    csvDownload(`pointage-recap-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
