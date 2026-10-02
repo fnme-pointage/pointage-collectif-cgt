@@ -15,7 +15,7 @@ Query.prototype.insert=function(value){const unit={id:'newunit-'+db.units.length
   await page.route('https://pointage.test/**',r=>{const f=path.resolve('app',new URL(r.request().url()).pathname.slice(1)||'index.html');return fs.existsSync(f)?r.fulfill({path:f}):r.fulfill({status:404,body:''});});
   await page.goto('https://pointage.test/');await page.locator('[data-admin-tab="codes"]').click();await page.locator('[data-tlabel="0"]').waitFor();
   assert.equal(await page.locator('#codeTemplateCard').isVisible(),true);assert.match(await page.locator('#codeTemplateCard .notice').textContent(),/base aux nouvelles unités/);assert.match(await page.locator('#codeTemplateCard .notice').textContent(),/heures déjà saisies/);
-  await page.locator('#applyNationalToUnits').uncheck();
+  assert.equal(await page.locator('#applyNationalToUnits').isChecked(),false);assert.equal(await page.locator('#nationalEffectiveField').isVisible(),false);
   await page.locator('[data-tlabel="0"]').fill('DS modèle modifié');
   await page.locator('#adminUnit').selectOption('ulm');await page.locator('#confirmCancel').click();await page.waitForFunction(()=>document.querySelector('#adminUnit').value==='adminunit');assert.equal(await page.locator('#adminUnit').inputValue(),'adminunit');assert.equal(await page.locator('[data-tlabel="0"]').inputValue(),'DS modèle modifié');
   await page.locator('[data-tcode="1"]').fill('D4');await page.locator('#saveCodeTemplate').click();assert.match(await page.locator('#templateMessage').textContent(),/Deux codes identiques/);await page.locator('[data-tcode="1"]').fill('52');

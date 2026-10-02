@@ -243,8 +243,8 @@
         <div class="notice" style="margin-bottom:12px">Cette liste type sert de base aux nouvelles unités. Depuis ADMIN, tu peux aussi appliquer les codes ajoutés ou modifiés à toutes les unités actives en une seule fois, à partir du mois choisi. Les autres codes propres aux unités, les heures déjà saisies et les références des pointages enregistrés sont conservés. Les mois fermés ne sont pas modifiés. Dans chaque onglet d’unité, tu peux adapter uniquement son propre catalogue.</div>
         <div id="templateCodes" class="tablewrap"></div>
         <p class="muted small">Modifie les codes, les libellés ou les documents de référence. Décoche « Actif » pour retirer un code des nouvelles saisies, selon le périmètre choisi ci-dessous.</p>
-        <label class="checkbox"><input id="applyNationalToUnits" type="checkbox" checked> Appliquer les codes ajoutés ou modifiés à toutes les unités actives</label>
-        <div id="nationalEffectiveField" class="monthfield" style="margin-top:10px"><label for="nationalEffective">Applicable à partir de</label><input id="nationalEffective" type="month"></div>
+        <label class="checkbox"><input id="applyNationalToUnits" type="checkbox" autocomplete="off"> Appliquer les codes ajoutés ou modifiés à toutes les unités actives</label>
+        <div id="nationalEffectiveField" class="monthfield hidden" style="margin-top:10px"><label for="nationalEffective">Applicable à partir de</label><input id="nationalEffective" type="month"></div>
         <p class="muted small">Si tu décoches cette option, seule la liste type des futures unités est modifiée. Les listes des unités existantes ne sont pas remplacées.</p>
         <div class="actions"><button id="saveCodeTemplate" type="button" disabled>Enregistrer les modifications nationales</button><button id="reloadCodeTemplate" class="secondary" type="button">Recharger la liste type</button></div>
         <div id="templateButtonsHelp" class="muted small" style="margin-top:12px;line-height:1.5">
@@ -1459,6 +1459,7 @@
     $('applyNationalToUnits').disabled=templateBusy;$('nationalEffective').disabled=templateBusy;
     $('saveCodeTemplate').disabled=!templateLoaded||templateBusy;$('reloadCodeTemplate').disabled=templateBusy;$('addTemplateCode').disabled=!templateLoaded||templateBusy;
   }
+  $('applyNationalToUnits').checked=false;
   $('applyNationalToUnits').onchange=()=>show('nationalEffectiveField',$('applyNationalToUnits').checked);
   $('addTemplateCode').onclick=()=>{if(templateBusy)return;templateRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCodeTemplate();};
   $('reloadCodeTemplate').onclick=async()=>{if(catalogueState(templateRows)!==catalogueState(templateOriginal) && !await confirmAction('Recharger la liste type et abandonner les modifications non enregistrées ?'))return;await loadCodeTemplate();};
