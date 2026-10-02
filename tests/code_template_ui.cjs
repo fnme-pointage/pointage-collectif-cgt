@@ -22,7 +22,7 @@ Query.prototype.insert=function(value){const unit={id:'newunit-'+db.units.length
   await page.locator('#saveCodeTemplate').click();await page.getByText(/Liste type enregistrée/).waitFor();
   assert.equal(await page.evaluate(()=>window.templateSnapshot.revision),2);assert.equal(await page.evaluate(()=>window.testDb.pointage_code_versions.find(c=>c.unit_id==='ulm'&&c.code==='D4').label),'HEURE DS');
   await page.locator('[data-admin-tab="units"]').click();await page.locator('#newUnitName').fill('Nouvelle unité test');await page.locator('#createUnit').click();await page.waitForFunction(()=>document.querySelector('#adminUnit').selectedOptions[0].textContent==='Nouvelle unité test');
-  await page.locator('[data-admin-tab="codes"]').click();await page.locator('[data-clabel="0"]').waitFor();assert.equal(await page.locator('#codeTemplateCard').isVisible(),false);
+  await page.locator('[data-admin-tab="codes"]').click();await page.locator('[data-clabel="0"]').waitFor();assert.equal(await page.locator('#codeTemplateCard').isVisible(),false);assert.equal(await page.locator('#unitCatalogueHelp').isVisible(),true);assert.match(await page.locator('#unitCatalogueHelp').textContent(),/nouveaux inscrits/);
   assert.equal(await page.locator('[data-clabel="0"]').inputValue(),'DS modèle modifié');assert.equal(await page.locator('[data-cactive="1"]').isChecked(),false);assert.equal(await page.locator('[data-ccode="2"]').inputValue(),'N1');
   await page.locator('[data-clabel="0"]').fill('DS personnalisé unité');await page.locator('#saveAdminCodes').click();await page.locator('#confirmAccept').click();await page.getByText(/Modifications enregistrées pour/).waitFor();
   assert.equal(await page.evaluate(()=>window.templateSnapshot.codes[0].label),'DS modèle modifié');

@@ -242,6 +242,7 @@
       </div>
       <div class="card">
         <div class="sectiontitle"><h2>Catalogue des codes</h2><button id="addAdminCode" class="secondary" type="button">+ Code</button></div>
+        <div id="unitCatalogueHelp" class="notice hidden" style="margin-bottom:12px">Le catalogue de chaque unité est initialisé à partir de la liste type. Tu peux ensuite adapter les codes, les libellés et les documents aux besoins de ton unité. Sa liste en vigueur est proposée à tous ses utilisateurs, y compris aux nouveaux inscrits, selon le mois choisi. Les modifications ne changent pas la liste type et s’appliquent uniquement aux unités cochées ci-dessous. Pour modifier uniquement ton unité, laisse uniquement celle-ci cochée.</div>
         <div class="row">
           <div class="monthfield"><label for="catalogueSourceUnit">Catalogue de l’unité</label><select id="catalogueSourceUnit"></select></div>
           <div class="monthfield"><label for="catalogueEffective">Applicable à partir de</label><input id="catalogueEffective" type="month"></div>
@@ -689,6 +690,7 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
     show('codeTemplateCard',profile.is_admin && isAdminUnit);
+    show('unitCatalogueHelp',profile.is_admin && !isAdminUnit);
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
     const unitsTab=document.querySelector('[data-admin-tab="units"]');
