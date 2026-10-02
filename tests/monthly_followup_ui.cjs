@@ -13,7 +13,10 @@ for(const width of [390,1440]){
  await page.clock.install({time:new Date('2026-10-02T08:00:00Z')});
  await page.route('**/supabase-js@2',r=>r.fulfill({contentType:'application/javascript',body:stub}));
  await page.route('https://pointage.test/**',r=>{const f=path.resolve('app',new URL(r.request().url()).pathname.slice(1)||'index.html');return fs.existsSync(f)?r.fulfill({path:f}):r.fulfill({status:404,body:''});});
- await page.goto('https://pointage.test/');await page.locator('#adminUnit').waitFor();assert.equal(await page.locator('#monthlyFollowup').isVisible(),false);
+ await page.goto('https://pointage.test/');await page.locator('#adminUnit').waitFor();await page.locator('#exportMonthlyGlobal').waitFor();assert.equal(await page.locator('#monthlyFollowup').isVisible(),true);assert.equal(await page.locator('#monthlySummaryTable').isVisible(),false);
+ const global=await download('#exportMonthlyGlobal');assert.match(global.name,/mensuel-toutes-unites-2026-10/);assert.match(global.text,/ULM/);assert.match(global.text,/UFPI/);assert.match(global.text,/"12"/);assert.match(global.text,/"Mois"/);assert.doesNotMatch(global.text,/2026-09|"99"|"100"/);
+ await page.locator('#monthlyYear').selectOption('2025');const old=await download('#exportMonthlyGlobal');assert.match(old.name,/2025-10/);assert.match(old.text,/"2"/);
+ await page.screenshot({path:'/tmp/monthly-admin-'+width+'.png',fullPage:true});
  await page.locator('#adminUnit').selectOption('ulm');await page.waitForFunction(()=>!document.querySelector('#exportMonthlySummary').disabled,{},{timeout:10000});
  assert.equal(await page.locator('#monthlyFollowup').isVisible(),true);assert.equal(await page.locator('#monthlyYear').inputValue(),'2026');assert.equal(await page.locator('#monthlyMonth').inputValue(),'10');assert.equal(await page.locator('#monthlyMonth option').count(),12);
  const text=await page.locator('#monthlySummaryTable').textContent();assert.match(text,/NOUVEAU/);assert.match(text,/8/);assert.doesNotMatch(text,/ADMIN|99/);
@@ -25,8 +28,8 @@ for(const width of [390,1440]){
  await page.locator('#monthlyMonth').selectOption('11');await page.waitForFunction(()=>document.querySelector('#monthlyStats').textContent.includes('0 saisies'));assert.equal(await page.locator('#exportMonthlySummary').isEnabled(),true);
  await page.locator('#adminUnit').selectOption('ufpi');await page.waitForFunction(()=>document.querySelector('#monthlyStats').textContent.includes('UFPI'));assert.match(await page.locator('#monthlySummaryTable').textContent(),/UF/);assert.doesNotMatch(await page.locator('#monthlySummaryTable').textContent(),/Militant ULM/);
  await page.screenshot({path:'/tmp/monthly-followup-'+width+'.png',fullPage:true});
- await page.locator('#adminUnit').selectOption('adminunit');await page.waitForFunction(()=>document.querySelector('#monthlyFollowup').classList.contains('hidden'));assert.deepEqual(errors,[]);
+ await page.locator('#adminUnit').selectOption('adminunit');await page.locator('#exportMonthlyGlobal').waitFor();assert.equal(await page.locator('#monthlyUnitExportActions').isVisible(),false);assert.deepEqual(errors,[]);
  await context.close();
 }
-await browser.close();console.log('PASS: monthly panel outside ADMIN, year/month filters, independent annual selection, historical codes, exact CSV totals, admin exclusion, unit isolation, empty month, mobile/desktop.');
+await browser.close();console.log('PASS: monthly panel in ADMIN with global exports, year/month filters, independent annual selection, historical codes, exact CSV totals, admin exclusion, unit isolation, empty month, mobile/desktop.');
 })().catch(e=>{console.error(e);process.exit(1)});

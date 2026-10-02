@@ -204,9 +204,13 @@
         </div>
         <p id="monthlyStats" class="muted small"></p>
         <div id="monthlySummaryTable"></div>
-        <div class="actions">
+        <div id="monthlyUnitExportActions" class="actions">
           <button id="exportMonthlySummary" class="secondary" disabled>Exporter le récapitulatif mensuel CSV</button>
           <button id="exportMonthlyRaw" class="secondary" disabled>Exporter le détail mensuel CSV</button>
+        </div>
+        <div id="monthlyGlobalExportArea" class="hidden">
+          <div class="actions"><button id="exportMonthlyGlobal" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
+          <div id="monthlyGlobalExportMessage" aria-live="polite"></div>
         </div>
       </div>
       <div class="card">
@@ -727,22 +731,24 @@
     const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('globalExportArea',globalView);
     show('unitExportActions',!globalView);
-    renderMonthlyMenus();
     if(globalView){
       try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').order('unit_id').order('month_key'));}
       catch(error){$('globalExportMessage').innerHTML=msg('Impossible de charger les années de toutes les unités : '+error.message,'warn');}
     }
+    renderMonthlyMenus(yearMonths);
     const years=[...new Set([...yearMonths.map(m=>String(m.month_key).slice(0,4)),...(globalView?[curMonth().slice(0,4)]:[])])].sort().reverse();
     if(!years.includes(annualYear)) annualYear=years.includes(curMonth().slice(0,4))?curMonth().slice(0,4):(years[0]||'');
     $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
   }
   $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
 
-  function monthlyAvailable(){return profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name!=='ADMIN';}
-  function renderMonthlyMenus(){
+  function monthlyAvailable(){return !!profile?.is_admin;}
+  function monthlyGlobalView(){return units.find(u=>u.id===selectedUnit)?.name==='ADMIN';}
+  function renderMonthlyMenus(yearMonths=months){
     const visible=monthlyAvailable();show('monthlyFollowup',visible);
+    show('monthlyGlobalExportArea',monthlyGlobalView());show('monthlyUnitExportActions',!monthlyGlobalView());show('monthlySummaryTable',!monthlyGlobalView());
     if(!visible){monthlyReady=false;monthlyRequest++;return;}
-    const years=[...new Set([...months.map(m=>m.month_key.slice(0,4)),curMonth().slice(0,4)])].sort().reverse();
+    const years=[...new Set([...yearMonths.map(m=>m.month_key.slice(0,4)),curMonth().slice(0,4)])].sort().reverse();
     if(monthlyUnit!==selectedUnit){monthlyUnit=selectedUnit;monthlyYear=curMonth().slice(0,4);monthlyMonth=curMonth().slice(5,7);}
     if(!years.includes(monthlyYear))monthlyYear=years[0];
     $('monthlyYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===monthlyYear?' selected':''}>${esc(y)}</option>`).join('');
@@ -754,6 +760,7 @@
     const request=++monthlyRequest,unitId=selectedUnit,key=monthlyYear+'-'+monthlyMonth;
     monthlyReady=false;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;
     if(!monthlyAvailable())return;
+    if(monthlyGlobalView()){$('monthlyStats').textContent='';$('monthlySummaryTable').innerHTML='';$('monthlyGlobalExportMessage').innerHTML='';return;}
     $('monthlyStats').textContent='';$('monthlySummaryTable').innerHTML='<div class="muted small">Chargement du suivi mensuel…</div>';
     try{
       const [codes,ents]=await Promise.all([
@@ -1521,6 +1528,28 @@
     }
   };
 
+  $('exportMonthlyGlobal').onclick=async()=>{
+    if(!profile?.is_admin || !monthlyGlobalView()) return;
+    const year=monthlyYear,period=year+'-'+monthlyMonth;
+    if(!/^[1-9][0-9]{3}$/.test(year)){$('monthlyGlobalExportMessage').innerHTML=msg('Choisis une année valide.','warn');return;}
+    const button=$('exportMonthlyGlobal');
+    button.disabled=true;button.textContent='Export en cours…';$('monthlyGlobalExportMessage').innerHTML='';
+    try{
+      const [people,codes,globalEntries]=await Promise.all([
+        fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
+        fetchAll(()=>sb.from('month_codes').select('id,month_key,code').eq('month_key',period).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('month_key',period).order('id'))
+      ]);
+      const rows=globalSummaryRows(period,people,codes,globalEntries);rows[0][0]='Mois';
+      csvDownload('pointage-recap-mensuel-toutes-unites-'+period+'.csv',rows);
+      $('monthlyGlobalExportMessage').innerHTML=msg('Export '+period+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
+    }catch(error){
+      $('monthlyGlobalExportMessage').innerHTML=msg('Impossible de réaliser l’export global : '+error.message,'warn');
+    }finally{
+      button.disabled=false;button.textContent='Exporter tous les utilisateurs de toutes les unités CSV';
+    }
+  };
+
   function csvDownload(filename, rows){
     const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
@@ -1551,7 +1580,7 @@
   };
 
   $('exportMonthlyRaw').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable()) return;
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
@@ -1562,7 +1591,7 @@
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
   $('exportMonthlySummary').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable()) return;
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
     const {people,codeNames,amounts,codeTotals}=annualReport(monthlyCodes,monthlyEntries);
     const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
     people.forEach(p=>{
