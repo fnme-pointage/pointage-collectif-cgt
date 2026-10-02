@@ -175,14 +175,13 @@
         <div><div class="big" id="userTotal">0,00 h</div></div>
       </div>
       <div id="userNotice"></div>
-      <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures.</p>
-      <p class="muted small">Merci de reporter les éléments indiqués sur vos CRI.</p>
+      <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
       <div id="entryList"></div>
       <div class="actions">
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
         <button id="saveEntries" type="button">Enregistrer mes données</button>
       </div>
-      <div class="notice warn">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
+      <div class="notice warn" style="margin-top:20px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
     </div>
   </div>
 
@@ -843,7 +842,7 @@
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
       const code=currentCode && r.saved_code ? {...currentCode,code:r.saved_code,label:r.saved_label,document:r.saved_document} : currentCode;
       return `<div class="entry">
-        <div><label id="entryCodeLabel${i}">Codes et libellés</label>
+        <div><label id="entryCodeLabel${i}"><strong>Codes et libellés</strong></label>
           ${can?`<details class="code-picker" data-picker="${i}">
             <summary id="entryCode${i}" aria-labelledby="entryCodeLabel${i} entryCode${i}">${code?`${esc(code.code)} — ${esc(code.label)}`:'Choisir un code…'}</summary>
             <div class="picker-panel">${codesTable(monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)),'',c=>{
@@ -853,7 +852,7 @@
           </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
           <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}</div>
         </div>
-        <div><label for="entryHours${i}">${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'} aria-describedby="entryHoursHelp${i}"><p id="entryHoursHelp${i}" class="entry-hours-help">Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.</p></div>
+        <div><label for="entryHours${i}"><strong>${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</strong></label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'} aria-describedby="entryHoursHelp${i}"><p id="entryHoursHelp${i}" class="entry-hours-help">Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.</p></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
         <p class="entry-correction">En cas d’erreur sur une saisie déjà enregistrée, corrige la ligne concernée, puis clique à nouveau sur « Enregistrer mes données » pour sauvegarder la correction.</p>
       </div>`;

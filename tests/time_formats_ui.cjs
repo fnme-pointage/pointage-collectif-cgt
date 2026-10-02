@@ -20,7 +20,7 @@ stub=stub.replace('window.calls.push({name,args});',`window.calls.push({name,arg
   assert.ok(correctionBox.y>=helpBox.y+helpBox.height && correctionBox.y>=referenceBox.y+referenceBox.height);
   assert.ok(inputBox.width>=(width===390?125:200));
   assert.equal(await page.getByText('Les deux formats sont convertis automatiquement', {exact:false}).count(),0);
-  assert.match(await page.locator('#entryList').locator('..').textContent(),/Merci de reporter les éléments indiqués sur vos CRI/);
+  assert.match(await page.locator('#entryList').locator('..').textContent(),/renseigne les heures en tenant compte de tes CRI/);
   await page.locator('#entryHours0').fill('7:30');await page.locator('#saveEntries').click();assert.match(await page.locator('#userNotice').textContent(),/heures décimales valides/);
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.name==='pointage_save_entries').length),0);
   await page.locator('#entryHours0').fill('7,50');await page.locator('#saveEntries').click();await page.waitForFunction(()=>document.querySelector('#userNotice').textContent.includes('Tes données sont enregistrées'));
