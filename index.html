@@ -149,6 +149,8 @@
     </div>
   </div>
 
+  <div id="flashBanner" class="hidden" aria-live="polite"></div>
+
   <div id="monthButtons" class="month-grid" aria-label="Mois de l’année"></div>
   <div id="calendarMessage" aria-live="polite"></div>
 
@@ -189,6 +191,7 @@
     <div class="adminnav">
       <button data-admin-tab="results" class="active">Suivi</button>
       <button data-admin-tab="codes">Catalogue des codes</button>
+      <button data-admin-tab="flash">Messages flash</button>
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="units" class="hidden">Unités</button>
       <button data-admin-tab="documents">Base documentaire nationale</button>
@@ -281,6 +284,31 @@
         <p class="muted small">Le bouton « Exporter CSV » extrait le récapitulatif annuel par code de la personne pour l’année indiquée ci-dessus, dans son unité.</p>
         <div id="userExportMessage" aria-live="polite"></div>
         <div id="usersTable"></div>
+      </div>
+    </section>
+
+    <section id="admin-flash" class="hidden">
+      <div class="card">
+        <div class="sectiontitle"><h2>Messages flash</h2></div>
+        <p class="notice">Diffuse une information importante dans l’espace de tous les utilisateurs, dans toutes les unités. Le message apparaît au début de la période choisie et disparaît automatiquement à la fin, y compris sur une page déjà ouverte.</p>
+        <form id="flashForm">
+          <label for="flashTitle">Titre</label><input id="flashTitle" maxlength="160" required placeholder="Ex. Information importante">
+          <label for="flashBody" style="margin-top:12px">Message</label><textarea id="flashBody" rows="5" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
+          <div class="row" style="margin-top:12px">
+            <div class="grow"><label for="flashStart">Début d’affichage</label><input id="flashStart" type="datetime-local" required></div>
+            <div class="grow"><label for="flashEnd">Fin d’affichage</label><input id="flashEnd" type="datetime-local" required></div>
+          </div>
+          <p class="muted small">Les dates et heures sont affichées dans le fuseau horaire de ton appareil.</p>
+          <label class="checkbox"><input id="flashEmail" type="checkbox"> Envoyer également ce message par mail aux utilisateurs</label>
+          <p class="muted small">Les mails sont envoyés individuellement depuis fnme.pointage@gmail.com aux utilisateurs actifs dont l’adresse est confirmée au moment de la création. Si le message est programmé, les envois commencent au début de l’affichage. Trois reprises maximum sont prévues après un échec, pendant la période de diffusion.</p>
+          <button id="publishFlash" type="submit">Publier le message</button>
+        </form>
+        <div id="flashFeedback" aria-live="polite" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <div class="sectiontitle"><h2>Messages publiés et programmés</h2><button id="refreshFlash" class="secondary" type="button">Actualiser</button></div>
+        <p class="muted small">Tu peux arrêter un message avant son échéance. Cela interrompt son affichage et les mails restant à envoyer. Un mail déjà envoyé ne peut pas être rappelé. Pour changer le contenu, arrête le message et crée-en un nouveau.</p>
+        <div id="flashHistory" aria-live="polite"></div>
       </div>
     </section>
 
@@ -633,6 +661,7 @@
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
   async function route(){
+    resetFlashSession();
     show('documentsArea',false);show('userNav',false);
     closePdfReader();
     show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
@@ -672,6 +701,7 @@
       renderAdminUnits();
     } else selectedUnit=profile.unit_id;
     show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);
+    startFlashSession();
     await refreshMaintenance();
     if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
@@ -1231,13 +1261,74 @@
     }
   }
 
+
+  // Messages flash : dates serveur, expiration locale et actualisation des pages ouvertes.
+  let flashMessages=[],flashClockOffset=0,flashPoll=null,flashExpiry=null,flashRequest=0,flashHistoryRequest=0,flashRendered='',flashBusy=false,flashDraftId=null;
+  const flashNow=()=>Date.now()+flashClockOffset;
+  const flashDate=value=>new Date(value).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});
+  function flashLocalInput(date){const d=new Date(date.getTime()-date.getTimezoneOffset()*60000);return d.toISOString().slice(0,16);}
+  function resetFlashSession(){
+    flashRequest++;flashHistoryRequest++;clearInterval(flashPoll);clearInterval(flashExpiry);flashPoll=flashExpiry=null;
+    flashMessages=[];flashRendered='';$('flashBanner').innerHTML='';show('flashBanner',false);
+  }
+  function renderFlashBanner(){
+    const current=profile?.active&&!profile.is_admin?flashMessages.filter(m=>!m.cancelled_at&&Date.parse(m.starts_at)<=flashNow()&&Date.parse(m.ends_at)>flashNow()):[];
+    const html=current.map(m=>`<div class="card" style="border-left:5px solid #bd1522"><span class="pill">Message flash</span><h2 style="margin:10px 0">${esc(m.title)}</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.body)}</p><p class="muted small">Information affichée jusqu’au ${esc(flashDate(m.ends_at))}.</p></div>`).join('');
+    if(html!==flashRendered){$('flashBanner').innerHTML=html;flashRendered=html;}
+    show('flashBanner',current.length>0);
+  }
+  async function loadFlashBanner(){
+    if(!session||!profile?.active||profile.is_admin)return;
+    const request=++flashRequest;
+    try{const {data,error}=await sb.rpc('pointage_get_flash_messages');if(request!==flashRequest||error||!data)return;
+      flashClockOffset=Date.parse(data.server_now)-Date.now();flashMessages=data.messages||[];renderFlashBanner();
+    }catch(error){/* Une interruption réseau ne prolonge pas les messages expirés. */}
+  }
+  function startFlashSession(){
+    if(profile?.is_admin){if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}return;}
+    loadFlashBanner();flashPoll=setInterval(loadFlashBanner,30000);flashExpiry=setInterval(renderFlashBanner,1000);
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
+  async function loadFlashHistory(){
+    if(!profile?.is_admin)return;const request=++flashHistoryRequest;
+    try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
+      const now=Date.parse(data.server_now),messages=data.messages||[];
+      $('flashHistory').innerHTML=messages.length?messages.map(m=>{
+        const status=m.cancelled_at?'Arrêté':Date.parse(m.ends_at)<=now?'Terminé':Date.parse(m.starts_at)>now?'Programmé':'En cours';
+        const mail=m.send_email?`${m.email_sent} mail(s) accepté(s) par le serveur · ${m.email_pending} en attente · ${m.email_failed} en échec · ${m.email_skipped} non envoyé(s)`:'Affichage dans l’application uniquement';
+        return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
+      }).join(''):'<p class="muted">Aucun message flash publié.</p>';
+      document.querySelectorAll('[data-stop-flash]').forEach(btn=>btn.onclick=async()=>{
+        if(flashBusy||!await confirmAction('Arrêter ce message et les mails restant à envoyer ?'))return;
+        btn.disabled=true;try{const {error}=await sb.rpc('pointage_stop_flash_message',{p_id:btn.dataset.stopFlash});if(error)throw error;await loadFlashHistory();}catch(error){$('flashFeedback').innerHTML=msg('Arrêt impossible : '+error.message,'warn');btn.disabled=false;}
+      });
+    }catch(error){$('flashHistory').innerHTML=msg('Chargement impossible : '+error.message,'warn');}
+  }
+  $('refreshFlash').onclick=loadFlashHistory;
+  $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
+  $('flashForm').onsubmit=async event=>{
+    event.preventDefault();if(flashBusy||!profile?.is_admin)return;
+    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked;
+    if(!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
+    if(email&&!await confirmAction('Publier ce message pour toutes les unités et l’envoyer aussi par mail aux utilisateurs actifs ayant confirmé leur adresse ?',{button:'Publier et envoyer'}))return;
+    flashBusy=true;$('publishFlash').disabled=true;
+    $('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=true);
+    flashDraftId=flashDraftId||crypto.randomUUID();
+    try{const {error}=await sb.rpc('pointage_create_flash_message',{p_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email});if(error)throw error;
+      $('flashFeedback').innerHTML=msg(email?'Message publié. Les mails sont mis en file pour envoi pendant la période de diffusion.':'Message publié dans les espaces utilisateurs.','ok');
+      $('flashTitle').value='';$('flashBody').value='';$('flashEmail').checked=false;flashDraftId=null;await loadFlashHistory();
+    }catch(error){$('flashFeedback').innerHTML=msg('Publication non confirmée : '+error.message+' Tu peux réessayer sans doubler le même envoi.','warn');}
+    finally{flashBusy=false;$('publishFlash').disabled=false;$('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=false);}
+  };
+
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-    ['results','codes','users','units'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    ['results','codes','users','units','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
+    if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national');
   });
 

@@ -1,0 +1,67 @@
+BEGIN;
+UPDATE pointage_private.notification_config SET enabled=false;
+SELECT set_config('test.admin',(SELECT id::text FROM public.profiles WHERE active AND is_admin LIMIT 1),true);
+SELECT set_config('test.user',(SELECT p.id::text FROM public.profiles p JOIN auth.users a ON a.id=p.id WHERE p.active AND NOT p.is_admin AND a.email_confirmed_at IS NOT NULL LIMIT 1),true);
+SELECT set_config('request.jwt.claim.sub',current_setting('test.admin'),true);
+SET LOCAL ROLE authenticated;
+DO $$DECLARE id1 uuid:=gen_random_uuid();id2 uuid:=gen_random_uuid();BEGIN
+ PERFORM set_config('test.flash_now',id1::text,true);PERFORM set_config('test.flash_future',id2::text,true);
+ PERFORM public.pointage_create_flash_message(id1,'Information <test>','Texte important',now()-interval '1 minute',now()+interval '1 day',false);
+ PERFORM public.pointage_create_flash_message(id1,'Information <test>','Texte important',now()-interval '1 minute',now()+interval '1 day',false);
+ IF (SELECT count(*) FROM public.pointage_flash_messages WHERE id=id1)<>1 THEN RAISE EXCEPTION 'Duplicate message';END IF;
+ PERFORM public.pointage_create_flash_message(id2,'Programmé','Mail test',now()+interval '1 hour',now()+interval '1 day',true);
+ IF jsonb_array_length(public.pointage_list_flash_messages()->'messages')<2 THEN RAISE EXCEPTION 'Admin history missing';END IF;
+ BEGIN PERFORM public.pointage_create_flash_message(gen_random_uuid(),'Bad','Bad',now(),now()-interval '1 hour',false);RAISE EXCEPTION 'Invalid dates accepted';EXCEPTION WHEN raise_exception THEN IF sqlerrm='Invalid dates accepted' THEN RAISE;END IF;END;
+ BEGIN INSERT INTO public.pointage_flash_messages(id,title,body,starts_at,ends_at) VALUES(gen_random_uuid(),'Bypass','Bypass',now(),now()+interval '1 day');RAISE EXCEPTION 'Direct write allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+END;$$;
+RESET ROLE;
+DO $$DECLARE expected integer;BEGIN
+ SELECT count(*) INTO expected FROM public.profiles p JOIN auth.users a ON a.id=p.id JOIN public.units u ON u.id=p.unit_id WHERE p.active AND NOT p.is_admin AND u.active AND upper(u.name)<>'ADMIN' AND a.email_confirmed_at IS NOT NULL AND a.email IS NOT NULL;
+ IF (SELECT count(*) FROM pointage_private.flash_email_notifications WHERE message_id=current_setting('test.flash_future')::uuid)<>expected THEN RAISE EXCEPTION 'Wrong recipients';END IF;
+ IF EXISTS(SELECT 1 FROM pointage_private.flash_email_notifications WHERE message_id=current_setting('test.flash_now')::uuid) THEN RAISE EXCEPTION 'Email opt-out ignored';END IF;
+ PERFORM set_config('test.token',(SELECT token FROM pointage_private.notification_config),true);
+END;$$;
+SELECT set_config('request.jwt.claim.sub',current_setting('test.user'),true);
+SET LOCAL ROLE authenticated;
+DO $$BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.pointage_flash_messages WHERE id=current_setting('test.flash_now')::uuid) THEN RAISE EXCEPTION 'Active flash hidden';END IF;
+ IF EXISTS(SELECT 1 FROM public.pointage_flash_messages WHERE id=current_setting('test.flash_future')::uuid) THEN RAISE EXCEPTION 'Scheduled flash exposed';END IF;
+ IF public.pointage_get_flash_messages()->>'server_now' IS NULL THEN RAISE EXCEPTION 'Server clock absent';END IF;
+ BEGIN PERFORM public.pointage_create_flash_message(gen_random_uuid(),'Spoof','Spoof',now(),now()+interval '1 day',false);RAISE EXCEPTION 'Member publication allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ BEGIN PERFORM public.pointage_stop_flash_message(current_setting('test.flash_now')::uuid);RAISE EXCEPTION 'Member cancellation allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ BEGIN PERFORM public.pointage_list_flash_messages();RAISE EXCEPTION 'Member history exposed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ BEGIN PERFORM 1 FROM pointage_private.flash_email_notifications;RAISE EXCEPTION 'Queue exposed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+END;$$;
+RESET ROLE;
+SET LOCAL ROLE service_role;
+DO $$BEGIN IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Mail sent before start';END IF;END;$$;
+RESET ROLE;
+UPDATE public.pointage_flash_messages SET starts_at=now()-interval '1 minute' WHERE id=current_setting('test.flash_future')::uuid;
+UPDATE pointage_private.flash_email_notifications SET next_attempt_at=now(),status=CASE WHEN user_id=current_setting('test.user')::uuid THEN 'pending' ELSE 'skipped' END WHERE message_id=current_setting('test.flash_future')::uuid;
+SET LOCAL ROLE service_role;
+DO $$DECLARE job record;i integer;BEGIN
+ FOR i IN 1..4 LOOP
+  SELECT * INTO job FROM public.pointage_claim_flash_notifications(current_setting('test.token'));
+  IF job.id IS NULL OR job.email IS NULL OR job.title<>'Programmé' THEN RAISE EXCEPTION 'Verified job absent';END IF;
+  IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Job claimed twice';END IF;
+  PERFORM public.pointage_finish_flash_notification(current_setting('test.token'),job.id,job.claim_id,false,'SMTP_ERROR');
+  UPDATE pointage_private.flash_email_notifications SET next_attempt_at=now() WHERE id=job.id;
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM public.pointage_claim_flash_notifications(current_setting('test.token'))) THEN RAISE EXCEPTION 'Fourth retry allowed';END IF;
+ IF NOT EXISTS(SELECT 1 FROM pointage_private.flash_email_notifications WHERE id=job.id AND status='failed' AND attempts=4) THEN RAISE EXCEPTION 'Final failure not recorded';END IF;
+END;$$;
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub',current_setting('test.admin'),true);
+SET LOCAL ROLE authenticated;
+SELECT public.pointage_stop_flash_message(current_setting('test.flash_now')::uuid);
+SELECT public.pointage_stop_flash_message(current_setting('test.flash_future')::uuid);
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub',current_setting('test.user'),true);
+SET LOCAL ROLE authenticated;
+DO $$BEGIN IF EXISTS(SELECT 1 FROM public.pointage_flash_messages WHERE id IN(current_setting('test.flash_now')::uuid,current_setting('test.flash_future')::uuid)) THEN RAISE EXCEPTION 'Stopped message still visible';END IF;END;$$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$BEGIN BEGIN PERFORM public.pointage_get_flash_messages();RAISE EXCEPTION 'Anonymous read allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;END;$$;
+RESET ROLE;
+ROLLBACK;
+SELECT 'PASS: admin only, schedule/visibility, idempotency, optional verified recipients, server clock, private queue, three retries, cancellation and anonymous denial; no real mail, rolled back' result;
