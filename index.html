@@ -304,6 +304,10 @@
           <div id="createUserFeedback" aria-live="polite"></div>
         </form>
         <div id="usersTable"></div>
+        <div id="unitTransferHistoryArea" class="hidden" style="margin-top:18px">
+          <div class="sectiontitle"><h3>Historique des transferts entre unités</h3><button id="reloadUnitTransfers" class="secondary" type="button">Actualiser</button></div>
+          <div id="unitTransferHistory" class="muted small"></div>
+        </div>
         <form id="transferUserForm" class="notice hidden" style="margin-top:14px">
           <h3>Transférer un utilisateur vers une autre unité</h3>
           <p id="transferUserName" class="muted small"></p>
@@ -1476,6 +1480,8 @@
     try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:q.eq('unit_id',profile.unit_id);});}
     catch(error){alert(error.message);return;}
     renderUsers();
+    show('unitTransferHistoryArea',!!profile?.is_admin);
+    if(profile?.is_admin)loadUnitTransferHistory();
   }
 
   // Supabase limite les réponses par défaut : récupérer toutes les pages pour l'année.
@@ -1733,6 +1739,20 @@
   }
   $('exportIndividualSelected').onclick=()=>exportIndividual($('individualExportUser').value,$('exportIndividualSelected'));
 
+  async function loadUnitTransferHistory(){
+    if(!profile?.is_admin)return;
+    const out=$('unitTransferHistory');out.textContent='Chargement des transferts…';
+    try{
+      const {data,error}=await sb.from('pointage_unit_transfers')
+        .select('id,user_id,from_unit_id,to_unit_id,effective_date,performed_at,old_role,new_role')
+        .order('performed_at',{ascending:false}).limit(100);
+      if(error)throw error;
+      out.innerHTML=(data||[]).length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Ancienne unité</th><th>Nouvelle unité</th><th>Profil</th></tr></thead><tbody>'+
+        data.map(t=>'<tr><td>'+esc(t.effective_date)+'</td><td>'+esc(adminUserProfiles.find(p=>p.id===t.user_id)?.full_name||t.user_id)+'</td><td>'+esc(units.find(u=>u.id===t.from_unit_id)?.name||'')+'</td><td>'+esc(units.find(u=>u.id===t.to_unit_id)?.name||'')+'</td><td>'+esc(t.new_role==='manager'?'Responsable d’unité':'Utilisateur')+'</td></tr>').join('')+'</tbody></table></div>'
+        :'<p>Aucun transfert enregistré.</p>';
+    }catch(error){out.textContent='Historique indisponible : '+error.message;}
+  }
+  $('reloadUnitTransfers').onclick=loadUnitTransferHistory;
   let transferUserId=null;
   $('cancelTransferUser').onclick=()=>{transferUserId=null;show('transferUserForm',false);};
   $('transferUserForm').onsubmit=async event=>{
