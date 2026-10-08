@@ -290,7 +290,7 @@
     <section id="admin-flash" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Messages flash</h2></div>
-        <p class="notice">Depuis Admin, publie un message national pour toutes les unités ou un message destiné à une seule unité. Chaque unité peut également gérer ses propres messages. Les utilisateurs voient les messages nationaux et ceux de leur unité simultanément.</p><label for="flashTarget">Destinataires du message</label><select id="flashTarget"><option value="all">Toutes les unités — Admin</option></select><p class="muted small">Admin peut consulter et arrêter tous les messages, y compris ceux publiés par les unités.</p>
+        <p id="flashScopeHelp" class="notice">Depuis Admin, tu peux publier un message national ou ciblé sur une seule unité. Les utilisateurs reçoivent les messages nationaux et les messages de leur unité.</p><div id="flashTargetField"><label for="flashTarget">Destinataires du message</label><select id="flashTarget"><option value="all">Toutes les unités — Admin</option></select></div><p id="flashTargetHint" class="muted small"></p>
         <form id="flashForm">
           <label for="flashTitle">Titre</label><input id="flashTitle" maxlength="160" required placeholder="Ex. Information importante">
           <label for="flashBody" style="margin-top:12px">Message</label><textarea id="flashBody" rows="5" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
@@ -307,7 +307,7 @@
       </div>
       <div class="card">
         <div class="sectiontitle"><h2>Messages publiés et programmés</h2><button id="refreshFlash" class="secondary" type="button">Actualiser</button></div>
-        <p class="muted small">Tu peux arrêter un message avant son échéance. Cela interrompt son affichage et les mails restant à envoyer. Un mail déjà envoyé ne peut pas être rappelé. Pour changer le contenu, arrête le message et crée-en un nouveau.</p>
+        <p class="muted small">Admin peut consulter et arrêter tous les messages. Dans l’espace d’une unité, seuls ses propres messages sont gérés. Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.</p><div id="flashHistoryFilterField"><label for="flashHistoryFilter">Filtrer les messages</label><select id="flashHistoryFilter"><option value="all">Tous les messages</option><option value="national">Nationaux uniquement</option></select></div>
         <div id="flashHistory" aria-live="polite"></div>
       </div>
     </section>
@@ -733,6 +733,7 @@
     $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
+    refreshFlashTargets();
     renderCataloguePanels();
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
@@ -744,7 +745,7 @@
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
     $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
-  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
+  $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
     if(!profile?.is_admin || units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;
     if(!await allowLeaveCatalogue())return;
@@ -1290,17 +1291,33 @@
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
   function refreshFlashTargets(){
-    const select=$('flashTarget');if(!select)return;
-    const old=select.value;select.innerHTML='<option value="all">Toutes les unités — Admin</option>'+units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">${esc(u.name)} uniquement</option>`).join('');
-    select.value=Array.from(select.options).some(o=>o.value===old)?old:'all';
+    const select=$('flashTarget'),filter=$('flashHistoryFilter');if(!select||!filter)return;
+    const isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const unit=units.find(u=>u.id===selectedUnit);
+    const previousTarget=select.value,previousFilter=filter.value;
+    const unitOptions=units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">Unité ${esc(u.name)}</option>`).join('');
+    select.innerHTML='<option value="all">Toutes les unités — message national</option>'+unitOptions;
+    if(isNational)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:'all';
+    else if(unit)select.value=unit.id;
+    select.disabled=!isNational;
+    show('flashTargetField',isNational);
+    $('flashTargetHint').textContent=isNational?'Tu peux aussi publier un message local pour une unité.':'Ce message sera publié uniquement dans l’unité '+(unit?.name||'sélectionnée')+'.';
+    $('flashScopeHelp').textContent=isNational?'Dans Admin, tu peux publier un message national, ou sélectionner une seule unité. Les utilisateurs voient simultanément les messages nationaux et ceux de leur unité.':'Dans cet espace, tu gères uniquement les messages flash de '+(unit?.name||"l'unité")+'. Les messages nationaux restent gérés depuis Admin.';
+    filter.innerHTML='<option value="all">Tous les messages</option><option value="national">Messages nationaux</option>'+unitOptions;
+    filter.value=Array.from(filter.options).some(o=>o.value===previousFilter)?previousFilter:'all';
+    show('flashHistoryFilterField',isNational);
   }
   async function loadFlashHistory(){
     if(!profile?.is_admin)return;const request=++flashHistoryRequest;
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
-      const now=Date.parse(data.server_now),messages=data.messages||[];
+      const now=Date.parse(data.server_now),isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+      const allMessages=data.messages||[];
+      const filter=isNational?$('flashHistoryFilter').value:selectedUnit;
+      const messages=allMessages.filter(m=>filter==='all'||(filter==='national'?!m.unit_id:m.unit_id===filter));
       $('flashHistory').innerHTML=messages.length?messages.map(m=>{
         const status=m.cancelled_at?'Arrêté':Date.parse(m.ends_at)<=now?'Terminé':Date.parse(m.starts_at)>now?'Programmé':'En cours';
-        const origin=m.unit_name?`Unité ${esc(m.unit_name)}`:'Toutes les unités · Admin';
+        const name=m.unit_id?units.find(u=>u.id===m.unit_id)?.name:null;
+        const origin=m.unit_id?`Unité ${esc(name||'inconnue')}`:'Toutes les unités · Admin';
         const mail=m.send_email?`${m.email_sent} mail(s) accepté(s) par le serveur · ${m.email_pending} en attente · ${m.email_failed} en échec · ${m.email_skipped} non envoyé(s)`:'Affichage dans l’application uniquement';
         return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status} · ${origin}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
       }).join(''):'<p class="muted">Aucun message flash publié.</p>';
@@ -1311,11 +1328,12 @@
     }catch(error){$('flashHistory').innerHTML=msg('Chargement impossible : '+error.message,'warn');}
   }
   $('refreshFlash').onclick=loadFlashHistory;
+  $('flashHistoryFilter').onchange=loadFlashHistory;
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
     event.preventDefault();if(flashBusy||!profile?.is_admin)return;
-    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=$('flashTarget').value;
-    if(!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
+    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=units.find(u=>u.id===selectedUnit)?.name==='ADMIN'?$('flashTarget').value:selectedUnit;
+    if((target!=='all'&&!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
     if(email&&!await confirmAction(target==='all'?'Publier ce message pour toutes les unités et envoyer les mails aux utilisateurs concernés ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
     flashBusy=true;$('publishFlash').disabled=true;
     $('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=true);
