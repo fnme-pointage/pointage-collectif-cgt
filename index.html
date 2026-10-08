@@ -270,7 +270,7 @@
         </div>
         <div class="actions"><button id="saveAdminCodes" type="button">Enregistrer les modifications</button></div>
         <div id="codeAdminMessage" aria-live="polite"></div>
-        <p class="muted small">Décoche « Actif » pour retirer un code des nouvelles saisies. Pour corriger un libellé, modifie sa ligne avec la date d’application souhaitée.</p>
+        <p id="catalogueEditHelp" class="muted small">Décoche « Actif » pour retirer un code des nouvelles saisies. Pour corriger un libellé, modifie sa ligne avec la date d’application souhaitée.</p>
       </div>
       </div>
     </section>
@@ -1494,7 +1494,10 @@
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const typeView=adminScope;
     show('catalogueSourceField',false);show('codeTemplateCard',typeView);show('unitCataloguePanel',!typeView);
-    show('unitCatalogueHelp',!adminScope);show('adminCatalogueHelp',false);show('catalogueTargetFields',false);
+    show('unitCatalogueHelp',false);show('adminCatalogueHelp',false);show('catalogueTargetFields',false);
+    const readOnly=!adminScope;
+    show('addAdminCode',!readOnly);show('saveAdminCodes',!readOnly);show('catalogueEditHelp',!readOnly);
+    document.querySelector('#unitCataloguePanel > p.muted.small').classList.toggle('hidden',readOnly);
   }
   let catalogueLoadedUnit='';
   async function loadCatalogue(){
@@ -1519,9 +1522,16 @@
     if(request!==catalogueRequest)return;
     if(error){$('codeAdminMessage').innerHTML=msg(error.message,'warn');return;}
     const latest=new Map();for(const c of data||[])if(!latest.has(c.catalogue_id))latest.set(c.catalogue_id,c);
-    catalogueRows=orderedCodes([...latest.values()]);catalogueOriginal=structuredClone(catalogueRows);catalogueLoadedUnit=catalogueUnit;renderCatalogue();$('saveAdminCodes').disabled=false;
+    catalogueRows=orderedCodes([...latest.values()]);catalogueOriginal=structuredClone(catalogueRows);catalogueLoadedUnit=catalogueUnit;renderCatalogue();$('saveAdminCodes').disabled=units.find(u=>u.id===selectedUnit)?.name!=='ADMIN';
   }
   function renderCatalogue(){
+    if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN'){
+      $('adminCodes').innerHTML=codesTable(catalogueRows,'<th>Statut</th><th>En vigueur depuis</th>',c=>`<tr>
+        <td>${esc(c.label)}</td><td>${esc(c.code)}</td><td>${esc(c.document||'')}</td>
+        <td>${c.active?'Actif':'Inactif'}</td>
+        <td>${esc(c.effective_month==='1900-01'?'l’origine':monthLabel(c.effective_month))}</td></tr>`);
+      return;
+    }
     $('adminCodes').innerHTML=codesTable(catalogueRows,'<th>Actif</th><th></th>',(c,i)=>`<tr>
       <td><input data-clabel="${i}" aria-label="Libellé" maxlength="300" value="${esc(c.label)}"></td>
       <td><input data-ccode="${i}" aria-label="Code" maxlength="30" value="${esc(c.code)}"></td>
@@ -1537,7 +1547,7 @@
   $('catalogueEffective').onfocus=()=>{catalogueDate=$('catalogueEffective').value;};
   $('catalogueEffective').onchange=async()=>{if(!$('catalogueEffective').value || $('catalogueEffective').value<curMonth()){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
   $('catalogueAllUnits').onchange=()=>document.querySelectorAll('[data-catalogue-unit]').forEach(el=>el.checked=$('catalogueAllUnits').checked);
-  $('addAdminCode').onclick=()=>{catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
+  $('addAdminCode').onclick=()=>{if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
   $('saveAdminCodes').onclick=async()=>{
     if(!profile?.is_admin || catalogueLoadedUnit!==catalogueUnit || !catalogueLoadedUnit)return;
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
