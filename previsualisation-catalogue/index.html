@@ -1798,7 +1798,7 @@
     csvDownload(`pointage-recap-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
-  if('serviceWorker' in navigator) /* Prévisualisation : ne pas installer de service worker */
+  // Prévisualisation : enregistrement du service worker désactivé.
 })();
 </script>
 </body>
