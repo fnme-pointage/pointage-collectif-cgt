@@ -1721,7 +1721,7 @@
     if(!select||!profile)return;
     const previous=select.value;
     const isNational=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const historicalIds=new Set([...annualEntries,...monthlyEntries].map(e=>e.user_id));
+    const historicalIds=new Set(allProfiles.map(p=>p.id));
     const people=[...new Map([...adminUserProfiles,...allProfiles].map(p=>[p.id,p])).values()];
     const eligible=people.filter(p=>!p.is_admin&&(isNational||p.unit_id===selectedUnit||historicalIds.has(p.id)))
       .sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
@@ -1924,7 +1924,7 @@
     const person=[...adminUserProfiles,...allProfiles].find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
     if(!person||person.is_admin||!Array.from($('individualExportUser').options).some(o=>o.value===userId))return;
-    if(!/^[1-9]\\d{3}$/.test(year)){$('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');return;}
+    if(!/^[1-9]\d{3}$/.test(year)){$('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');return;}
     const national=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitId=selectedUnit,start=year+'-01',end=String(Number(year)+1)+'-01';
     button.disabled=true;button.textContent='Export en cours…';$('userExportMessage').innerHTML='';
@@ -1934,7 +1934,7 @@
         fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);})
       ]);
       if(!personEntries.length){$('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');return;}
-      const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
+      const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
       csvDownload('pointage-individuel-'+name+'-'+year+'.csv',individualCsvRows(person,year,codes,personEntries));
       $('userExportMessage').innerHTML=msg('Export historique CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
     }catch(error){$('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');}
