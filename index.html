@@ -1109,7 +1109,8 @@
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
-    show('userArea',false);show('documentsArea',true);
+    show('userArea',false);show('unitManagerArea',false);show('documentsArea',true);
+    $('unitManagerTab').classList.remove('active');
     $('userPointageTab').classList.remove('active');
     $('userDocumentsTab').classList.toggle('active',scope==='national');
     $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
