@@ -63,3 +63,35 @@ $body$;
 
 REVOKE ALL ON FUNCTION public.pointage_admin_update_user_role(uuid,text,uuid,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.pointage_admin_update_user_role(uuid,text,uuid,text) TO authenticated;
+
+-- Première fonctionnalité responsable : lecture strictement limitée à sa propre unité.
+-- Pas de lecture de courriels, identifiants ou données d'autres unités.
+CREATE OR REPLACE FUNCTION public.pointage_manager_unit_overview()
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $body$
+DECLARE
+  manager public.profiles%ROWTYPE;
+  unitname text;
+  members jsonb;
+BEGIN
+  SELECT * INTO manager
+  FROM public.profiles
+  WHERE id=auth.uid() AND active AND is_unit_manager AND NOT is_admin;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Accès responsable d’unité requis' USING ERRCODE='42501';
+  END IF;
+  SELECT name INTO unitname FROM public.units
+  WHERE id=manager.unit_id AND active AND upper(name)<>'ADMIN';
+  IF unitname IS NULL THEN
+    RAISE EXCEPTION 'Unité responsable invalide' USING ERRCODE='42501';
+  END IF;
+  SELECT coalesce(jsonb_agg(
+    jsonb_build_object('name',p.full_name,'active',p.active,'is_manager',p.is_unit_manager)
+    ORDER BY p.full_name
+  ),'[]'::jsonb) INTO members
+  FROM public.profiles p WHERE p.unit_id=manager.unit_id AND NOT p.is_admin;
+  RETURN jsonb_build_object('unit_id',manager.unit_id,'unit_name',unitname,'members',members);
+END;
+$body$;
+REVOKE ALL ON FUNCTION public.pointage_manager_unit_overview() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.pointage_manager_unit_overview() TO authenticated;
