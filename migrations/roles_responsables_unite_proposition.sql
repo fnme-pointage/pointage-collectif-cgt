@@ -1,4 +1,4 @@
--- Projet, non appliqué en production.
+-- Migration des rôles : administrateur national, responsable d’unité, utilisateur.
 -- Ajouter un statut distinct sans modifier les profils actuels.
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS is_unit_manager boolean NOT NULL DEFAULT false;
