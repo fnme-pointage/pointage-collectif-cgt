@@ -164,6 +164,7 @@
 
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
+    <button id="unitManagerTab" class="hidden" type="button">Gestion de mon unité</button>
     <button id="userDocumentsTab" type="button">Base documentaire nationale</button>
     <button id="userUnitDocumentsTab" type="button">Base documentaire d’unité</button>
   </div>
@@ -186,6 +187,8 @@
       <div class="notice warn" style="margin-top:8px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
     </div>
   </div>
+
+  <div id="unitManagerArea" class="hidden"><div class="card"><div class="sectiontitle"><h2 id="unitManagerTitle">Gestion de mon unité</h2><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><p class="muted small">Espace réservé aux responsables de cette unité. Les catalogues de codes restent en lecture seule, et seuls les droits explicitement accordés sont accessibles.</p><div id="unitManagerList" aria-live="polite"></div></div></div>
 
   <div id="adminArea" class="hidden">
     <div class="adminnav">
@@ -662,7 +665,7 @@
 
   async function route(){
     resetFlashSession();
-    show('documentsArea',false);show('userNav',false);
+    show('documentsArea',false);show('userNav',false);show('unitManagerArea',false);
     closePdfReader();
     show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
     if(recovering){
@@ -683,7 +686,9 @@
     }
     show('authView',false);show('mainView',true);
     renderUserIdentity();
-    $('userRole').textContent=profile.is_admin?'Administrateur':'Utilisateur';
+    $('userRole').textContent=profile.is_admin?'Administrateur':profile.is_unit_manager?'Responsable d’unité':'Utilisateur';
+    show('unitManagerTab',!!profile.is_unit_manager&&!profile.is_admin);
+    $('unitManagerTab').classList.remove('active');
     show('adminArea',profile.is_admin);
     show('maintenanceAdmin',false);
     show('userNav',!profile.is_admin);
@@ -1113,9 +1118,38 @@
   $('userPointageTab').onclick=()=>{
     if(documentBusy)return;
     documentRequest++;closePdfReader();
-    show('documentsArea',false);show('userArea',!profile.is_admin);
+    show('documentsArea',false);show('unitManagerArea',false);show('userArea',!profile.is_admin);
+    $('unitManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
   };
+  async function loadUnitManager(){
+    if(!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
+    $('unitManagerList').innerHTML='<p class="muted small">Chargement des membres de l’unité…</p>';
+    try {
+      const {data,error}=await sb.rpc('pointage_manager_unit_overview');
+      if(error)throw error;
+      if(!profile?.is_unit_manager||data.unit_id!==profile.unit_id)return;
+      $('unitManagerTitle').textContent='Gestion de mon unité — '+(data.unit_name||'');
+      const people=data.members||[];
+      $('unitManagerList').innerHTML='<p class="muted small">'+people.length+' membre(s) actif(s) ou en attente dans cette unité.</p>'+
+        '<div class="tablewrap"><table><thead><tr><th>Nom</th><th>Profil</th><th>Statut</th></tr></thead><tbody>'+
+        people.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.is_manager?'Responsable d’unité':'Utilisateur')+'</td><td>'+esc(p.active?'Actif':'Inactif')+'</td></tr>').join('')+
+        '</tbody></table></div><p class="muted small">Première étape : consultation sécurisée des membres. Les actions de gestion, les messages flash et les documents seront intégrés après validation de leurs autorisations.</p>';
+    } catch(error) {
+      $('unitManagerList').innerHTML=msg('Consultation impossible : '+error.message,'warn');
+    }
+  }
+  $('unitManagerTab').onclick=async()=>{
+    if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
+    documentRequest++;closePdfReader();
+    show('documentsArea',false);show('userArea',false);show('unitManagerArea',true);
+    $('unitManagerTab').classList.add('active');
+    $('userPointageTab').classList.remove('active');
+    $('userDocumentsTab').classList.remove('active');
+    $('userUnitDocumentsTab').classList.remove('active');
+    await loadUnitManager();
+  };
+  $('refreshUnitManager').onclick=loadUnitManager;
   $('userDocumentsTab').onclick=()=>openDocumentBase('national');
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit');
   $('refreshDocuments').onclick=()=>loadDocuments();
