@@ -93,3 +93,37 @@ BEGIN
 END;$body$;
 REVOKE ALL ON FUNCTION public.pointage_admin_transfer_user(uuid,uuid,date,text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pointage_admin_transfer_user(uuid,uuid,date,text) TO authenticated;
+
+-- L'ancien RPC de modification des rôles doit lui aussi refuser les mutations
+-- d'unité de comptes opérationnels pour empêcher un transfert non journalisé.
+CREATE OR REPLACE FUNCTION public.pointage_admin_update_user_role(
+ p_user_id uuid,p_full_name text,p_unit_id uuid,p_role text
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $body$
+DECLARE oldp public.profiles%ROWTYPE; u public.units%ROWTYPE;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=auth.uid() AND active AND is_admin)
+ THEN RAISE EXCEPTION 'Accès administrateur requis' USING ERRCODE='42501'; END IF;
+ IF p_role NOT IN ('user','manager','admin') OR p_full_name IS NULL
+   OR length(btrim(p_full_name)) NOT BETWEEN 1 AND 150
+ THEN RAISE EXCEPTION 'Nom ou rôle invalide'; END IF;
+ SELECT * INTO oldp FROM public.profiles WHERE id=p_user_id FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Utilisateur introuvable'; END IF;
+ SELECT * INTO u FROM public.units WHERE id=p_unit_id AND active;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Unité invalide'; END IF;
+ IF (p_role='admin')<>(upper(u.name)='ADMIN')
+ THEN RAISE EXCEPTION 'Administrateur dans ADMIN, autres profils dans leur unité'; END IF;
+ IF oldp.id=auth.uid() AND p_role<>'admin'
+ THEN RAISE EXCEPTION 'Impossible de retirer son propre rôle Admin'; END IF;
+ IF oldp.is_admin AND p_role<>'admin'
+   AND (SELECT count(*) FROM public.profiles WHERE is_admin AND active)<=1
+ THEN RAISE EXCEPTION 'Dernier Administrateur protégé'; END IF;
+ IF oldp.unit_id IS DISTINCT FROM p_unit_id AND
+   EXISTS(SELECT 1 FROM public.units WHERE id=oldp.unit_id AND upper(name)<>'ADMIN')
+ THEN RAISE EXCEPTION 'Pour changer l’unité, utilise le bouton Transférer'; END IF;
+ IF oldp.unit_id IS DISTINCT FROM p_unit_id AND
+    (EXISTS(SELECT 1 FROM public.entries WHERE user_id=p_user_id)
+     OR EXISTS(SELECT 1 FROM public.submissions WHERE user_id=p_user_id))
+ THEN RAISE EXCEPTION 'Le compte contient des pointages historiques'; END IF;
+ UPDATE public.profiles SET full_name=btrim(p_full_name),unit_id=p_unit_id,
+  is_admin=(p_role='admin'),is_unit_manager=(p_role='manager') WHERE id=p_user_id;
+END;$body$;
