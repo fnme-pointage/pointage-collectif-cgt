@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="../manifest.json">
   <title>Pointage collectif</title>
 <style>#flashPreviewWarning{position:sticky;top:0;z-index:9999;padding:10px;background:#fff0cc;border-bottom:2px solid #b54708;text-align:center;font-weight:650;color:#733b00}</style>
   <style>
@@ -44,7 +44,7 @@
 
 <div id="configMissing" class="app hidden">
   <div class="card login">
-    <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Configuration nécessaire</h1></div>
+    <div class="brand"><img class="brand-logo" src="../assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Configuration nécessaire</h1></div>
     <p>La base partagée n'est pas encore reliée à l'application.</p>
     <p class="muted small">Ouvre le fichier <strong>config.js</strong> et renseigne l'URL et la clé publique de ton projet Supabase. Le fichier README explique les étapes.</p>
   </div>
@@ -52,7 +52,7 @@
 
 <div id="authView" class="app hidden">
   <div class="card login">
-    <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Pointage collectif</h1></div>
+    <div class="brand"><img class="brand-logo" src="../assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Pointage collectif</h1></div>
     <div class="tabs">
       <button id="loginTab">Connexion</button>
       <button id="signupTab" class="secondary">Créer mon compte</button>
@@ -100,7 +100,7 @@
 
 <div id="recoveryView" class="app hidden">
   <div class="card login">
-    <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Nouveau mot de passe</h1></div>
+    <div class="brand"><img class="brand-logo" src="../assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Nouveau mot de passe</h1></div>
     <div id="recoveryMsg"></div>
     <div id="recoveryForm">
       <label for="newPassword">Nouveau mot de passe</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password">
@@ -115,7 +115,7 @@
 
 <div id="pendingView" class="app hidden">
   <div class="card login">
-    <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Compte en attente</h1></div>
+    <div class="brand"><img class="brand-logo" src="../assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Compte en attente</h1></div>
     <div class="notice warn">Ton compte existe, mais il doit encore être activé par l'administrateur.</div>
     <p id="pendingIdentity" class="muted"></p>
     <div class="actions"><button id="pendingLogout" class="secondary">Se déconnecter</button></div>
@@ -124,7 +124,7 @@
 
 <div id="mainView" class="app hidden">
   <div class="top">
-    <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Pointage collectif</h1></div>
+    <div class="brand"><img class="brand-logo" src="../assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Pointage collectif</h1></div>
     <div class="userbox">
       <strong id="userName"></strong><span id="userUnit" class="muted hidden"></span><br>
       <span id="userRole" class="muted"></span> · <a href="#" id="changePasswordLink">Changer mon mot de passe</a> · <a href="#" id="logoutLink">Déconnexion</a>
