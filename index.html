@@ -285,6 +285,17 @@
         </div>
         <p class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Tout nouveau compte arrive dans ADMIN. La colonne « Unité demandée » indique son choix à l’inscription : utilise « Modifier » pour choisir son unité affectée, puis active-le.</p>
         <p class="muted small">Le bouton « Exporter CSV » extrait le récapitulatif annuel par code de la personne pour l’année indiquée ci-dessus, dans son unité.</p>
+        <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
+        <form id="createUserForm" class="notice hidden" style="margin:12px 0">
+          <h3>Créer un utilisateur</h3>
+          <p class="muted small">Une invitation sera envoyée par e-mail. La personne choisira son propre mot de passe.</p>
+          <label for="createUserName">Nom et prénom</label><input id="createUserName" maxlength="150" required autocomplete="off">
+          <label for="createUserEmail">Adresse e-mail</label><input id="createUserEmail" type="email" maxlength="320" required autocomplete="off">
+          <label for="createUserUnit">Unité</label><select id="createUserUnit" required></select>
+          <label for="createUserRole">Profil</label><select id="createUserRole" required></select>
+          <div class="actions"><button id="confirmCreateUser" type="submit">Créer et envoyer l’invitation</button><button id="cancelCreateUser" class="secondary" type="button">Annuler</button></div>
+          <div id="createUserFeedback" aria-live="polite"></div>
+        </form>
         <div id="userExportMessage" aria-live="polite"></div>
         <div id="usersTable"></div>
       </div>
@@ -396,7 +407,7 @@
     document.getElementById('configMissing').classList.remove('hidden');
     return;
   }
-  let recovering=new URLSearchParams(location.hash.slice(1)).get('type')==='recovery' || new URLSearchParams(location.search).get('type')==='recovery';
+  let recovering=['recovery','invite'].includes(new URLSearchParams(location.hash.slice(1)).get('type')) || ['recovery','invite'].includes(new URLSearchParams(location.search).get('type'));
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
   let managerSpace=false;
@@ -1735,6 +1746,53 @@
       };
     });
   }
+
+  // Invitations créées depuis le serveur : les rôles et l'unité ne sont jamais décidés par le navigateur.
+  function refreshCreateUserChoices(){
+    const isAdmin=!!profile?.is_admin;
+    const options=units.filter(u=>u.active && (isAdmin || u.id===profile.unit_id));
+    const previous=$('createUserUnit').value;
+    const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : profile.unit_id;
+    $('createUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`).join('');
+    $('createUserUnit').disabled=!isAdmin;
+    const target=units.find(u=>u.id===$('createUserUnit').value);
+    const national=isAdmin && target?.name==='ADMIN';
+    $('createUserRole').innerHTML=national
+      ?'<option value="admin">Administrateur</option>'
+      :'<option value="user">Utilisateur</option><option value="manager">Responsable d’unité</option>';
+  }
+  $('openCreateUser').onclick=()=>{
+    if(!unitManagement())return;
+    refreshCreateUserChoices();
+    $('createUserFeedback').innerHTML='';
+    show('createUserForm',true);
+    $('createUserName').focus();
+  };
+  $('createUserUnit').onchange=refreshCreateUserChoices;
+  $('cancelCreateUser').onclick=()=>show('createUserForm',false);
+  $('createUserForm').onsubmit=async event=>{
+    event.preventDefault();
+    if(!unitManagement())return;
+    const name=$('createUserName').value.trim(),email=$('createUserEmail').value.trim().toLowerCase();
+    const unitId=profile.is_admin?$('createUserUnit').value:profile.unit_id;
+    const role=$('createUserRole').value;
+    const unit=units.find(u=>u.id===unitId);
+    if(!name || name.length>150 || !email || !unit?.active || !['user','manager','admin'].includes(role)
+       || (role==='admin')!== (profile.is_admin&&unit.name==='ADMIN')){
+      $('createUserFeedback').innerHTML=msg('Vérifie le nom, l’adresse e-mail, le profil et l’unité.','warn');return;
+    }
+    if(!await confirmAction('Créer le compte de '+name+' et envoyer une invitation à '+email+' ?',{button:'Créer le compte'}))return;
+    $('confirmCreateUser').disabled=true;$('createUserFeedback').innerHTML='';
+    try{
+      const {data,error}=await sb.functions.invoke('create-managed-user',{body:{full_name:name,email,unit_id:unitId,role}});
+      if(error){let detail='';try{detail=(await error.context?.json())?.error||'';}catch{}throw new Error(detail||error.message);}
+      if(!data?.ok)throw new Error(data?.error||'Réponse de création non confirmée');
+      $('createUserFeedback').innerHTML=msg('Invitation envoyée à '+email+'. Le compte est rattaché à '+unit.name+'.','ok');
+      $('createUserName').value='';$('createUserEmail').value='';
+      await loadAdminUsers();
+    }catch(error){$('createUserFeedback').innerHTML=msg('Création impossible : '+error.message,'warn');}
+    finally{$('confirmCreateUser').disabled=false;}
+  };
 
   $('userExportYear').value=curMonth().slice(0,4);
 
