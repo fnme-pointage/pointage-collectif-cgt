@@ -872,7 +872,7 @@
       renderYearSelect();return;
     }
     if(!/^[1-9][0-9]{3}$/.test(next)||Number(next)<1900){$('spaceYear').value=spaceYear;return;}
-    if(!await allowLeavePointage() || (profile.is_admin && !await allowLeaveCatalogue())){$('spaceYear').value=spaceYear;return;}
+    if(!await allowLeavePointage() || (unitManagement() && !await allowLeaveCatalogue())){$('spaceYear').value=spaceYear;return;}
     spaceYear=next;selectedMonth='';await loadMonths();
   };
 
@@ -1162,6 +1162,7 @@
     if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
     if(!await allowLeavePointage())return;
     managerSpace=true;selectedUnit=profile.unit_id;
+    if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}
     documentRequest++;closePdfReader();
     show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('adminArea',true);
     $('unitManagerTab').classList.add('active');
@@ -1203,7 +1204,7 @@
     $('documentList').innerHTML=visible.length?visible.map(d=>`<div class="document-row">
       <div><strong>${esc(d.title)}</strong><br><span class="muted small">PDF · ${fmt(Number(d.file_size)/1048576)} Mo</span></div>
       <div class="document-actions"><button type="button" class="secondary" data-view-document="${esc(d.id)}">Consulter</button>
-      ${profile.is_admin?`<button type="button" class="danger" data-delete-document="${esc(d.id)}">Supprimer</button>`:''}</div>
+      ${unitManagement()&&(documentsScope==='unit'||profile.is_admin)?`<button type="button" class="danger" data-delete-document="${esc(d.id)}">Supprimer</button>`:''}</div>
     </div>`).join(''):'<p class="muted small">'+(search?'Aucun document ne correspond à cette recherche.':'Aucun document disponible pour le moment.')+'</p>';
     $('documentStorage').textContent=documents.length+' PDF · '+fmt(documents.reduce((total,d)=>total+Number(d.file_size||0),0)/1048576)+' Mo de PDF dans cette base.';
     document.querySelectorAll('[data-view-document]').forEach(button=>button.onclick=()=>openPdfDocument(button.dataset.viewDocument));
@@ -1217,7 +1218,7 @@
     if(file.size===0 || file.size>52428800){$('documentMessage').innerHTML=msg('Le PDF doit faire entre 1 octet et 50 Mo.','warn');return;}
     const header=new TextDecoder().decode(await file.slice(0,1024).arrayBuffer());
     if(!header.includes('%PDF-')){$('documentMessage').innerHTML=msg('Le fichier sélectionné ne semble pas être un PDF.','warn');return;}
-    const button=$('addDocument'), id=crypto.randomUUID(), path=id+'.pdf';
+    const button=$('addDocument'), id=crypto.randomUUID(), path=(profile.is_admin?'':unitId+'/')+id+'.pdf';
     documentBusy=true;$('adminUnit').disabled=true;
     button.disabled=true;button.textContent='Ajout en cours…';$('documentMessage').innerHTML='';
     let uploaded=false;
