@@ -304,6 +304,16 @@
           <div id="createUserFeedback" aria-live="polite"></div>
         </form>
         <div id="usersTable"></div>
+        <form id="transferUserForm" class="notice hidden" style="margin-top:14px">
+          <h3>Transférer un utilisateur vers une autre unité</h3>
+          <p id="transferUserName" class="muted small"></p>
+          <p class="muted small">Le transfert est immédiat. Les pointages antérieurs restent dans leur unité d’origine. Si cette personne a déjà pointé pendant le mois en cours, le transfert sera refusé jusqu’au début du mois suivant.</p>
+          <label for="transferUserUnit">Nouvelle unité</label><select id="transferUserUnit" required></select>
+          <label for="transferUserRole">Profil dans la nouvelle unité</label><select id="transferUserRole"><option value="user">Utilisateur</option><option value="manager">Responsable d’unité</option></select>
+          <label for="transferUserDate">Date de prise d’effet</label><input type="date" id="transferUserDate" required readonly>
+          <div class="actions"><button type="submit" id="confirmTransferUser">Confirmer le transfert</button><button id="cancelTransferUser" class="secondary" type="button">Annuler</button></div>
+          <div id="transferUserFeedback" aria-live="polite"></div>
+        </form>
       </div>
     </section>
 
@@ -1434,7 +1444,7 @@
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
-    if(btn.dataset.adminTab==='users')show('createUserForm',false);
+    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
@@ -1706,13 +1716,47 @@
   }
   $('exportIndividualSelected').onclick=()=>exportIndividual($('individualExportUser').value,$('exportIndividualSelected'));
 
+  let transferUserId=null;
+  $('cancelTransferUser').onclick=()=>{transferUserId=null;show('transferUserForm',false);};
+  $('transferUserForm').onsubmit=async event=>{
+    event.preventDefault();
+    if(!profile?.is_admin||!transferUserId)return;
+    const person=adminUserProfiles.find(p=>p.id===transferUserId);
+    const toUnit=$('transferUserUnit').value,role=$('transferUserRole').value,date=$('transferUserDate').value;
+    if(!person||person.is_admin||!units.some(u=>u.id===toUnit&&u.active&&u.name!=='ADMIN')||!['user','manager'].includes(role))return;
+    if(!await confirmAction('Transférer '+(person.full_name||person.email)+' dans '+(units.find(u=>u.id===toUnit)?.name||'la nouvelle unité')+' ? Ses anciens pointages resteront dans son unité d’origine.',{title:'Confirmer le transfert',button:'Transférer'}))return;
+    const button=$('confirmTransferUser');button.disabled=true;
+    try{
+      const {error}=await sb.rpc('pointage_admin_transfer_user',{p_user_id:person.id,p_to_unit_id:toUnit,p_effective_date:date,p_role:role});
+      if(error)throw error;
+      transferUserId=null;show('transferUserForm',false);
+      await loadAdminData();
+      alert('Transfert effectué. L’historique des pointages est conservé dans l’unité d’origine.');
+    }catch(error){$('transferUserFeedback').innerHTML=msg(error.message,'warn');}
+    finally{button.disabled=false;}
+  };
+
   function renderUsers(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
+    document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
+      if(!profile?.is_admin)return;
+      const person=adminUserProfiles.find(p=>p.id===button.dataset.userTransfer);
+      if(!person||person.is_admin)return;
+      transferUserId=person.id;
+      $('transferUserName').textContent=(person.full_name||person.email||'Utilisateur')+' — unité actuelle : '+(units.find(u=>u.id===person.unit_id)?.name||'');
+      const options=units.filter(u=>u.active&&u.name!=='ADMIN'&&u.id!==person.unit_id);
+      $('transferUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+      $('transferUserRole').value=person.is_unit_manager?'manager':'user';
+      $('transferUserDate').value=new Date().toLocaleDateString('en-CA');
+      $('transferUserFeedback').innerHTML='';
+      show('transferUserForm',true);
+      $('transferUserForm').scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
       if(!unitManagement())return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userDelete);
