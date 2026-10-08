@@ -1422,6 +1422,12 @@
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
+    // Relire les données partagées lors du retour dans un onglet, sans écraser le pointage personnel.
+    if(profile?.is_unit_manager && managerSpace && !profile.is_admin){
+      if(btn.dataset.adminTab==='results')loadAdminData();
+      if(btn.dataset.adminTab==='codes')loadCatalogue();
+      if(btn.dataset.adminTab==='users')loadAdminUsers();
+    }
   });
 
   async function loadAdminData(){
