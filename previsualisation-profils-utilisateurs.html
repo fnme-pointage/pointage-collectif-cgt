@@ -39,7 +39,7 @@
   .month-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px}.month-grid button{background:#fff;color:#222;border:1px solid #ddd;padding:12px 6px}.month-grid button.active{background:#bd1522;color:#fff}.month-grid small{display:block;font-size:11px}.catalogue-units{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}@media(max-width:620px){.month-grid{grid-template-columns:repeat(3,1fr)}}
   </style>
 </head>
-<body><div id="rolesPreview">PRÉVISUALISATION — profils : Admin peut attribuer les trois rôles ; les responsables peuvent choisir Utilisateur ou Responsable dans leur unité, jamais Administrateur.<details><summary>Voir les droits proposés</summary><p>Responsable ULM : Mon pointage | Gestion ULM. Dans Gestion ULM, modification du rôle Utilisateur / Responsable uniquement. Aucun enregistrement depuis cette prévisualisation.</p></details></div>
+<body><div id="rolesPreview">PRÉVISUALISATION — dans OPF, ULM et UFPI, le formulaire Modifier ne propose que Utilisateur et Responsable d’unité. Administrateur est disponible uniquement dans l’espace ADMIN. Aucun changement de compte n’est enregistré ici.</div>
 
 <div id="configMissing" class="app hidden">
   <div class="card login">
@@ -1683,7 +1683,7 @@
         <label>Profil<select data-edit-role>
           <option value="user"${!p.is_admin&&!p.is_unit_manager?' selected':''}>Utilisateur</option>
           <option value="manager"${p.is_unit_manager?' selected':''}>Responsable d’unité</option>
-          <option value="admin"${p.is_admin?' selected':''}>Administrateur</option>
+          ${isAdminUnit&&profile.is_admin?'<option value="admin"'+(p.is_admin?' selected':'')+'>Administrateur</option>':''}
         </select></label>
         <button data-edit-save type="button">Enregistrer</button> <button class="secondary" data-edit-cancel type="button">Annuler</button>`;
       cell.querySelector('[data-edit-cancel]').onclick=renderUsers;
@@ -1692,6 +1692,7 @@
         const unitId=cell.querySelector('[data-edit-unit]').value;
         const role=cell.querySelector('[data-edit-role]').value;
         const isNationalUnit=units.find(u=>u.id===unitId)?.name==='ADMIN';
+        if(role==='admin'&&(!profile.is_admin||!isAdminUnit)){alert('Le profil Administrateur peut uniquement être attribué depuis l’espace ADMIN.');return;}
         if((role==='admin')!==isNationalUnit){alert(role==='admin'?'Un administrateur doit être rattaché à ADMIN.':'Un utilisateur ou responsable doit être rattaché à OPF, ULM ou UFPI.');return;}
         if(p.id===profile.id&&role!=='admin'){alert('Tu ne peux pas retirer tes propres droits administrateur.');return;}
         if((p.is_admin!== (role==='admin')||!!p.is_unit_manager!==(role==='manager'))&&!await confirmAction('Changer le profil de cet utilisateur ? Ses droits d’accès seront modifiés.',{button:'Confirmer le profil'}))return;
