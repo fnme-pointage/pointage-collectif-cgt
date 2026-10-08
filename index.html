@@ -1104,19 +1104,21 @@
   const PDF_LIBRARY_URL=PDF_ASSET_URL+'legacy/build/';
   const canReadDocuments=()=>!!session && !!profile && (profile.is_admin || profile.active);
   const documentUnitId=()=>documentsScope==='unit'?(profile.is_admin?selectedUnit:profile.unit_id):null;
-  function openDocumentBase(scope){
+  function openDocumentBase(scope,personal=false){
     if(documentBusy)return;
     closePdfReader();documentsScope=scope;documents=[];
     $('documentSearch').value='';$('documentTitle').value='';$('documentFile').value='';
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
-    managerSpace=false;if(!profile.is_admin)show('adminArea',false);
+    if(personal){managerSpace=false;if(!profile.is_admin)show('adminArea',false);}
     show('userArea',false);show('unitManagerArea',false);show('documentsArea',true);
-    $('unitManagerTab').classList.remove('active');
-    $('userPointageTab').classList.remove('active');
-    $('userDocumentsTab').classList.toggle('active',scope==='national');
-    $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
+    if(personal){
+      $('unitManagerTab').classList.remove('active');
+      $('userPointageTab').classList.remove('active');
+      $('userDocumentsTab').classList.toggle('active',scope==='national');
+      $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
+    }
     loadDocuments();
   }
   $('userPointageTab').onclick=()=>{
@@ -1171,8 +1173,8 @@
     await loadMonths();
   };
   $('refreshUnitManager').onclick=loadUnitManager;
-  $('userDocumentsTab').onclick=()=>openDocumentBase('national');
-  $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit');
+  $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
+  $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
   $('refreshDocuments').onclick=()=>loadDocuments();
   $('documentSearch').oninput=()=>renderDocuments();
   async function loadDocuments(){
@@ -1208,7 +1210,7 @@
     document.querySelectorAll('[data-delete-document]').forEach(button=>button.onclick=()=>deleteDocument(button.dataset.deleteDocument,button));
   }
   $('addDocument').onclick=async()=>{
-    if(!profile?.is_admin || documentBusy) return;
+    if(!unitManagement() || (documentsScope==='national'&&!profile.is_admin) || documentBusy) return;
     const unitId=documentUnitId();
     const title=$('documentTitle').value.trim(), file=$('documentFile').files[0];
     if(!title||!file){$('documentMessage').innerHTML=msg('Renseigne un titre et choisis un PDF.','warn');return;}
@@ -1238,7 +1240,7 @@
     }finally{documentBusy=false;$('adminUnit').disabled=false;button.disabled=false;button.textContent='Ajouter le PDF';}
   };
   async function deleteDocument(id,button){
-    if(!profile?.is_admin || documentBusy) return;
+    if(!unitManagement() || (documentsScope==='national'&&!profile.is_admin) || documentBusy) return;
     const documentInfo=documents.find(d=>d.id===id);
     if(!documentInfo || !await confirmAction('Supprimer le document « '+documentInfo.title+' » ?',{button:'Supprimer'})) return;
     documentBusy=true;$('adminUnit').disabled=true;button.disabled=true;
@@ -1418,7 +1420,7 @@
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
-    if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national');
+    if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
   });
 
   async function loadAdminData(){
@@ -1676,7 +1678,9 @@
       if(val && p.unit_id===units.find(u=>u.name==='ADMIN')?.id){
         alert('Affecte ce compte à une unité avant de l’activer.');e.target.checked=false;return;
       }
-      const {error}=await sb.from('profiles').update({active:val}).eq('unit_id',p.unit_id).eq('id',id);
+      const {error}=profile.is_admin
+        ?await sb.from('profiles').update({active:val}).eq('unit_id',p.unit_id).eq('id',id)
+        :await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:p.full_name,p_role:p.is_unit_manager?'manager':'user',p_active:val});
       if(error){alert(error.message);e.target.checked=!val;return;}
       await loadAdminData();
     });
@@ -1685,7 +1689,7 @@
       if(!p) return;
       const cell=button.closest('td');
       cell.innerHTML=`<label>Nom et prénom<input data-edit-name type="text" maxlength="150" value="${esc(p.full_name||'')}"></label>
-        <label>Unité<select data-edit-unit>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>
+        <label>Unité<select data-edit-unit ${profile.is_admin?'':'disabled'}>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>
         <label>Profil<select data-edit-role>
           <option value="user"${!p.is_admin&&!p.is_unit_manager?' selected':''}>Utilisateur</option>
           <option value="manager"${p.is_unit_manager?' selected':''}>Responsable d’unité</option>
@@ -1697,6 +1701,12 @@
         const name=cell.querySelector('[data-edit-name]').value.trim();
         const unitId=cell.querySelector('[data-edit-unit]').value;
         const role=cell.querySelector('[data-edit-role]').value;
+        if(!profile.is_admin){
+          if(role==='admin'||p.unit_id!==profile.unit_id){alert('Droits insuffisants.');return;}
+          const {error}=await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:name,p_role:role,p_active:p.active});
+          if(error){alert(error.message);return;}
+          await loadAdminData();return;
+        }
         const isNationalUnit=units.find(u=>u.id===unitId)?.name==='ADMIN';
         if(role==='admin'&&(!profile.is_admin||!isAdminUnit)){alert('Le profil Administrateur peut uniquement être attribué depuis l’espace ADMIN.');return;}
         if((role==='admin')!==isNationalUnit){alert(role==='admin'?'Un administrateur doit être rattaché à ADMIN.':'Un utilisateur ou responsable doit être rattaché à OPF, ULM ou UFPI.');return;}
@@ -1738,7 +1748,7 @@
   }
 
   async function exportIndividual(userId,button){
-    if(!profile?.is_admin) return;
+    if(!unitManagement()) return;
     const person=adminUserProfiles.find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
     if(!person || person.is_admin) return;
