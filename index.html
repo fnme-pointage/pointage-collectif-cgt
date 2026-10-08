@@ -399,6 +399,8 @@
   let recovering=new URLSearchParams(location.hash.slice(1)).get('type')==='recovery' || new URLSearchParams(location.search).get('type')==='recovery';
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
+  let managerSpace=false;
+  const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active);
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
@@ -664,7 +666,7 @@
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
   async function route(){
-    resetFlashSession();
+    resetFlashSession();managerSpace=false;
     show('documentsArea',false);show('userNav',false);show('unitManagerArea',false);
     closePdfReader();
     show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
@@ -735,7 +737,7 @@
   };
 
   function renderAdminUnits(){
-    $('adminUnit').innerHTML=units.filter(u=>u.active).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || u.id===profile.unit_id)).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
     refreshFlashTargets();
@@ -748,7 +750,7 @@
     nationalTab.classList.toggle('hidden',!isAdminUnit);
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
-    $('unitsList').innerHTML=units.map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
+    $('unitsList').innerHTML=units.filter(u=>profile.is_admin||u.id===profile.unit_id).map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
   }
   $('adminUnit').onchange=async()=>{if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
@@ -767,7 +769,7 @@
     const {error:yearError}=await sb.rpc('pointage_ensure_year',{p_unit_id:selectedUnit,p_year:Number(spaceYear)});
     if(yearError){$('calendarMessage').innerHTML=msg('Impossible de charger l’année : '+yearError.message,'warn');return;}
     $('calendarMessage').innerHTML='';
-    if(profile.is_admin)await loadCatalogue();
+    if(unitManagement())await loadCatalogue();
     const {data,error}=await sb.from('months').select('*').eq('unit_id',selectedUnit).order('month_key',{ascending:false});
     if(error){alert(error.message);return;}
     months=data||[];
@@ -775,13 +777,13 @@
     selectedMonth = yearMonths.some(m=>m.month_key===selectedMonth) ? selectedMonth :
                     (yearMonths.find(m=>m.month_key===curMonth())?.month_key || yearMonths[0]?.month_key || '');
     renderMonthSelect();
-    if(profile.is_admin) await renderAnnualYears();
+    if(unitManagement()) await renderAnnualYears();
     if(selectedMonth){await loadMonthData();return;}
     $('monthState').textContent='Aucun mois';
     monthCodes=[]; entries=[]; savedEntriesState='[]';entriesDirty=false;
     renderUserEntries();
     $('userNotice').innerHTML=msg('Aucun mois disponible pour cette unité.','warn');
-    if(profile.is_admin){
+    if(unitManagement()){
       const {data:people,error:pe}=await sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name');
       if(pe){alert(pe.message);return;}
       allProfiles=people||[];adminEntries=[];await loadAdminUsers();await loadAnnualData();await loadMonthlyData();
@@ -804,7 +806,7 @@
   }
   $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
 
-  function monthlyAvailable(){return !!profile?.is_admin;}
+  function monthlyAvailable(){return unitManagement();}
   function monthlyGlobalView(){return units.find(u=>u.id===selectedUnit)?.name==='ADMIN';}
   function renderMonthlyMenus(yearMonths=months){
     const visible=monthlyAvailable();show('monthlyFollowup',visible);
@@ -889,7 +891,7 @@
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:inputDuration(entryDurationSeconds(x))}));
     savedEntriesState=entryState();entriesDirty=false;
     renderUserEntries();
-    if(profile.is_admin){
+    if(unitManagement()){
       await loadAdminData();
     }
   }
@@ -1109,6 +1111,7 @@
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
+    managerSpace=false;if(!profile.is_admin)show('adminArea',false);
     show('userArea',false);show('unitManagerArea',false);show('documentsArea',true);
     $('unitManagerTab').classList.remove('active');
     $('userPointageTab').classList.remove('active');
@@ -1119,6 +1122,7 @@
   $('userPointageTab').onclick=()=>{
     if(documentBusy)return;
     documentRequest++;closePdfReader();
+    managerSpace=false;if(!profile.is_admin)show('adminArea',false);
     show('documentsArea',false);show('unitManagerArea',false);show('userArea',!profile.is_admin);
     $('unitManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
@@ -1154,13 +1158,17 @@
   }
   $('unitManagerTab').onclick=async()=>{
     if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
+    if(!await allowLeavePointage())return;
+    managerSpace=true;selectedUnit=profile.unit_id;
     documentRequest++;closePdfReader();
-    show('documentsArea',false);show('userArea',false);show('unitManagerArea',true);
+    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('adminArea',true);
     $('unitManagerTab').classList.add('active');
     $('userPointageTab').classList.remove('active');
     $('userDocumentsTab').classList.remove('active');
     $('userUnitDocumentsTab').classList.remove('active');
-    await loadUnitManager();
+    document.querySelector('[data-admin-tab="results"]').click();
+    renderAdminUnits();
+    await loadMonths();
   };
   $('refreshUnitManager').onclick=loadUnitManager;
   $('userDocumentsTab').onclick=()=>openDocumentBase('national');
@@ -1170,7 +1178,7 @@
   async function loadDocuments(){
     if(!canReadDocuments()) return;
     const request=++documentRequest,unitId=documentUnitId();
-    show('documentAdminForm',profile.is_admin);
+    show('documentAdminForm',unitManagement() && documentsScope==='unit' || (profile.is_admin && documentsScope==='national'));
     $('documentMessage').innerHTML='';
     $('documentList').innerHTML='<p class="muted small">Chargement des documents…</p>';
     try{
@@ -1365,7 +1373,7 @@
     updateFlashEmailLabel();
   }
   async function loadFlashHistory(){
-    if(!profile?.is_admin)return;const request=++flashHistoryRequest;
+    if(!unitManagement())return;const request=++flashHistoryRequest;
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
       const now=Date.parse(data.server_now),isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
       const allMessages=data.messages||[];
@@ -1388,7 +1396,7 @@
   $('flashHistoryFilter').onchange=loadFlashHistory;
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
-    event.preventDefault();if(flashBusy||!profile?.is_admin)return;
+    event.preventDefault();if(flashBusy||!unitManagement())return;
     const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=units.find(u=>u.id===selectedUnit)?.name==='ADMIN'?$('flashTarget').value:selectedUnit;
     if((target!=='all'&&!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
     if(email&&!await confirmAction(target==='all'?'Publier ce message pour toutes les unités et envoyer les mails aux utilisateurs concernés ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
@@ -1426,7 +1434,7 @@
   }
 
   async function loadAdminUsers(){
-    try{adminUserProfiles=await fetchAll(()=>sb.from('profiles').select('*').order('full_name').order('email'));}
+    try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:q.eq('unit_id',profile.unit_id);});}
     catch(error){alert(error.message);return;}
     renderUsers();
   }
