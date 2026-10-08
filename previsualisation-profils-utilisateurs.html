@@ -39,7 +39,7 @@
   .month-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px}.month-grid button{background:#fff;color:#222;border:1px solid #ddd;padding:12px 6px}.month-grid button.active{background:#bd1522;color:#fff}.month-grid small{display:block;font-size:11px}.catalogue-units{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}@media(max-width:620px){.month-grid{grid-template-columns:repeat(3,1fr)}}
   </style>
 </head>
-<body><div id="rolesPreview">PRÉVISUALISATION — responsables d’unité. Aucun profil ne sera modifié depuis cette page.<details><summary>Voir la navigation proposée pour un responsable</summary><div style="padding:12px;background:white;color:#222;border:1px solid #ddd"><strong>Responsable ULM</strong><p>Mon pointage &nbsp; | &nbsp; Gestion de mon unité</p><p>Dans « Gestion de mon unité » : consultation des membres ULM uniquement. Autres droits en préparation.</p></div></details></div>
+<body><div id="rolesPreview">PRÉVISUALISATION — profils : Admin peut attribuer les trois rôles ; les responsables peuvent choisir Utilisateur ou Responsable dans leur unité, jamais Administrateur.<details><summary>Voir les droits proposés</summary><p>Responsable ULM : Mon pointage | Gestion ULM. Dans Gestion ULM, modification du rôle Utilisateur / Responsable uniquement. Aucun enregistrement depuis cette prévisualisation.</p></details></div>
 
 <div id="configMissing" class="app hidden">
   <div class="card login">
@@ -1134,8 +1134,20 @@
       const people=data.members||[];
       $('unitManagerList').innerHTML='<p class="muted small">'+people.length+' membre(s) actif(s) ou en attente dans cette unité.</p>'+
         '<div class="tablewrap"><table><thead><tr><th>Nom</th><th>Profil</th><th>Statut</th></tr></thead><tbody>'+
-        people.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.is_manager?'Responsable d’unité':'Utilisateur')+'</td><td>'+esc(p.active?'Actif':'Inactif')+'</td></tr>').join('')+
-        '</tbody></table></div><p class="muted small">Première étape : consultation sécurisée des membres. Les actions de gestion, les messages flash et les documents seront intégrés après validation de leurs autorisations.</p>';
+        people.map(p=>'<tr><td>'+esc(p.name)+'</td><td><select data-manager-role="'+esc(p.id)+'" '+(p.id===profile.id?'disabled':'')+'><option value="user" '+(!p.is_manager?'selected':'')+'>Utilisateur</option><option value="manager" '+(p.is_manager?'selected':'')+'>Responsable d’unité</option></select></td><td>'+esc(p.active?'Actif':'Inactif')+'</td></tr>').join('')+
+        '</tbody></table></div><p class="muted small">Un responsable peut nommer ou retirer un responsable dans son unité. Le profil Administrateur reste réservé à Admin.</p>';
+      document.querySelectorAll('[data-manager-role]').forEach(select=>select.onchange=async()=>{
+        const member=people.find(p=>p.id===select.dataset.managerRole);
+        if(!member||member.id===profile.id){await loadUnitManager();return;}
+        const wanted=select.value==='manager';
+        if(!await confirmAction(wanted?'Nommer cette personne responsable de l’unité ?':'Retirer le rôle responsable de cette personne ?',{button:'Confirmer'})){
+          select.value=member.is_manager?'manager':'user';return;
+        }
+        select.disabled=true;
+        const {error}=await sb.rpc('pointage_manager_change_member_role',{p_user_id:member.id,p_is_manager:wanted});
+        if(error)alert('Modification impossible : '+error.message);
+        await loadUnitManager();
+      });
     } catch(error) {
       $('unitManagerList').innerHTML=msg('Consultation impossible : '+error.message,'warn');
     }
@@ -1390,7 +1402,8 @@
     finally{flashBusy=false;$('publishFlash').disabled=false;$('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=false);}
   };
 
-  document.addEventListener('click',event=>{if(event.target.closest('[data-edit-save]')){event.preventDefault();event.stopImmediatePropagation();alert('Prévisualisation uniquement : aucun profil ne sera modifié.');}},true);
+  document.addEventListener('click',event=>{if(event.target.closest('[data-edit-save]')){event.preventDefault();event.stopImmediatePropagation();alert('Prévisualisation uniquement.');}},true);
+  document.addEventListener('change',event=>{if(event.target.closest('[data-manager-role]')){event.preventDefault();event.stopImmediatePropagation();alert('Prévisualisation uniquement.');}},true);
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
@@ -1877,7 +1890,7 @@
     csvDownload(`pointage-recap-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
-  if('serviceWorker' in navigator) { /* Pas de service worker dans la prévisualisation. */ }
+  if('serviceWorker' in navigator) { /* Service worker désactivé en prévisualisation. */ }
 })();
 </script>
 </body>
