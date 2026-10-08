@@ -1494,8 +1494,8 @@
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const typeView=adminScope;
     show('catalogueSourceField',false);show('codeTemplateCard',typeView);show('unitCataloguePanel',!typeView);
-    show('unitCatalogueHelp',!adminScope && !!profile?.is_admin);show('adminCatalogueHelp',false);show('catalogueTargetFields',false);
-    const readOnly=!adminScope && !profile?.is_admin;
+    show('unitCatalogueHelp',false);show('adminCatalogueHelp',false);show('catalogueTargetFields',false);
+    const readOnly=!adminScope;
     show('addAdminCode',!readOnly);show('saveAdminCodes',!readOnly);show('catalogueEditHelp',!readOnly);
     document.querySelector('#unitCataloguePanel > p.muted.small').classList.toggle('hidden',readOnly);
   }
@@ -1522,10 +1522,10 @@
     if(request!==catalogueRequest)return;
     if(error){$('codeAdminMessage').innerHTML=msg(error.message,'warn');return;}
     const latest=new Map();for(const c of data||[])if(!latest.has(c.catalogue_id))latest.set(c.catalogue_id,c);
-    catalogueRows=orderedCodes([...latest.values()]);catalogueOriginal=structuredClone(catalogueRows);catalogueLoadedUnit=catalogueUnit;renderCatalogue();$('saveAdminCodes').disabled=!profile?.is_admin;
+    catalogueRows=orderedCodes([...latest.values()]);catalogueOriginal=structuredClone(catalogueRows);catalogueLoadedUnit=catalogueUnit;renderCatalogue();$('saveAdminCodes').disabled=units.find(u=>u.id===selectedUnit)?.name!=='ADMIN';
   }
   function renderCatalogue(){
-    if(!profile?.is_admin){
+    if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN'){
       $('adminCodes').innerHTML=codesTable(catalogueRows,'<th>Statut</th><th>En vigueur depuis</th>',c=>`<tr>
         <td>${esc(c.label)}</td><td>${esc(c.code)}</td><td>${esc(c.document||'')}</td>
         <td>${c.active?'Actif':'Inactif'}</td>
@@ -1547,7 +1547,7 @@
   $('catalogueEffective').onfocus=()=>{catalogueDate=$('catalogueEffective').value;};
   $('catalogueEffective').onchange=async()=>{if(!$('catalogueEffective').value || $('catalogueEffective').value<curMonth()){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
   $('catalogueAllUnits').onchange=()=>document.querySelectorAll('[data-catalogue-unit]').forEach(el=>el.checked=$('catalogueAllUnits').checked);
-  $('addAdminCode').onclick=()=>{if(!profile?.is_admin)return;catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
+  $('addAdminCode').onclick=()=>{if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
   $('saveAdminCodes').onclick=async()=>{
     if(!profile?.is_admin || catalogueLoadedUnit!==catalogueUnit || !catalogueLoadedUnit)return;
     const adminScope=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
