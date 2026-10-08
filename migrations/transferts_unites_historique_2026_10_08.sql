@@ -2,7 +2,8 @@
 -- Seul Admin peut transférer, et aucun pointage du mois courant ne peut être partagé.
 CREATE TABLE IF NOT EXISTS public.pointage_unit_transfers (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+ user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+ user_name text NOT NULL,
  from_unit_id uuid NOT NULL REFERENCES public.units(id),
  to_unit_id uuid NOT NULL REFERENCES public.units(id),
  effective_date date NOT NULL,
@@ -84,8 +85,8 @@ BEGIN
  IF EXISTS (SELECT 1 FROM public.entries WHERE user_id=p_user_id AND month_key=current_key)
     OR EXISTS (SELECT 1 FROM public.submissions WHERE user_id=p_user_id AND month_key=current_key)
  THEN RAISE EXCEPTION 'Ce compte a déjà des pointages ce mois-ci : transfert possible au début du mois suivant avant toute nouvelle saisie'; END IF;
- INSERT INTO public.pointage_unit_transfers(user_id,from_unit_id,to_unit_id,effective_date,performed_by,old_role,new_role)
- VALUES (p_user_id,oldp.unit_id,p_to_unit_id,p_effective_date,auth.uid(),
+ INSERT INTO public.pointage_unit_transfers(user_id,user_name,from_unit_id,to_unit_id,effective_date,performed_by,old_role,new_role)
+ VALUES (p_user_id,coalesce(oldp.full_name,oldp.email,p_user_id::text),oldp.unit_id,p_to_unit_id,p_effective_date,auth.uid(),
  CASE WHEN oldp.is_unit_manager THEN 'manager' ELSE 'user' END,p_role) RETURNING id INTO transfer_id;
  UPDATE public.profiles SET unit_id=p_to_unit_id,is_unit_manager=(p_role='manager'),requested_unit_id=p_to_unit_id
  WHERE id=p_user_id;
