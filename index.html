@@ -609,7 +609,7 @@
     show('userUnit',!profile.is_admin && !!unit);
   }
   async function loadUnits(){
-    const {data,error}=await sb.from('units').select('id,name').eq('active',true).order('name');
+    const {data,error}=await sb.from('units').select('id,name,active').eq('active',true).order('name');
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
     units=(data||[]).filter(u=>u.name!=='ADMIN');
     renderUserIdentity();
