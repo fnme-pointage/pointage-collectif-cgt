@@ -1928,6 +1928,7 @@
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
         fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
       ]);
+      // Recalcul intégral : profils, catalogues et saisies les plus récents de toutes les unités.
       const rows=globalSummaryRows(year,people,codes,globalEntries);
       csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
       $('globalExportMessage').innerHTML=msg('Export '+year+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
@@ -1950,6 +1951,7 @@
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').eq('month_key',period).order('id')),
         fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('month_key',period).order('id'))
       ]);
+      // Même source en direct que les exports individuels et les suivis locaux.
       const rows=globalSummaryRows(period,people,codes,globalEntries);rows[0][0]='Mois';
       csvDownload('pointage-recap-mensuel-toutes-unites-'+period+'.csv',rows);
       $('monthlyGlobalExportMessage').innerHTML=msg('Export '+period+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
@@ -1964,7 +1966,9 @@
     const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
   }
-  $('exportRaw').onclick=()=>{
+  $('exportRaw').onclick=async()=>{
+    if(!unitManagement())return;
+    await loadAdminData();
     if(!annualReady) return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
@@ -1975,7 +1979,9 @@
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
-  $('exportSummary').onclick=()=>{
+  $('exportSummary').onclick=async()=>{
+    if(!unitManagement())return;
+    await loadAdminData();
     if(!annualReady) return;
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const rows=[['Année','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
@@ -1989,8 +1995,10 @@
     csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
 
-  $('exportMonthlyRaw').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
+  $('exportMonthlyRaw').onclick=async()=>{
+    if(!monthlyAvailable() || monthlyGlobalView()) return;
+    await loadAdminData();
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
@@ -2000,8 +2008,10 @@
     });
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
-  $('exportMonthlySummary').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
+  $('exportMonthlySummary').onclick=async()=>{
+    if(!monthlyAvailable() || monthlyGlobalView()) return;
+    await loadAdminData();
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
     const {people,codeNames,amounts,codeTotals}=annualReport(monthlyCodes,monthlyEntries);
     const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
     people.forEach(p=>{
