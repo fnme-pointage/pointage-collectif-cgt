@@ -56,6 +56,11 @@ CREATE POLICY pointage_pdfs_manager_unit_insert ON storage.objects FOR INSERT TO
     AND EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=auth.uid() AND p.active
        AND p.is_unit_manager AND NOT p.is_admin AND
        name LIKE p.unit_id::text || '/%.pdf'));
+CREATE POLICY pointage_pdfs_manager_unit_upload_read ON storage.objects FOR SELECT TO authenticated
+  USING(bucket_id='pointage-documents'
+    AND EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=auth.uid() AND p.active
+      AND p.is_unit_manager AND NOT p.is_admin
+      AND name LIKE p.unit_id::text || '/%.pdf'));
 CREATE POLICY pointage_pdfs_manager_unit_delete ON storage.objects FOR DELETE TO authenticated
   USING(bucket_id='pointage-documents'
     AND (EXISTS(SELECT 1 FROM public.pointage_documents d
