@@ -86,7 +86,7 @@ BEGIN
     RAISE EXCEPTION 'Unité responsable invalide' USING ERRCODE='42501';
   END IF;
   SELECT coalesce(jsonb_agg(
-    jsonb_build_object('name',p.full_name,'active',p.active,'is_manager',p.is_unit_manager)
+    jsonb_build_object('id',p.id,'name',p.full_name,'active',p.active,'is_manager',p.is_unit_manager)
     ORDER BY p.full_name
   ),'[]'::jsonb) INTO members
   FROM public.profiles p WHERE p.unit_id=manager.unit_id AND NOT p.is_admin;
@@ -95,3 +95,37 @@ END;
 $body$;
 REVOKE ALL ON FUNCTION public.pointage_manager_unit_overview() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.pointage_manager_unit_overview() TO authenticated;
+
+-- Les responsables peuvent promouvoir ou rétrograder les membres de LEUR unité,
+-- jamais attribuer le rôle national ni modifier un compte administrateur.
+CREATE OR REPLACE FUNCTION public.pointage_manager_change_member_role(
+  p_user_id uuid, p_is_manager boolean
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $body$
+DECLARE
+  caller public.profiles%ROWTYPE;
+  target public.profiles%ROWTYPE;
+BEGIN
+  SELECT * INTO caller FROM public.profiles
+    WHERE id=auth.uid() AND active AND is_unit_manager AND NOT is_admin;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Accès responsable d’unité requis' USING ERRCODE='42501';
+  END IF;
+  IF p_is_manager IS NULL THEN
+    RAISE EXCEPTION 'Profil invalide';
+  END IF;
+  SELECT * INTO target FROM public.profiles WHERE id=p_user_id FOR UPDATE;
+  IF NOT FOUND OR target.unit_id IS DISTINCT FROM caller.unit_id OR target.is_admin THEN
+    RAISE EXCEPTION 'Modification de ce profil interdite' USING ERRCODE='42501';
+  END IF;
+  IF p_user_id=auth.uid() AND NOT p_is_manager THEN
+    RAISE EXCEPTION 'Impossible de supprimer son propre rôle responsable';
+  END IF;
+  UPDATE public.profiles SET is_unit_manager=p_is_manager
+    WHERE id=p_user_id AND unit_id=caller.unit_id AND NOT is_admin;
+END;
+$body$;
+
+REVOKE ALL ON FUNCTION public.pointage_manager_change_member_role(uuid,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.pointage_manager_change_member_role(uuid,boolean) TO authenticated;
