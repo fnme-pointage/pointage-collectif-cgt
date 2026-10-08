@@ -1610,7 +1610,7 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th><th>Export individuel</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button></td><td>${p.is_admin?'<span class="muted small">Sans pointage</span>':`<button class="secondary" data-user-export="${esc(p.id)}" type="button">Exporter CSV</button>`}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button></td><td>${p.is_admin?'<span class="muted small">Sans pointage</span>':`<button class="secondary" data-user-export="${esc(p.id)}" type="button">Exporter CSV</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?8:7}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-export]').forEach(button=>button.onclick=()=>exportIndividual(button.dataset.userExport,button));
@@ -1631,11 +1631,21 @@
       const cell=button.closest('td');
       cell.innerHTML=`<label>Nom et prénom<input data-edit-name type="text" maxlength="150" value="${esc(p.full_name||'')}"></label>
         <label>Unité<select data-edit-unit>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>
+        <label>Profil<select data-edit-role>
+          <option value="user"${!p.is_admin&&!p.is_unit_manager?' selected':''}>Utilisateur</option>
+          <option value="manager"${p.is_unit_manager?' selected':''}>Responsable d’unité</option>
+          <option value="admin"${p.is_admin?' selected':''}>Administrateur</option>
+        </select></label>
         <button data-edit-save type="button">Enregistrer</button> <button class="secondary" data-edit-cancel type="button">Annuler</button>`;
       cell.querySelector('[data-edit-cancel]').onclick=renderUsers;
       cell.querySelector('[data-edit-save]').onclick=async()=>{
         const name=cell.querySelector('[data-edit-name]').value.trim();
         const unitId=cell.querySelector('[data-edit-unit]').value;
+        const role=cell.querySelector('[data-edit-role]').value;
+        const isNationalUnit=units.find(u=>u.id===unitId)?.name==='ADMIN';
+        if((role==='admin')!==isNationalUnit){alert(role==='admin'?'Un administrateur doit être rattaché à ADMIN.':'Un utilisateur ou responsable doit être rattaché à OPF, ULM ou UFPI.');return;}
+        if(p.id===profile.id&&role!=='admin'){alert('Tu ne peux pas retirer tes propres droits administrateur.');return;}
+        if((p.is_admin!== (role==='admin')||!!p.is_unit_manager!==(role==='manager'))&&!await confirmAction('Changer le profil de cet utilisateur ? Ses droits d’accès seront modifiés.',{button:'Confirmer le profil'}))return;
         if(!name){alert('Indique le nom et le prénom.');return;}
         if(unitId!==p.unit_id){
           const [entriesResult,submissionsResult]=await Promise.all([
@@ -1645,8 +1655,8 @@
           if(entriesResult.error||submissionsResult.error){alert((entriesResult.error||submissionsResult.error).message);return;}
           if(entriesResult.count||submissionsResult.count){alert('Ce compte possède déjà des données de pointage. Son unité ne peut pas être changée depuis cet écran.');return;}
         }
-        const {data,error}=await sb.from('profiles').update({full_name:name,unit_id:unitId}).eq('id',p.id).eq('unit_id',p.unit_id).select('id').single();
-        if(error||!data){alert(error?.message||'Modification impossible. Recharge la page.');return;}
+        const {data,error}=await sb.rpc('pointage_admin_update_user_role',{p_user_id:p.id,p_full_name:name,p_unit_id:unitId,p_role:role});
+        if(error){alert(error.message||'Modification impossible. Recharge la page.');return;}
         if(p.id===profile.id){profile.full_name=name;profile.unit_id=unitId;renderUserIdentity();show('userArea',!profile.is_admin && selectedUnit===unitId);}
         await loadAdminData();
       };
