@@ -1744,11 +1744,11 @@
     const out=$('unitTransferHistory');out.textContent='Chargement des transferts…';
     try{
       const {data,error}=await sb.from('pointage_unit_transfers')
-        .select('id,user_id,from_unit_id,to_unit_id,effective_date,performed_at,old_role,new_role')
+        .select('id,user_id,user_name,from_unit_id,to_unit_id,effective_date,performed_at,old_role,new_role')
         .order('performed_at',{ascending:false}).limit(100);
       if(error)throw error;
       out.innerHTML=(data||[]).length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Ancienne unité</th><th>Nouvelle unité</th><th>Profil</th></tr></thead><tbody>'+
-        data.map(t=>'<tr><td>'+esc(t.effective_date)+'</td><td>'+esc(adminUserProfiles.find(p=>p.id===t.user_id)?.full_name||t.user_id)+'</td><td>'+esc(units.find(u=>u.id===t.from_unit_id)?.name||'')+'</td><td>'+esc(units.find(u=>u.id===t.to_unit_id)?.name||'')+'</td><td>'+esc(t.new_role==='manager'?'Responsable d’unité':'Utilisateur')+'</td></tr>').join('')+'</tbody></table></div>'
+        data.map(t=>'<tr><td>'+esc(t.effective_date)+'</td><td>'+esc(adminUserProfiles.find(p=>p.id===t.user_id)?.full_name||t.user_name||t.user_id)+'</td><td>'+esc(units.find(u=>u.id===t.from_unit_id)?.name||'')+'</td><td>'+esc(units.find(u=>u.id===t.to_unit_id)?.name||'')+'</td><td>'+esc(t.new_role==='manager'?'Responsable d’unité':'Utilisateur')+'</td></tr>').join('')+'</tbody></table></div>'
         :'<p>Aucun transfert enregistré.</p>';
     }catch(error){out.textContent='Historique indisponible : '+error.message;}
   }
