@@ -304,6 +304,20 @@
           <div id="createUserFeedback" aria-live="polite"></div>
         </form>
         <div id="usersTable"></div>
+        <div id="unitTransferHistoryArea" class="hidden" style="margin-top:18px">
+          <div class="sectiontitle"><h3>Historique des transferts entre unités</h3><button id="reloadUnitTransfers" class="secondary" type="button">Actualiser</button></div>
+          <div id="unitTransferHistory" class="muted small"></div>
+        </div>
+        <form id="transferUserForm" class="notice hidden" style="margin-top:14px">
+          <h3>Transférer un utilisateur vers une autre unité</h3>
+          <p id="transferUserName" class="muted small"></p>
+          <p class="muted small">Le transfert est immédiat. Les pointages antérieurs restent dans leur unité d’origine. Si cette personne a déjà pointé pendant le mois en cours, le transfert sera refusé jusqu’au début du mois suivant.</p>
+          <label for="transferUserUnit">Nouvelle unité</label><select id="transferUserUnit" required></select>
+          <label for="transferUserRole">Profil dans la nouvelle unité</label><select id="transferUserRole"><option value="user">Utilisateur</option><option value="manager">Responsable d’unité</option></select>
+          <label for="transferUserDate">Date de prise d’effet</label><input type="date" id="transferUserDate" required readonly>
+          <div class="actions"><button type="submit" id="confirmTransferUser">Confirmer le transfert</button><button id="cancelTransferUser" class="secondary" type="button">Annuler</button></div>
+          <div id="transferUserFeedback" aria-live="polite"></div>
+        </form>
       </div>
     </section>
 
@@ -850,7 +864,8 @@
       ]);
       if(request!==monthlyRequest || unitId!==selectedUnit || key!==monthlyYear+'-'+monthlyMonth)return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
-      monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));monthlyReady=true;
+      await appendHistoricReportPeople(ents);
+      monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));refreshIndividualExportUsers();monthlyReady=true;
       const report=annualReport(monthlyCodes,monthlyEntries);
       $('monthlyStats').textContent=`${units.find(u=>u.id===unitId)?.name||''} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} utilisateurs · ${monthlyEntries.length} saisies`;
       $('monthlySummaryTable').innerHTML=reportTable(report);
@@ -1434,7 +1449,7 @@
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
-    if(btn.dataset.adminTab==='users')show('createUserForm',false);
+    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
@@ -1465,6 +1480,8 @@
     try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:q.eq('unit_id',profile.unit_id);});}
     catch(error){alert(error.message);return;}
     renderUsers();
+    show('unitTransferHistoryArea',!!profile?.is_admin);
+    if(profile?.is_admin)loadUnitTransferHistory();
   }
 
   // Supabase limite les réponses par défaut : récupérer toutes les pages pour l'année.
@@ -1478,6 +1495,19 @@
     }
   }
 
+  async function appendHistoricReportPeople(ents){
+    const known=new Set(allProfiles.map(p=>p.id));
+    const ids=[...new Set(ents.map(e=>e.user_id))].filter(id=>!known.has(id));
+    if(!ids.length)return;
+    const additions=[];
+    for(let i=0;i<ids.length;i+=100){
+      const {data,error}=await sb.from('profiles').select('*').in('id',ids.slice(i,i+100));
+      if(error)throw error;
+      additions.push(...(data||[]));
+    }
+    allProfiles=[...allProfiles,...additions];
+    refreshIndividualExportUsers();
+  }
   async function loadAnnualData(){
     const request=++annualRequest, year=annualYear, unitId=selectedUnit;
     annualReady=false;
@@ -1495,8 +1525,10 @@
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
+      await appendHistoricReportPeople(ents);
       annualCodes=codes;
       annualEntries=ents.filter(e=>!adminIds.has(e.user_id));
+      refreshIndividualExportUsers();
       annualReady=true;
       renderAnnualSummary();
       $('exportSummary').disabled=$('exportRaw').disabled=false;
@@ -1509,7 +1541,8 @@
   function annualReport(codes=annualCodes,ents=annualEntries){
     const codeById=new Map(codes.map(c=>[Number(c.id),c]));
     const codeNames=[...new Set([...codes.map(c=>c.code),...ents.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const people=allProfiles.filter(p=>!p.is_admin && p.unit_id===selectedUnit && (p.active || ents.some(e=>e.user_id===p.id)));
+    const historicalIds=new Set(ents.map(e=>e.user_id));
+    const people=allProfiles.filter(p=>!p.is_admin && ((p.unit_id===selectedUnit&&p.active)||historicalIds.has(p.id)));
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of ents){
       const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
@@ -1691,28 +1724,76 @@
 
   function refreshIndividualExportUsers(){
     const select=$('individualExportUser');
-    if(!select)return;
+    if(!select||!profile)return;
     const previous=select.value;
-    // Même périmètre que le suivi : tous les utilisateurs depuis ADMIN, ou l'unité sélectionnée.
-    const eligible=adminUserProfiles.filter(p=>!p.is_admin && (
-      profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name==='ADMIN'
-        ? true : p.unit_id===selectedUnit
-    )).sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
+    const isNational=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const historicalIds=new Set(allProfiles.map(p=>p.id));
+    const people=[...new Map([...adminUserProfiles,...allProfiles].map(p=>[p.id,p])).values()];
+    const eligible=people.filter(p=>!p.is_admin&&(isNational||p.unit_id===selectedUnit||historicalIds.has(p.id)))
+      .sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
     select.innerHTML=eligible.length
       ? eligible.map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email||p.id)}${!p.active?' (inactif)':''}</option>`).join('')
-      : '<option value="">Aucun utilisateur dans cette unité</option>';
+      : '<option value="">Aucun utilisateur à exporter</option>';
     if(eligible.some(p=>p.id===previous))select.value=previous;
     $('exportIndividualSelected').disabled=!eligible.length;
   }
   $('exportIndividualSelected').onclick=()=>exportIndividual($('individualExportUser').value,$('exportIndividualSelected'));
 
+  async function loadUnitTransferHistory(){
+    if(!profile?.is_admin)return;
+    const out=$('unitTransferHistory');out.textContent='Chargement des transferts…';
+    try{
+      const {data,error}=await sb.from('pointage_unit_transfers')
+        .select('id,user_id,user_name,from_unit_id,to_unit_id,effective_date,performed_at,old_role,new_role')
+        .order('performed_at',{ascending:false}).limit(100);
+      if(error)throw error;
+      out.innerHTML=(data||[]).length?'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Ancienne unité</th><th>Nouvelle unité</th><th>Profil</th></tr></thead><tbody>'+
+        data.map(t=>'<tr><td>'+esc(t.effective_date)+'</td><td>'+esc(adminUserProfiles.find(p=>p.id===t.user_id)?.full_name||t.user_name||t.user_id)+'</td><td>'+esc(units.find(u=>u.id===t.from_unit_id)?.name||'')+'</td><td>'+esc(units.find(u=>u.id===t.to_unit_id)?.name||'')+'</td><td>'+esc(t.new_role==='manager'?'Responsable d’unité':'Utilisateur')+'</td></tr>').join('')+'</tbody></table></div>'
+        :'<p>Aucun transfert enregistré.</p>';
+    }catch(error){out.textContent='Historique indisponible : '+error.message;}
+  }
+  $('reloadUnitTransfers').onclick=loadUnitTransferHistory;
+  let transferUserId=null;
+  $('cancelTransferUser').onclick=()=>{transferUserId=null;show('transferUserForm',false);};
+  $('transferUserForm').onsubmit=async event=>{
+    event.preventDefault();
+    if(!profile?.is_admin||!transferUserId)return;
+    const person=adminUserProfiles.find(p=>p.id===transferUserId);
+    const toUnit=$('transferUserUnit').value,role=$('transferUserRole').value,date=$('transferUserDate').value;
+    if(!person||person.is_admin||!units.some(u=>u.id===toUnit&&u.active&&u.name!=='ADMIN')||!['user','manager'].includes(role))return;
+    if(!await confirmAction('Transférer '+(person.full_name||person.email)+' dans '+(units.find(u=>u.id===toUnit)?.name||'la nouvelle unité')+' ? Ses anciens pointages resteront dans son unité d’origine.',{title:'Confirmer le transfert',button:'Transférer'}))return;
+    const button=$('confirmTransferUser');button.disabled=true;
+    try{
+      const {error}=await sb.rpc('pointage_admin_transfer_user',{p_user_id:person.id,p_to_unit_id:toUnit,p_effective_date:date,p_role:role});
+      if(error)throw error;
+      transferUserId=null;show('transferUserForm',false);
+      await loadAdminData();
+      alert('Transfert effectué. L’historique des pointages est conservé dans l’unité d’origine.');
+    }catch(error){$('transferUserFeedback').innerHTML=msg(error.message,'warn');}
+    finally{button.disabled=false;}
+  };
+
   function renderUsers(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
+    document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
+      if(!profile?.is_admin)return;
+      const person=adminUserProfiles.find(p=>p.id===button.dataset.userTransfer);
+      if(!person||person.is_admin)return;
+      transferUserId=person.id;
+      $('transferUserName').textContent=(person.full_name||person.email||'Utilisateur')+' — unité actuelle : '+(units.find(u=>u.id===person.unit_id)?.name||'');
+      const options=units.filter(u=>u.active&&u.name!=='ADMIN'&&u.id!==person.unit_id);
+      $('transferUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+      $('transferUserRole').value=person.is_unit_manager?'manager':'user';
+      const today=new Date();$('transferUserDate').value=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+      $('transferUserFeedback').innerHTML='';
+      show('transferUserForm',true);
+      $('transferUserForm').scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
       if(!unitManagement())return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userDelete);
@@ -1840,79 +1921,75 @@
 
   function individualCsvRows(person,year,codes,personEntries){
     const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
-    const totals=new Map();
+    const byUnit=new Map(),allCodes=new Set(codes.map(c=>c.code));
     for(const entry of personEntries){
-      const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
-      totals.set(code,(totals.get(code)||0)+entryDurationSeconds(entry));
+      const unitId=entry.unit_id,code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      if(!byUnit.has(unitId))byUnit.set(unitId,new Map());
+      const row=byUnit.get(unitId);
+      row.set(code,(row.get(code)||0)+entryDurationSeconds(entry));allCodes.add(code);
     }
-    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const totalSeconds=[...totals.values()].reduce((sum,n)=>sum+n,0);
-    const decimal=decimalCsv;
-    return [
-      ['Année','Utilisateur',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)'],
-      [year,person.full_name||person.email||person.id,...codeNames.map(code=>decimal(totals.get(code)||0)),decimal(totalSeconds),...codeNames.map(code=>totals.get(code)||0),totalSeconds,clockDuration(totalSeconds)]
-    ];
+    const codeNames=[...allCodes].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const rows=[['Année','Utilisateur','Unité du pointage',...codeNames,'Total heures',...codeNames.map(c=>c+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    for(const [unitId,codesMap] of byUnit){
+      const total=[...codesMap.values()].reduce((a,b)=>a+b,0);
+      rows.push([year,person.full_name||person.email||person.id,units.find(u=>u.id===unitId)?.name||'',
+        ...codeNames.map(c=>decimalCsv(codesMap.get(c)||0)),decimalCsv(total),
+        ...codeNames.map(c=>codesMap.get(c)||0),total,clockDuration(total)]);
+    }
+    return rows;
   }
 
   async function exportIndividual(userId,button){
-    if(!unitManagement()) return;
-    const person=adminUserProfiles.find(p=>p.id===userId);
+    if(!unitManagement())return;
+    const person=[...adminUserProfiles,...allProfiles].find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
-    if(!person || person.is_admin || (!profile.is_admin && person.unit_id!==profile.unit_id) || (profile.is_admin && units.find(u=>u.id===selectedUnit)?.name!=='ADMIN' && person.unit_id!==selectedUnit)) return;
-    if(!/^[1-9]\d{3}$/.test(year)){
-      $('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');
-      return;
-    }
-    const unitId=person.unit_id;
-    const start=year+'-01', end=String(Number(year)+1)+'-01';
-    button.disabled=true;
-    button.textContent='Export en cours…';
-    $('userExportMessage').innerHTML='';
+    if(!person||person.is_admin||!Array.from($('individualExportUser').options).some(o=>o.value===userId))return;
+    if(!/^[1-9]\d{3}$/.test(year)){$('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');return;}
+    const national=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const unitId=selectedUnit,start=year+'-01',end=String(Number(year)+1)+'-01';
+    button.disabled=true;button.textContent='Export en cours…';$('userExportMessage').innerHTML='';
     try{
       const [codes,personEntries]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);}),
+        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);})
       ]);
-      if(!personEntries.length){
-        $('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');
-        return;
-      }
+      if(!personEntries.length){$('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');return;}
       const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
       csvDownload('pointage-individuel-'+name+'-'+year+'.csv',individualCsvRows(person,year,codes,personEntries));
-      $('userExportMessage').innerHTML=msg('Export CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
-    }catch(error){
-      $('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');
-    }finally{
-      button.disabled=false;
-      button.textContent='Exporter CSV';
-    }
+      $('userExportMessage').innerHTML=msg('Export historique CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
+    }catch(error){$('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');}
+    finally{button.disabled=false;button.textContent='Exporter CSV';}
   }
 
-  function globalSummaryRows(year,people,codes,globalEntries){
-    const users=people.filter(p=>!p.is_admin);
-    const userIds=new Set(users.map(p=>p.id));
+  function globalSummaryRows(period,people,codes,globalEntries){
+    const byId=new Map(people.filter(p=>!p.is_admin).map(p=>[p.id,p]));
     const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
-    const amounts=new Map(), totals=new Map();
+    const amounts=new Map(),totals=new Map();
+    const unitName=id=>units.find(u=>u.id===id)?.name||'';
     for(const entry of globalEntries){
-      if(!userIds.has(entry.user_id)) continue;
-      const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      if(!byId.has(entry.user_id))continue;
+      // Un salarié muté apparaît dans l'unité de CHAQUE pointage, jamais dans sa seule unité actuelle.
+      const key=entry.user_id+'|'+entry.unit_id;
+      if(!amounts.has(key))amounts.set(key,{user:byId.get(entry.user_id),unitId:entry.unit_id,codes:new Map()});
+      const row=amounts.get(key),code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
       const seconds=entryDurationSeconds(entry);
-      if(!amounts.has(entry.user_id)) amounts.set(entry.user_id,new Map());
-      const userAmounts=amounts.get(entry.user_id);
-      userAmounts.set(code,(userAmounts.get(code)||0)+seconds);
+      row.codes.set(code,(row.codes.get(code)||0)+seconds);
       totals.set(code,(totals.get(code)||0)+seconds);
     }
-    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const unitName=id=>units.find(u=>u.id===id)?.name||'';
-    const decimal=decimalCsv;
-    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
-    users.sort((a,b)=>unitName(a.unit_id).localeCompare(unitName(b.unit_id),'fr') || String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
-    for(const person of users){
-      const userAmounts=amounts.get(person.id)||new Map();
-      const total=[...userAmounts.values()].reduce((sum,n)=>sum+n,0);
-      rows.push([year,person.full_name||'',person.email||'',unitName(person.unit_id),...codeNames.map(code=>decimal(userAmounts.get(code)||0)),decimal(total),...codeNames.map(code=>userAmounts.get(code)||0),total,clockDuration(total)]);
+    // Conserver aussi les comptes sans pointage dans leur unité actuelle.
+    for(const p of byId.values()){
+      const key=p.id+'|'+p.unit_id;
+      if(!amounts.has(key))amounts.set(key,{user:p,unitId:p.unit_id,codes:new Map()});
     }
-    rows.push([year,'Total par code','','',...codeNames.map(code=>decimal(totals.get(code)||0)),decimal([...totals.values()].reduce((sum,n)=>sum+n,0)),...codeNames.map(code=>totals.get(code)||0),[...totals.values()].reduce((sum,n)=>sum+n,0),clockDuration([...totals.values()].reduce((sum,n)=>sum+n,0))]);
+    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total heures',...codeNames.map(c=>c+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    const record=[...amounts.values()].sort((a,b)=>unitName(a.unitId).localeCompare(unitName(b.unitId),'fr')||String(a.user.full_name||a.user.email||'').localeCompare(String(b.user.full_name||b.user.email||''),'fr'));
+    for(const item of record){
+      const total=[...item.codes.values()].reduce((a,b)=>a+b,0);
+      rows.push([period,item.user.full_name||'',item.user.email||'',unitName(item.unitId),...codeNames.map(c=>decimalCsv(item.codes.get(c)||0)),decimalCsv(total),...codeNames.map(c=>item.codes.get(c)||0),total,clockDuration(total)]);
+    }
+    const sum=[...totals.values()].reduce((a,b)=>a+b,0);
+    rows.push([period,'Total par code','','',...codeNames.map(c=>decimalCsv(totals.get(c)||0)),decimalCsv(sum),...codeNames.map(c=>totals.get(c)||0),sum,clockDuration(sum)]);
     return rows;
   }
 
@@ -1926,7 +2003,7 @@
       const [people,codes,globalEntries]=await Promise.all([
         fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       // Recalcul intégral : profils, catalogues et saisies les plus récents de toutes les unités.
       const rows=globalSummaryRows(year,people,codes,globalEntries);
@@ -1949,7 +2026,7 @@
       const [people,codes,globalEntries]=await Promise.all([
         fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').eq('month_key',period).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('month_key',period).order('id'))
+        fetchAll(()=>sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('month_key',period).order('id'))
       ]);
       // Même source en direct que les exports individuels et les suivis locaux.
       const rows=globalSummaryRows(period,people,codes,globalEntries);rows[0][0]='Mois';
