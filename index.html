@@ -290,7 +290,7 @@
     <section id="admin-flash" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Messages flash</h2></div>
-        <p class="notice">Diffuse une information importante dans l’espace de tous les utilisateurs, dans toutes les unités. Le message apparaît au début de la période choisie et disparaît automatiquement à la fin, y compris sur une page déjà ouverte.</p>
+        <p class="notice">Depuis Admin, publie un message national pour toutes les unités ou un message destiné à une seule unité. Chaque unité peut également gérer ses propres messages. Les utilisateurs voient les messages nationaux et ceux de leur unité simultanément.</p><label for="flashTarget">Destinataires du message</label><select id="flashTarget"><option value="all">Toutes les unités — Admin</option></select><p class="muted small">Admin peut consulter et arrêter tous les messages, y compris ceux publiés par les unités.</p>
         <form id="flashForm">
           <label for="flashTitle">Titre</label><input id="flashTitle" maxlength="160" required placeholder="Ex. Information importante">
           <label for="flashBody" style="margin-top:12px">Message</label><textarea id="flashBody" rows="5" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
@@ -1273,7 +1273,7 @@
   }
   function renderFlashBanner(){
     const current=profile?.active&&!profile.is_admin?flashMessages.filter(m=>!m.cancelled_at&&Date.parse(m.starts_at)<=flashNow()&&Date.parse(m.ends_at)>flashNow()):[];
-    const html=current.map(m=>`<div class="card" style="border-left:5px solid #bd1522"><span class="pill">Message flash</span><h2 style="margin:10px 0">${esc(m.title)}</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.body)}</p><p class="muted small">Information affichée jusqu’au ${esc(flashDate(m.ends_at))}.</p></div>`).join('');
+    const html=current.map(m=>`<div class="card" style="border-left:5px solid #bd1522"><span class="pill">${m.unit_name?`Unité ${esc(m.unit_name)}`:"Message national · Admin"}</span><h2 style="margin:10px 0">${esc(m.title)}</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.body)}</p><p class="muted small">Information affichée jusqu’au ${esc(flashDate(m.ends_at))}.</p></div>`).join('');
     if(html!==flashRendered){$('flashBanner').innerHTML=html;flashRendered=html;}
     show('flashBanner',current.length>0);
   }
@@ -1285,18 +1285,24 @@
     }catch(error){/* Une interruption réseau ne prolonge pas les messages expirés. */}
   }
   function startFlashSession(){
-    if(profile?.is_admin){if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}return;}
+    if(profile?.is_admin){refreshFlashTargets();if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}return;}
     loadFlashBanner();flashPoll=setInterval(loadFlashBanner,30000);flashExpiry=setInterval(renderFlashBanner,1000);
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
+  function refreshFlashTargets(){
+    const select=$('flashTarget');if(!select)return;
+    const old=select.value;select.innerHTML='<option value="all">Toutes les unités — Admin</option>'+units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">${esc(u.name)} uniquement</option>`).join('');
+    select.value=Array.from(select.options).some(o=>o.value===old)?old:'all';
+  }
   async function loadFlashHistory(){
     if(!profile?.is_admin)return;const request=++flashHistoryRequest;
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
       const now=Date.parse(data.server_now),messages=data.messages||[];
       $('flashHistory').innerHTML=messages.length?messages.map(m=>{
         const status=m.cancelled_at?'Arrêté':Date.parse(m.ends_at)<=now?'Terminé':Date.parse(m.starts_at)>now?'Programmé':'En cours';
+        const origin=m.unit_name?`Unité ${esc(m.unit_name)}`:'Toutes les unités · Admin';
         const mail=m.send_email?`${m.email_sent} mail(s) accepté(s) par le serveur · ${m.email_pending} en attente · ${m.email_failed} en échec · ${m.email_skipped} non envoyé(s)`:'Affichage dans l’application uniquement';
-        return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
+        return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status} · ${origin}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
       }).join(''):'<p class="muted">Aucun message flash publié.</p>';
       document.querySelectorAll('[data-stop-flash]').forEach(btn=>btn.onclick=async()=>{
         if(flashBusy||!await confirmAction('Arrêter ce message et les mails restant à envoyer ?'))return;
@@ -1308,13 +1314,13 @@
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
     event.preventDefault();if(flashBusy||!profile?.is_admin)return;
-    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked;
+    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=$('flashTarget').value;
     if(!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
-    if(email&&!await confirmAction('Publier ce message pour toutes les unités et l’envoyer aussi par mail aux utilisateurs actifs ayant confirmé leur adresse ?',{button:'Publier et envoyer'}))return;
+    if(email&&!await confirmAction(target==='all'?'Publier ce message pour toutes les unités et envoyer les mails aux utilisateurs concernés ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
     flashBusy=true;$('publishFlash').disabled=true;
     $('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=true);
     flashDraftId=flashDraftId||crypto.randomUUID();
-    try{const {error}=await sb.rpc('pointage_create_flash_message',{p_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email});if(error)throw error;
+    try{const {error}=await sb.rpc('pointage_create_flash_message',{p_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email,p_unit_id:target==='all'?null:target});if(error)throw error;
       $('flashFeedback').innerHTML=msg(email?'Message publié. Les mails sont mis en file pour envoi pendant la période de diffusion.':'Message publié dans les espaces utilisateurs.','ok');
       $('flashTitle').value='';$('flashBody').value='';$('flashEmail').checked=false;flashDraftId=null;await loadFlashHistory();
     }catch(error){$('flashFeedback').innerHTML=msg('Publication non confirmée : '+error.message+' Tu peux réessayer sans doubler le même envoi.','warn');}
