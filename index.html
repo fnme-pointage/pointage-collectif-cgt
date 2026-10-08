@@ -861,7 +861,7 @@
       if(request!==monthlyRequest || unitId!==selectedUnit || key!==monthlyYear+'-'+monthlyMonth)return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
       await appendHistoricReportPeople(ents);
-      monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));monthlyReady=true;
+      monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));refreshIndividualExportUsers();monthlyReady=true;
       const report=annualReport(monthlyCodes,monthlyEntries);
       $('monthlyStats').textContent=`${units.find(u=>u.id===unitId)?.name||''} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} utilisateurs · ${monthlyEntries.length} saisies`;
       $('monthlySummaryTable').innerHTML=reportTable(report);
@@ -1500,6 +1500,7 @@
       additions.push(...(data||[]));
     }
     allProfiles=[...allProfiles,...additions];
+    refreshIndividualExportUsers();
   }
   async function loadAnnualData(){
     const request=++annualRequest, year=annualYear, unitId=selectedUnit;
@@ -1521,6 +1522,7 @@
       await appendHistoricReportPeople(ents);
       annualCodes=codes;
       annualEntries=ents.filter(e=>!adminIds.has(e.user_id));
+      refreshIndividualExportUsers();
       annualReady=true;
       renderAnnualSummary();
       $('exportSummary').disabled=$('exportRaw').disabled=false;
@@ -1716,16 +1718,16 @@
 
   function refreshIndividualExportUsers(){
     const select=$('individualExportUser');
-    if(!select)return;
+    if(!select||!profile)return;
     const previous=select.value;
-    // Même périmètre que le suivi : tous les utilisateurs depuis ADMIN, ou l'unité sélectionnée.
-    const eligible=adminUserProfiles.filter(p=>!p.is_admin && (
-      profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name==='ADMIN'
-        ? true : p.unit_id===selectedUnit
-    )).sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
+    const isNational=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const historicalIds=new Set([...annualEntries,...monthlyEntries].map(e=>e.user_id));
+    const people=[...new Map([...adminUserProfiles,...allProfiles].map(p=>[p.id,p])).values()];
+    const eligible=people.filter(p=>!p.is_admin&&(isNational||p.unit_id===selectedUnit||historicalIds.has(p.id)))
+      .sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
     select.innerHTML=eligible.length
       ? eligible.map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email||p.id)}${!p.active?' (inactif)':''}</option>`).join('')
-      : '<option value="">Aucun utilisateur dans cette unité</option>';
+      : '<option value="">Aucun utilisateur à exporter</option>';
     if(eligible.some(p=>p.id===previous))select.value=previous;
     $('exportIndividualSelected').disabled=!eligible.length;
   }
@@ -1899,52 +1901,44 @@
 
   function individualCsvRows(person,year,codes,personEntries){
     const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
-    const totals=new Map();
+    const byUnit=new Map(),allCodes=new Set(codes.map(c=>c.code));
     for(const entry of personEntries){
-      const code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
-      totals.set(code,(totals.get(code)||0)+entryDurationSeconds(entry));
+      const unitId=entry.unit_id,code=entry.saved_code||codeById.get(Number(entry.code_id))||('Code '+entry.code_id);
+      if(!byUnit.has(unitId))byUnit.set(unitId,new Map());
+      const row=byUnit.get(unitId);
+      row.set(code,(row.get(code)||0)+entryDurationSeconds(entry));allCodes.add(code);
     }
-    const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const totalSeconds=[...totals.values()].reduce((sum,n)=>sum+n,0);
-    const decimal=decimalCsv;
-    return [
-      ['Année','Utilisateur',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)'],
-      [year,person.full_name||person.email||person.id,...codeNames.map(code=>decimal(totals.get(code)||0)),decimal(totalSeconds),...codeNames.map(code=>totals.get(code)||0),totalSeconds,clockDuration(totalSeconds)]
-    ];
+    const codeNames=[...allCodes].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+    const rows=[['Année','Utilisateur','Unité du pointage',...codeNames,'Total heures',...codeNames.map(c=>c+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    for(const [unitId,codesMap] of byUnit){
+      const total=[...codesMap.values()].reduce((a,b)=>a+b,0);
+      rows.push([year,person.full_name||person.email||person.id,units.find(u=>u.id===unitId)?.name||'',
+        ...codeNames.map(c=>decimalCsv(codesMap.get(c)||0)),decimalCsv(total),
+        ...codeNames.map(c=>codesMap.get(c)||0),total,clockDuration(total)]);
+    }
+    return rows;
   }
 
   async function exportIndividual(userId,button){
-    if(!unitManagement()) return;
-    const person=adminUserProfiles.find(p=>p.id===userId);
+    if(!unitManagement())return;
+    const person=[...adminUserProfiles,...allProfiles].find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
-    if(!person || person.is_admin || (!profile.is_admin && person.unit_id!==profile.unit_id) || (profile.is_admin && units.find(u=>u.id===selectedUnit)?.name!=='ADMIN' && person.unit_id!==selectedUnit)) return;
-    if(!/^[1-9]\d{3}$/.test(year)){
-      $('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');
-      return;
-    }
-    const unitId=person.unit_id;
-    const start=year+'-01', end=String(Number(year)+1)+'-01';
-    button.disabled=true;
-    button.textContent='Export en cours…';
-    $('userExportMessage').innerHTML='';
+    if(!person||person.is_admin||!Array.from($('individualExportUser').options).some(o=>o.value===userId))return;
+    if(!/^[1-9]\\d{3}$/.test(year)){$('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');return;}
+    const national=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const unitId=selectedUnit,start=year+'-01',end=String(Number(year)+1)+'-01';
+    button.disabled=true;button.textContent='Export en cours…';$('userExportMessage').innerHTML='';
     try{
       const [codes,personEntries]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);}),
+        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);})
       ]);
-      if(!personEntries.length){
-        $('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');
-        return;
-      }
-      const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
+      if(!personEntries.length){$('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');return;}
+      const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
       csvDownload('pointage-individuel-'+name+'-'+year+'.csv',individualCsvRows(person,year,codes,personEntries));
-      $('userExportMessage').innerHTML=msg('Export CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
-    }catch(error){
-      $('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');
-    }finally{
-      button.disabled=false;
-      button.textContent='Exporter CSV';
-    }
+      $('userExportMessage').innerHTML=msg('Export historique CSV de '+(person.full_name||person.email)+' pour '+year+' terminé.','ok');
+    }catch(error){$('userExportMessage').innerHTML=msg('Impossible de réaliser l’export : '+error.message,'warn');}
+    finally{button.disabled=false;button.textContent='Exporter CSV';}
   }
 
   function globalSummaryRows(period,people,codes,globalEntries){
