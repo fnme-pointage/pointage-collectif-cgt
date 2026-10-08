@@ -202,6 +202,16 @@
     </div>
 
     <section id="admin-results">
+      <div id="individualExportsArea" class="card">
+        <div class="sectiontitle"><h2>Exports individuels</h2></div>
+        <p class="muted small">Choisis une personne et une année pour exporter son récapitulatif par code. Les données sont relues au moment de l’export.</p>
+        <div class="row">
+          <div class="grow"><label for="individualExportUser">Utilisateur</label><select id="individualExportUser"></select></div>
+          <div class="smallfield"><label for="userExportYear">Année</label><input id="userExportYear" type="number" min="1900" max="9999" step="1"></div>
+          <button id="exportIndividualSelected" class="secondary" type="button">Exporter CSV</button>
+        </div>
+        <div id="userExportMessage" aria-live="polite"></div>
+      </div>
       <div id="monthlyFollowup" class="card hidden">
         <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
         <div class="row">
@@ -280,11 +290,8 @@
 
     <section id="admin-users" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Utilisateurs</h2>
-          <div class="smallfield"><label for="userExportYear">Année des exports CSV</label><input id="userExportYear" type="number" min="1900" max="9999" step="1"></div>
-        </div>
+        <div class="sectiontitle"><h2>Utilisateurs</h2></div>
         <p class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
-        <p class="muted small">Le bouton « Exporter CSV » extrait le récapitulatif annuel par code de la personne pour l’année indiquée ci-dessus, dans son unité.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
           <h3>Créer un utilisateur</h3>
@@ -296,7 +303,6 @@
           <div class="actions"><button id="confirmCreateUser" type="submit">Créer et envoyer l’invitation</button><button id="cancelCreateUser" class="secondary" type="button">Annuler</button></div>
           <div id="createUserFeedback" aria-live="polite"></div>
         </form>
-        <div id="userExportMessage" aria-live="polite"></div>
         <div id="usersTable"></div>
       </div>
     </section>
@@ -1683,12 +1689,29 @@
     finally{button.disabled=false;}
   };
 
+  function refreshIndividualExportUsers(){
+    const select=$('individualExportUser');
+    if(!select)return;
+    const previous=select.value;
+    // Même périmètre que le suivi : tous les utilisateurs depuis ADMIN, ou l'unité sélectionnée.
+    const eligible=adminUserProfiles.filter(p=>!p.is_admin && (
+      profile?.is_admin && units.find(u=>u.id===selectedUnit)?.name==='ADMIN'
+        ? true : p.unit_id===selectedUnit
+    )).sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
+    select.innerHTML=eligible.length
+      ? eligible.map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email||p.id)}${!p.active?' (inactif)':''}</option>`).join('')
+      : '<option value="">Aucun utilisateur dans cette unité</option>';
+    if(eligible.some(p=>p.id===previous))select.value=previous;
+    $('exportIndividualSelected').disabled=!eligible.length;
+  }
+  $('exportIndividualSelected').onclick=()=>exportIndividual($('individualExportUser').value,$('exportIndividualSelected'));
+
   function renderUsers(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
-    let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th><th>Export individuel</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td><td>${p.is_admin?'<span class="muted small">Sans pointage</span>':`<button class="secondary" data-user-export="${esc(p.id)}" type="button">Exporter CSV</button>`}</td></tr>`);
-    if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?8:7}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
+    let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
+    if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
       if(!unitManagement())return;
@@ -1707,7 +1730,7 @@
         button.disabled=false;
       }
     });
-    document.querySelectorAll('[data-user-export]').forEach(button=>button.onclick=()=>exportIndividual(button.dataset.userExport,button));
+    refreshIndividualExportUsers();
     document.querySelectorAll('[data-user-active]').forEach(el=>el.onchange=async e=>{
       const id=e.target.dataset.userActive, val=e.target.checked;
       const p=adminUserProfiles.find(item=>item.id===id);
@@ -1835,7 +1858,7 @@
     if(!unitManagement()) return;
     const person=adminUserProfiles.find(p=>p.id===userId);
     const year=$('userExportYear').value.trim();
-    if(!person || person.is_admin) return;
+    if(!person || person.is_admin || (!profile.is_admin && person.unit_id!==profile.unit_id) || (profile.is_admin && units.find(u=>u.id===selectedUnit)?.name!=='ADMIN' && person.unit_id!==selectedUnit)) return;
     if(!/^[1-9]\d{3}$/.test(year)){
       $('userExportMessage').innerHTML=msg('Indique une année valide à quatre chiffres.','warn');
       return;
@@ -1905,6 +1928,7 @@
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').gte('month_key',start).lt('month_key',end).order('id')),
         fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').gte('month_key',start).lt('month_key',end).order('id'))
       ]);
+      // Recalcul intégral : profils, catalogues et saisies les plus récents de toutes les unités.
       const rows=globalSummaryRows(year,people,codes,globalEntries);
       csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
       $('globalExportMessage').innerHTML=msg('Export '+year+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
@@ -1927,6 +1951,7 @@
         fetchAll(()=>sb.from('month_codes').select('id,month_key,code').eq('month_key',period).order('id')),
         fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('month_key',period).order('id'))
       ]);
+      // Même source en direct que les exports individuels et les suivis locaux.
       const rows=globalSummaryRows(period,people,codes,globalEntries);rows[0][0]='Mois';
       csvDownload('pointage-recap-mensuel-toutes-unites-'+period+'.csv',rows);
       $('monthlyGlobalExportMessage').innerHTML=msg('Export '+period+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
@@ -1941,7 +1966,9 @@
     const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
   }
-  $('exportRaw').onclick=()=>{
+  $('exportRaw').onclick=async()=>{
+    if(!unitManagement())return;
+    await loadAdminData();
     if(!annualReady) return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
@@ -1952,7 +1979,9 @@
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
-  $('exportSummary').onclick=()=>{
+  $('exportSummary').onclick=async()=>{
+    if(!unitManagement())return;
+    await loadAdminData();
     if(!annualReady) return;
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const rows=[['Année','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
@@ -1966,8 +1995,10 @@
     csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
 
-  $('exportMonthlyRaw').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
+  $('exportMonthlyRaw').onclick=async()=>{
+    if(!monthlyAvailable() || monthlyGlobalView()) return;
+    await loadAdminData();
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
     const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
@@ -1977,8 +2008,10 @@
     });
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
-  $('exportMonthlySummary').onclick=()=>{
-    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView()) return;
+  $('exportMonthlySummary').onclick=async()=>{
+    if(!monthlyAvailable() || monthlyGlobalView()) return;
+    await loadAdminData();
+    if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
     const {people,codeNames,amounts,codeTotals}=annualReport(monthlyCodes,monthlyEntries);
     const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
     people.forEach(p=>{
