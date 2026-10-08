@@ -299,7 +299,7 @@
             <div class="grow"><label for="flashEnd">Fin d’affichage</label><input id="flashEnd" type="datetime-local" required></div>
           </div>
           <p class="muted small">Les dates et heures sont affichées dans le fuseau horaire de ton appareil.</p>
-          <label class="checkbox"><input id="flashEmail" type="checkbox"> Envoyer également ce message par mail aux utilisateurs</label>
+          <label class="checkbox"><input id="flashEmail" type="checkbox"> <span id="flashEmailLabel">Envoyer également ce message par mail à tous les utilisateurs</span></label>
           <p class="muted small">Les mails sont envoyés individuellement depuis fnme.pointage@gmail.com aux utilisateurs actifs dont l’adresse est confirmée au moment de la création. Si le message est programmé, les envois commencent au début de l’affichage. Une seule reprise est prévue après l’envoi initial en cas d’échec, pendant la période de diffusion.</p>
           <button id="publishFlash" type="submit">Publier le message</button>
         </form>
@@ -1290,6 +1290,15 @@
     loadFlashBanner();flashPoll=setInterval(loadFlashBanner,30000);flashExpiry=setInterval(renderFlashBanner,1000);
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
+  function updateFlashEmailLabel(){
+    const adminSpace=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const target=adminSpace?$('flashTarget').value:selectedUnit;
+    const unit=units.find(u=>u.id===target);
+    $('flashEmailLabel').textContent=target==='all'
+      ?'Envoyer également ce message par mail à tous les utilisateurs'
+      :'Envoyer également ce message par mail aux utilisateurs de l’unité '+(unit?.name||'sélectionnée');
+  }
+  $('flashTarget').addEventListener('change',updateFlashEmailLabel);
   function refreshFlashTargets(){
     const select=$('flashTarget'),filter=$('flashHistoryFilter');if(!select||!filter)return;
     const isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
@@ -1306,6 +1315,7 @@
     filter.innerHTML='<option value="all">Tous les messages</option><option value="national">Messages nationaux</option>'+unitOptions;
     filter.value=Array.from(filter.options).some(o=>o.value===previousFilter)?previousFilter:'all';
     show('flashHistoryFilterField',isNational);
+    updateFlashEmailLabel();
   }
   async function loadFlashHistory(){
     if(!profile?.is_admin)return;const request=++flashHistoryRequest;
