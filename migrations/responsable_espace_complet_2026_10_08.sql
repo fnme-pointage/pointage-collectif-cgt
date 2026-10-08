@@ -58,8 +58,11 @@ CREATE POLICY pointage_pdfs_manager_unit_insert ON storage.objects FOR INSERT TO
        name LIKE p.unit_id::text || '/%.pdf'));
 CREATE POLICY pointage_pdfs_manager_unit_delete ON storage.objects FOR DELETE TO authenticated
   USING(bucket_id='pointage-documents'
-    AND EXISTS(SELECT 1 FROM public.pointage_documents d
-      WHERE d.file_path=name AND d.unit_id IS NOT NULL AND public.pointage_manager_unit_allowed(d.unit_id)));
+    AND (EXISTS(SELECT 1 FROM public.pointage_documents d
+      WHERE d.file_path=name AND d.unit_id IS NOT NULL AND public.pointage_manager_unit_allowed(d.unit_id))
+      OR EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=auth.uid() AND p.active
+         AND p.is_unit_manager AND NOT p.is_admin
+         AND name LIKE p.unit_id::text || '/%.pdf')));
 
 -- Fonctions flash existantes : Admin partout, responsables sur leur unité exclusivement.
 CREATE OR REPLACE FUNCTION pointage_private.create_unit_flash_message(p_id uuid, p_title text, p_body text, p_start timestamp with time zone, p_end timestamp with time zone, p_email boolean, p_unit_id uuid)
