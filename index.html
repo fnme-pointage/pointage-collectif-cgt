@@ -2050,7 +2050,15 @@
       const active=document.createElement('input');active.type='checkbox';
       const save=document.createElement('button');save.textContent='Enregistrer';
       const cancel=document.createElement('button');cancel.textContent='Annuler';
-      cell.replaceChildren('Nom et prénom',name,'Unité',unit,'Responsable d’unité',manager,'Actif',active,save,cancel);
+      const field=(title,control)=>{const label=document.createElement('label');label.textContent=title;label.append(control);return label;};
+      const roles=document.createElement('div');roles.className='small';
+      const roleHeading=document.createElement('strong');roleHeading.textContent='Profils cumulables';
+      const userLabel=document.createElement('label');userLabel.className='checkbox';const userCheck=document.createElement('input');userCheck.type='checkbox';userCheck.checked=true;userCheck.disabled=true;userLabel.append(userCheck,' Utilisateur (pointage personnel)');
+      const managerLabel=document.createElement('label');managerLabel.className='checkbox';managerLabel.append(manager,' Responsable d’unité');
+      roles.append(roleHeading,userLabel,managerLabel);
+      const activeLabel=document.createElement('label');activeLabel.className='checkbox';activeLabel.append(active,' Actif');
+      const actions=document.createElement('div');actions.className='actions';cancel.className='secondary';actions.append(save,cancel);
+      cell.replaceChildren(field('Nom et prénom',name),field('Unité',unit),roles,activeLabel,actions);
       cancel.onclick=()=>loadAdminUsers();
       save.onclick=async()=>{
         if(active.checked&&!await confirmAction('Activer ce compte ?', {button:'Activer'}))return;
