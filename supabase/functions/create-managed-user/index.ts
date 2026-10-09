@@ -15,8 +15,8 @@ Deno.serve(async(request:Request)=>{
   const sb=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:auth,error:authError}=await sb.auth.getUser(jwt);
   if(authError||!auth.user)return json({error:"AUTH_REQUIRED"},401);
-  const {data:caller,error:callerError}=await sb.from("profiles").select("id,active,is_admin,is_unit_manager,unit_id").eq("id",auth.user.id).single();
-  if(callerError||!caller?.active||(!caller.is_admin&&!caller.is_unit_manager))return json({error:"NOT_AUTHORIZED"},403);
+  const {data:caller,error:callerError}=await sb.from("profiles").select("id,active,is_admin,is_unit_manager,is_division_manager,managed_division_id,unit_id").eq("id",auth.user.id).single();
+  if(callerError||!caller?.active||(!caller.is_admin&&!caller.is_unit_manager&&!caller.is_division_manager))return json({error:"NOT_AUTHORIZED"},403);
   let raw:Record<string,unknown>;
   try{const source=await request.text();if(source.length>5000)return json({error:"INVALID_INPUT"},400);raw=JSON.parse(source);}catch{return json({error:"INVALID_INPUT"},400);}
   if(!raw||typeof raw!=="object"||Array.isArray(raw))return json({error:"INVALID_INPUT"},400);
@@ -31,7 +31,19 @@ Deno.serve(async(request:Request)=>{
   const national=unit.name==="ADMIN";
   if((role==="admin")!==national)return json({error:"INVALID_ROLE_UNIT"},403);
   if(!caller.is_admin){
-    if(unitId!==caller.unit_id||national||role==="admin")return json({error:"NOT_AUTHORIZED"},403);
+    if(national||role==="admin")return json({error:"NOT_AUTHORIZED"},403);
+    const allowedOwn=caller.is_unit_manager&&unitId===caller.unit_id;
+    let allowedDivision=false;
+    if(caller.is_division_manager&&caller.managed_division_id){
+      const {data:memberUnits,error:scopeError}=await sb.from("units")
+        .select("id,division_id").in("id",[caller.unit_id,unitId]);
+      if(scopeError)return json({error:"SCOPE_UNAVAILABLE"},503);
+      const own=memberUnits?.find(u=>u.id===caller.unit_id);
+      const target=memberUnits?.find(u=>u.id===unitId);
+      allowedDivision=own?.division_id===caller.managed_division_id &&
+        target?.division_id===caller.managed_division_id;
+    }
+    if(!allowedOwn&&!allowedDivision)return json({error:"NOT_AUTHORIZED"},403);
   }
   // Seul le serveur crée le compte, avec une invitation de définition de mot de passe.
   // Le compte reste affecté à l'unité sélectionnée, sans passer par une session privilégiée dans le navigateur.
