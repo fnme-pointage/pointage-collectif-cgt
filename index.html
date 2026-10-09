@@ -2057,7 +2057,11 @@
       const cell=button.closest('td');
       const name=document.createElement('input');name.value=person.full_name||'';
       const unit=document.createElement('select');
-      divisionManagedUnits().forEach(u=>{const option=document.createElement('option');option.value=u.id;option.textContent=u.name;option.selected=u.id===person.requested_unit_id;unit.append(option);});
+      const allowedUnits=divisionManagedUnits();
+      allowedUnits.forEach(u=>{const option=document.createElement('option');option.value=u.id;option.textContent=u.name;unit.append(option);});
+      unit.value=allowedUnits.some(u=>u.id===person.requested_unit_id)?person.requested_unit_id:(allowedUnits[0]?.id||'');
+      unit.style.width='100%';
+      unit.style.minWidth='150px';
       const manager=document.createElement('input');manager.type='checkbox';
       const active=document.createElement('input');active.type='checkbox';
       const save=document.createElement('button');save.textContent='Enregistrer';
@@ -2074,10 +2078,15 @@
       activeField.append(activeTitle,activeLabel);
       const actions=document.createElement('div');actions.className='actions';cancel.className='secondary';actions.append(save,cancel);
       cell.style.whiteSpace='normal';
-      cell.replaceChildren(field('Nom et prénom',name),field('Unité',unit),roles,activeField,actions);
+      const unitField=field('Unité de rattachement (modifiable)',unit);
+      const unitHelp=document.createElement('div');unitHelp.className='muted small';
+      unitHelp.textContent='Choisis l’unité définitive du nouveau compte parmi les unités de ta division.';
+      unitField.append(unitHelp);
+      cell.replaceChildren(field('Nom et prénom',name),unitField,roles,activeField,actions);
       cancel.onclick=()=>loadAdminUsers();
       save.onclick=async()=>{
-        if(active.checked&&!await confirmAction('Activer ce compte ?', {button:'Activer'}))return;
+        if(!allowedUnits.some(u=>u.id===unit.value)){alert('Sélectionne une unité de ta division.');return;}
+        if(active.checked&&!await confirmAction('Activer ce compte et le rattacher à « '+(allowedUnits.find(u=>u.id===unit.value)?.name||'')+' » ?', {button:'Activer'}))return;
         save.disabled=true;
         const {error}=await sb.rpc('pointage_division_review_signup',{p_user_id:person.id,p_full_name:name.value,p_unit_id:unit.value,p_role:manager.checked?'manager':'user',p_active:active.checked});
         if(error){alert(error.message);save.disabled=false;return;}
