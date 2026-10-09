@@ -874,6 +874,7 @@
   async function renderAnnualYears(){
     let yearMonths=months;
     const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    if(divisionSpace){try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').in('unit_id',divisionUnitIds()).order('month_key'));}catch(error){$('annualStats').textContent=error.message;}}
     show('globalExportArea',globalView);
     show('unitExportActions',!globalView);
     if(globalView){
@@ -909,15 +910,15 @@
     $('monthlyStats').textContent='';$('monthlySummaryTable').innerHTML='<div class="muted small">Chargement du suivi mensuel…</div>';
     try{
       const [codes,ents]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).eq('month_key',key).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('month_key',key).order('id'))
+        fetchAll(()=>{const q=sb.from('month_codes').select('id,unit_id,month_key,code,label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).eq('month_key',key).order('id');}),
+        fetchAll(()=>{const q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).eq('month_key',key).order('id');})
       ]);
       if(request!==monthlyRequest || unitId!==selectedUnit || key!==monthlyYear+'-'+monthlyMonth)return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
       await appendHistoricReportPeople(ents);
       monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));refreshIndividualExportUsers();monthlyReady=true;
       const report=annualReport(monthlyCodes,monthlyEntries);
-      $('monthlyStats').textContent=`${units.find(u=>u.id===unitId)?.name||''} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} utilisateurs · ${monthlyEntries.length} saisies`;
+      $('monthlyStats').textContent=`${divisionSpace?'Toutes les unités de la division':(units.find(u=>u.id===unitId)?.name||'')} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} lignes utilisateur/unité · ${monthlyEntries.length} saisies`;
       $('monthlySummaryTable').innerHTML=reportTable(report);
       $('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=false;
     }catch(error){
@@ -1688,8 +1689,8 @@
     const start=`${year}-01`, end=`${Number(year)+1}-01`;
     try {
       const [codes,ents]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>{const q=sb.from('month_codes').select('id,unit_id,month_key,code,label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).gte('month_key',start).lt('month_key',end).order('id');}),
+        fetchAll(()=>{const q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).gte('month_key',start).lt('month_key',end).order('id');})
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
@@ -1710,12 +1711,14 @@
     const codeById=new Map(codes.map(c=>[Number(c.id),c]));
     const codeNames=[...new Set([...codes.map(c=>c.code),...ents.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
     const historicalIds=new Set(ents.map(e=>e.user_id));
-    const people=allProfiles.filter(p=>!p.is_admin && ((p.unit_id===selectedUnit&&p.active)||historicalIds.has(p.id)));
+    const scoped=allProfiles.filter(p=>!p.is_admin && (((divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)&&p.active) || historicalIds.has(p.id)));
+    const byUser=new Map(scoped.map(p=>[p.id,p]));
+    const people=divisionSpace ? [...new Set([...ents.map(e=>e.user_id+'|'+e.unit_id),...scoped.filter(p=>p.active).map(p=>p.id+'|'+p.unit_id)])].map(key=>{const [userId,unitId]=key.split('|'),p=byUser.get(userId);return p?{...p,id:key,full_name:(p.full_name||p.email||userId)+' — '+(units.find(u=>u.id===unitId)?.name||'Unité')}:null;}).filter(Boolean) : scoped;
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of ents){
       const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
       if(!code) continue;
-      const seconds=entryDurationSeconds(e), key=`${e.user_id}\u0000${code}`;
+      const seconds=entryDurationSeconds(e), key=`${divisionSpace?e.user_id+'|'+e.unit_id:e.user_id}\u0000${code}`;
       amounts.set(key,(amounts.get(key)||0)+seconds);
       codeTotals.set(code,(codeTotals.get(code)||0)+seconds);
     }
@@ -1732,7 +1735,7 @@
     }
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
-    $('annualStats').textContent=`${units.find(u=>u.id===selectedUnit)?.name||''} · ${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
+    $('annualStats').textContent=`${divisionSpace?'Division · '+divisionManagedUnits().map(u=>u.name).join(', '):(units.find(u=>u.id===selectedUnit)?.name||'')} · ${monthCount} mois · ${people.length} lignes utilisateur/unité · ${annualEntries.length} saisies`;
     $('summaryTable').innerHTML=reportTable({people,codeNames,amounts,codeTotals});
   }
 
