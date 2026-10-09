@@ -698,7 +698,17 @@
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
     units=(data||[]).filter(u=>u.name!=='ADMIN');
     renderUserIdentity();
-    $('signupUnit').innerHTML='<option value="">Choisir une unité</option>'+units.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+    const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
+    if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
+    const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
+    const sortedDivisions=[...divisionNames.entries()].sort((a,b)=>a[1].localeCompare(b[1],'fr'));
+    const signupOptions=sortedDivisions.map(([id,name])=>{
+      const members=units.filter(u=>u.division_id===id).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+      return members.length?`<optgroup label="${esc(name)}">${members.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</optgroup>`:'';
+    }).join('');
+    const ungrouped=units.filter(u=>!divisionNames.has(u.division_id)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+    $('signupUnit').innerHTML='<option value="">Choisir une unité</option>'+signupOptions+
+      (ungrouped.length?`<optgroup label="Sans division">${ungrouped.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</optgroup>`:'');
     return true;
   }
   loadUnits();
@@ -2241,7 +2251,16 @@
     const scopedToDivision=divisionSpace&&!isAdmin;
     const previous=$('createUserUnit').value;
     const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?(options.some(u=>u.id===previous)?previous:selectedUnit):profile.unit_id);
-    $('createUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`).join('');
+    const option=u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`;
+    if(isAdmin){
+      const admin=options.filter(u=>u.name==='ADMIN').map(option).join('');
+      const grouped=divisions.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(d=>{
+        const members=options.filter(u=>u.division_id===d.id);
+        return members.length?`<optgroup label="${esc(d.name)}">${members.map(option).join('')}</optgroup>`:'';
+      }).join('');
+      const others=options.filter(u=>u.name!=='ADMIN'&&!divisions.some(d=>d.id===u.division_id));
+      $('createUserUnit').innerHTML=admin+grouped+(others.length?`<optgroup label="Sans division">${others.map(option).join('')}</optgroup>`:'');
+    }else $('createUserUnit').innerHTML=options.map(option).join('');
     $('createUserUnit').disabled=!isAdmin&&!divisionSpace;
     const target=units.find(u=>u.id===$('createUserUnit').value);
     const national=isAdmin && target?.name==='ADMIN';
