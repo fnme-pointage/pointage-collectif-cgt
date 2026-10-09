@@ -25,12 +25,24 @@ Deno.serve(async(request:Request)=>{
   if(userId===auth.user.id)return json({error:"SELF_DELETE_FORBIDDEN"},403);
 
   const [{data:caller,error:ce},{data:target,error:te}]=await Promise.all([
-    admin.from("profiles").select("id,active,is_admin,is_unit_manager,unit_id").eq("id",auth.user.id).single(),
+    admin.from("profiles").select("id,active,is_admin,is_unit_manager,is_division_manager,managed_division_id,unit_id").eq("id",auth.user.id).single(),
     admin.from("profiles").select("id,is_admin,is_unit_manager,unit_id").eq("id",userId).single()
   ]);
   if(ce||te||!caller||!target)return json({error:"ACCOUNT_NOT_FOUND"},404);
-  if(!caller.active||(!caller.is_admin&&!caller.is_unit_manager))return json({error:"NOT_AUTHORIZED"},403);
-  if(!caller.is_admin&&(target.is_admin||target.unit_id!==caller.unit_id))return json({error:"NOT_AUTHORIZED"},403);
+  if(!caller.active||(!caller.is_admin&&!caller.is_unit_manager&&!caller.is_division_manager))return json({error:"NOT_AUTHORIZED"},403);
+  if(!caller.is_admin){
+    if(target.is_admin)return json({error:"NOT_AUTHORIZED"},403);
+    const ownUnit=caller.is_unit_manager&&target.unit_id===caller.unit_id;
+    let divisionUnit=false;
+    if(caller.is_division_manager&&caller.managed_division_id){
+      const {data:scope,error:scopeError}=await admin.from("units")
+        .select("id,division_id").in("id",[caller.unit_id,target.unit_id]);
+      if(scopeError)return json({error:"SCOPE_UNAVAILABLE"},503);
+      divisionUnit=scope?.find(u=>u.id===caller.unit_id)?.division_id===caller.managed_division_id &&
+        scope?.find(u=>u.id===target.unit_id)?.division_id===caller.managed_division_id;
+    }
+    if(!ownUnit&&!divisionUnit)return json({error:"NOT_AUTHORIZED"},403);
+  }
   if(target.is_admin){
     if(!caller.is_admin)return json({error:"NOT_AUTHORIZED"},403);
     const {count,error}=await admin.from("profiles").select("id",{count:"exact",head:true}).eq("is_admin",true).eq("active",true);
