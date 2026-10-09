@@ -189,7 +189,7 @@
     </div>
   </div>
 
-  <div id="unitManagerArea" class="hidden"><div class="card"><div class="sectiontitle"><h2 id="unitManagerTitle">Gestion de mon unité</h2><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><p class="muted small">Espace réservé aux responsables de cette unité. Les catalogues de codes restent en lecture seule, et seuls les droits explicitement accordés sont accessibles.</p><div id="unitManagerList" aria-live="polite"></div></div></div>
+  <div id="unitManagerArea" class="hidden"><div class="card"><div class="sectiontitle"><h2 id="unitManagerTitle">Gestion de mon unité</h2></div><p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs concernent uniquement votre unité. Le catalogue des codes et la base documentaire sont accessibles selon vos habilitations. Les autres unités ne sont pas accessibles.</p></div></div>
 
   <div id="divisionArea" class="hidden">
     <div class="card">
@@ -210,6 +210,7 @@
     </div>
 
     <section id="admin-results">
+      <div id="unitFollowupCard" class="card hidden"><div class="sectiontitle"><h2>Suivi de mon unité</h2><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
       <div id="divisionFollowupCard" class="card hidden">
         <div class="sectiontitle"><h2>Suivi de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
         <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
@@ -841,6 +842,7 @@
     updateUsersScopeHelp();
     updateFlashScopeHelp();
     show('divisionFollowupCard',divisionSpace);
+    show('unitFollowupCard',managerSpace);
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
@@ -1296,6 +1298,7 @@
     document.querySelector('[data-admin-tab="results"]').click();
     renderAdminUnits();
     await loadMonths();
+    await loadUnitManager();
   };
   async function loadDivisions(){
     if(!profile?.is_admin)return;
