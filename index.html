@@ -2355,13 +2355,13 @@
     finally{button.disabled=false;button.textContent='Exporter CSV';}
   }
 
-  function globalSummaryRows(period,people,codes,globalEntries){
+  function globalSummaryRows(period,people,codes,globalEntries,allowedUnitIds=null){
     const byId=new Map(people.filter(p=>!p.is_admin).map(p=>[p.id,p]));
     const codeById=new Map(codes.map(c=>[Number(c.id),c.code]));
     const amounts=new Map(),totals=new Map();
     const unitName=id=>units.find(u=>u.id===id)?.name||'';
     for(const entry of globalEntries){
-      if(!byId.has(entry.user_id))continue;
+      if(!byId.has(entry.user_id)||(allowedUnitIds&&!allowedUnitIds.has(entry.unit_id)))continue;
       // Un salarié muté apparaît dans l'unité de CHAQUE pointage, jamais dans sa seule unité actuelle.
       const key=entry.user_id+'|'+entry.unit_id;
       if(!amounts.has(key))amounts.set(key,{user:byId.get(entry.user_id),unitId:entry.unit_id,codes:new Map()});
@@ -2372,6 +2372,7 @@
     }
     // Conserver aussi les comptes sans pointage dans leur unité actuelle.
     for(const p of byId.values()){
+      if(allowedUnitIds&&!allowedUnitIds.has(p.unit_id))continue;
       const key=p.id+'|'+p.unit_id;
       if(!amounts.has(key))amounts.set(key,{user:p,unitId:p.unit_id,codes:new Map()});
     }
@@ -2405,7 +2406,7 @@
         fetchAll(()=>sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').in('unit_id',unitIds).gte('month_key',start).lt('month_key',end).order('id'))
       ]);
       const scoped=people.filter(p=>unitIds.includes(p.unit_id)||entries.some(e=>e.user_id===p.id));
-      const rows=globalSummaryRows(year,scoped,codes,entries);
+      const rows=globalSummaryRows(year,scoped,codes,entries,new Set(unitIds));
       csvDownload('pointage-divisions-agregees-'+year+'.csv',rows);
       $('multiDivisionMessage').innerHTML=msg('Export réalisé pour '+chosen.length+' division(s), '+unitIds.length+' unité(s).','ok');
     }catch(error){$('multiDivisionMessage').innerHTML=msg('Export impossible : '+error.message,'warn');}
