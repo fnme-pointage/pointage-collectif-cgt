@@ -351,7 +351,7 @@
       </div>
       <div class="card">
         <div class="sectiontitle"><h2>Messages publiés et programmés</h2><button id="refreshFlash" class="secondary" type="button">Actualiser</button></div>
-        <p id="flashScopeHelp" class="muted small">Admin peut consulter et arrêter tous les messages. Dans l’espace d’une unité, seuls ses propres messages sont gérés. Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.</p><div id="flashHistoryFilterField"><label for="flashHistoryFilter">Filtrer les messages</label><select id="flashHistoryFilter"><option value="all">Tous les messages</option><option value="national">Nationaux uniquement</option></select></div>
+        <p id="flashHistoryScopeHelp" class="muted small">Admin peut consulter et arrêter tous les messages. Dans l’espace d’une unité, seuls ses propres messages sont gérés. Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.</p><div id="flashHistoryFilterField"><label for="flashHistoryFilter">Filtrer les messages</label><select id="flashHistoryFilter"><option value="all">Tous les messages</option><option value="national">Nationaux uniquement</option></select></div>
         <div id="flashHistory" aria-live="polite"></div>
       </div>
     </section>
@@ -810,7 +810,7 @@
   };
 
   function updateFlashScopeHelp(){
-    const help=$('flashScopeHelp');
+    const help=$('flashHistoryScopeHelp');
     if(!help)return;
     const effect='Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.';
     if(divisionSpace){
