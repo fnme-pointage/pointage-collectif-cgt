@@ -1931,12 +1931,11 @@
       row.set(code,(row.get(code)||0)+entryDurationSeconds(entry));allCodes.add(code);
     }
     const codeNames=[...allCodes].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const rows=[['Année','Utilisateur','Unité du pointage',...codeNames,'Total heures',...codeNames.map(c=>c+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    const rows=[['Année','Utilisateur','Unité du pointage',...codeNames,'Total heures']];
     for(const [unitId,codesMap] of byUnit){
       const total=[...codesMap.values()].reduce((a,b)=>a+b,0);
       rows.push([year,person.full_name||person.email||person.id,units.find(u=>u.id===unitId)?.name||'',
-        ...codeNames.map(c=>decimalCsv(codesMap.get(c)||0)),decimalCsv(total),
-        ...codeNames.map(c=>codesMap.get(c)||0),total,clockDuration(total)]);
+        ...codeNames.map(c=>decimalCsv(codesMap.get(c)||0)),decimalCsv(total)]);
     }
     return rows;
   }
@@ -1984,14 +1983,14 @@
       if(!amounts.has(key))amounts.set(key,{user:p,unitId:p.unit_id,codes:new Map()});
     }
     const codeNames=[...new Set([...codes.map(c=>c.code),...totals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total heures',...codeNames.map(c=>c+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    const rows=[['Année','Nom','E-mail','Unité',...codeNames,'Total heures']];
     const record=[...amounts.values()].sort((a,b)=>unitName(a.unitId).localeCompare(unitName(b.unitId),'fr')||String(a.user.full_name||a.user.email||'').localeCompare(String(b.user.full_name||b.user.email||''),'fr'));
     for(const item of record){
       const total=[...item.codes.values()].reduce((a,b)=>a+b,0);
-      rows.push([period,item.user.full_name||'',item.user.email||'',unitName(item.unitId),...codeNames.map(c=>decimalCsv(item.codes.get(c)||0)),decimalCsv(total),...codeNames.map(c=>item.codes.get(c)||0),total,clockDuration(total)]);
+      rows.push([period,item.user.full_name||'',item.user.email||'',unitName(item.unitId),...codeNames.map(c=>decimalCsv(item.codes.get(c)||0)),decimalCsv(total)]);
     }
     const sum=[...totals.values()].reduce((a,b)=>a+b,0);
-    rows.push([period,'Total par code','','',...codeNames.map(c=>decimalCsv(totals.get(c)||0)),decimalCsv(sum),...codeNames.map(c=>totals.get(c)||0),sum,clockDuration(sum)]);
+    rows.push([period,'Total par code','','',...codeNames.map(c=>decimalCsv(totals.get(c)||0)),decimalCsv(sum)]);
     return rows;
   }
 
@@ -2049,12 +2048,12 @@
     if(!unitManagement())return;
     await loadAdminData();
     if(!annualReady) return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
+    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e)),entryDurationSeconds(e),clockDuration(entryDurationSeconds(e))]);
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
@@ -2063,14 +2062,14 @@
     await loadAdminData();
     if(!annualReady) return;
     const {people,codeNames,amounts,codeTotals}=annualReport();
-    const rows=[['Année','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    const rows=[['Année','Nom','E-mail',...codeNames,'Total heures']];
     people.forEach(p=>{
       let total=0;
       const vals=codeNames.map(code=>{const seconds=amounts.get(`${p.id}\u0000${code}`)||0;total+=seconds;return decimalCsv(seconds);});
-      rows.push([annualYear,p.full_name||'',p.email||'',...vals,decimalCsv(total),...codeNames.map(code=>amounts.get(`${p.id}\u0000${code}`)||0),total,clockDuration(total)]);
+      rows.push([annualYear,p.full_name||'',p.email||'',...vals,decimalCsv(total)]);
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
-    rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal),...codeNames.map(code=>codeTotals.get(code)||0),grandTotal,clockDuration(grandTotal)]);
+    rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal)]);
     csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
 
@@ -2078,12 +2077,12 @@
     if(!monthlyAvailable() || monthlyGlobalView()) return;
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales','Secondes','Durée (h:min:s)']];
+    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
     monthlyEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e)),entryDurationSeconds(e),clockDuration(entryDurationSeconds(e))]);
+      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
@@ -2092,14 +2091,14 @@
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
     const {people,codeNames,amounts,codeTotals}=annualReport(monthlyCodes,monthlyEntries);
-    const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures',...codeNames.map(code=>code+' (secondes)'),'Total secondes','Total (h:min:s)']];
+    const rows=[['Mois','Nom','E-mail',...codeNames,'Total heures']];
     people.forEach(p=>{
       let total=0;
       const vals=codeNames.map(code=>{const seconds=amounts.get(`${p.id}\u0000${code}`)||0;total+=seconds;return decimalCsv(seconds);});
-      rows.push([monthlyYear+'-'+monthlyMonth,p.full_name||'',p.email||'',...vals,decimalCsv(total),...codeNames.map(code=>amounts.get(`${p.id}\u0000${code}`)||0),total,clockDuration(total)]);
+      rows.push([monthlyYear+'-'+monthlyMonth,p.full_name||'',p.email||'',...vals,decimalCsv(total)]);
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
-    rows.push([monthlyYear+'-'+monthlyMonth,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal),...codeNames.map(code=>codeTotals.get(code)||0),grandTotal,clockDuration(grandTotal)]);
+    rows.push([monthlyYear+'-'+monthlyMonth,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal)]);
     csvDownload(`pointage-recap-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
