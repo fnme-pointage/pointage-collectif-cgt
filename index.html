@@ -210,7 +210,7 @@
     </div>
 
     <section id="admin-results">
-      <div id="unitFollowupCard" class="card hidden"><div class="sectiontitle"><h2>Suivi de mon unité</h2><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
+      <div id="unitFollowupCard" class="card hidden"><div class="sectiontitle"><h2>Suivi de mon unité</h2><button id="refreshUnitFollowup" class="secondary" type="button">Actualiser</button></div><label for="unitFollowupYear">Année du suivi</label><input id="unitFollowupYear" type="number" min="1900" max="9999" value="2026"><div id="unitFollowupSummary" aria-live="polite"></div></div>
       <div id="divisionFollowupCard" class="card hidden">
         <div class="sectiontitle"><h2>Suivi de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
         <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
@@ -304,7 +304,7 @@
 
     <section id="admin-users" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Utilisateurs</h2></div>
+        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
         <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
@@ -843,6 +843,7 @@
     updateFlashScopeHelp();
     show('divisionFollowupCard',divisionSpace);
     show('unitFollowupCard',managerSpace);
+    show('unitManagerUsersArea',managerSpace);
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
@@ -1253,6 +1254,31 @@
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     if(!profile.is_admin)loadMonths();
   };
+  async function loadUnitFollowup(){
+    if(!managerSpace||!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
+    const year=Number($('unitFollowupYear').value);
+    const target=$('unitFollowupSummary');
+    if(!Number.isInteger(year)||year<1900||year>9999){target.innerHTML=msg('Sélectionne une année valide.','warn');return;}
+    target.innerHTML='<p class="muted small">Chargement…</p>';
+    try{
+      const [overview,entries]=await Promise.all([
+        sb.rpc('pointage_manager_unit_overview'),
+        fetchAll(()=>sb.from('entries').select('id,duration_seconds').eq('unit_id',profile.unit_id).gte('month_key',year+'-01').lt('month_key',(year+1)+'-01').order('id'))
+      ]);
+      if(overview.error)throw overview.error;
+      if(!managerSpace||overview.data?.unit_id!==profile.unit_id)return;
+      const name=overview.data.unit_name||'';
+      const members=(overview.data.members||[]).length;
+      const hours=entries.reduce((n,e)=>n+Number(e.duration_seconds||0),0)/3600;
+      $('unitManagerTitle').textContent='Gestion de mon unité — '+name;
+      target.innerHTML='<p><strong>1 unité</strong> · '+fmt(hours)+' h pour '+year+'</p>'+
+        '<div class="tablewrap"><table><thead><tr><th>Unité</th><th>Utilisateurs</th><th>Saisies</th><th>Heures</th></tr></thead><tbody>'+
+        '<tr><td>'+esc(name)+'</td><td>'+members+'</td><td>'+entries.length+'</td><td>'+fmt(hours)+'</td></tr>'+
+        '</tbody></table></div>';
+    }catch(error){target.innerHTML=msg('Suivi indisponible : '+error.message,'warn');}
+  }
+  $('refreshUnitFollowup').onclick=loadUnitFollowup;
+  $('unitFollowupYear').onchange=loadUnitFollowup;
   async function loadUnitManager(){
     if(!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
     $('unitManagerList').innerHTML='<p class="muted small">Chargement des membres de l’unité…</p>';
@@ -1289,7 +1315,7 @@
     managerSpace=true;divisionSpace=false;selectedUnit=profile.unit_id;show('divisionArea',false);show('adminUnitField',false);
     if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}
     documentRequest++;closePdfReader();
-    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminArea',true);
+    show('documentsArea',false);show('userArea',false);show('unitManagerArea',true);show('divisionArea',false);show('adminArea',true);
     $('unitManagerTab').classList.add('active');
     $('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.remove('active');
@@ -1298,7 +1324,8 @@
     document.querySelector('[data-admin-tab="results"]').click();
     renderAdminUnits();
     await loadMonths();
-    await loadUnitManager();
+    $('unitFollowupYear').value=String(new Date().getFullYear());
+    await Promise.all([loadUnitManager(),loadUnitFollowup()]);
   };
   async function loadDivisions(){
     if(!profile?.is_admin)return;
