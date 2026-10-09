@@ -29,7 +29,19 @@ Deno.serve(async(request:Request)=>{
     admin.from("profiles").select("id,is_admin,is_unit_manager,unit_id").eq("id",userId).single()
   ]);
   if(ce||te||!caller||!target)return json({error:"ACCOUNT_NOT_FOUND"},404);
-  if(!caller.active||!caller.is_admin)return json({error:"NOT_AUTHORIZED"},403);
+  if(!caller.active||(!caller.is_admin&&!caller.is_unit_manager&&!caller.is_division_manager))return json({error:"NOT_AUTHORIZED"},403);
+  if(!caller.is_admin){
+    if(target.is_admin)return json({error:"NOT_AUTHORIZED"},403);
+    const ownUnit=caller.is_unit_manager&&caller.unit_id===target.unit_id;
+    let divisionUnit=false;
+    if(caller.is_division_manager&&caller.managed_division_id){
+      const {data:units,error:ue}=await admin.from("units").select("id,division_id").in("id",[caller.unit_id,target.unit_id]);
+      if(ue)return json({error:"SCOPE_UNAVAILABLE"},503);
+      divisionUnit=units?.some(u=>u.id===caller.unit_id&&u.division_id===caller.managed_division_id)&&
+        units?.some(u=>u.id===target.unit_id&&u.division_id===caller.managed_division_id);
+    }
+    if(!ownUnit&&!divisionUnit)return json({error:"NOT_AUTHORIZED"},403);
+  }
   if(target.is_admin){
     if(!caller.is_admin)return json({error:"NOT_AUTHORIZED"},403);
     const {count,error}=await admin.from("profiles").select("id",{count:"exact",head:true}).eq("is_admin",true).eq("active",true);
@@ -37,14 +49,8 @@ Deno.serve(async(request:Request)=>{
     if((count||0)<=1)return json({error:"LAST_ADMIN_FORBIDDEN"},403);
   }
 
-  // Ne jamais effacer un historique de pointage en supprimant son auteur.
-  const [{count:entries,error:ee},{count:submissions,error:se}]=await Promise.all([
-    admin.from("entries").select("id",{count:"exact",head:true}).eq("user_id",userId),
-    admin.from("submissions").select("user_id",{count:"exact",head:true}).eq("user_id",userId)
-  ]);
-  if(ee||se)return json({error:"HISTORY_CHECK_FAILED"},503);
-  if((entries||0)>0||(submissions||0)>0)return json({error:"POINTAGES_EXIST"},409);
-
+  if(input.confirm_permanent_deletion!==true)return json({error:"CONFIRMATION_REQUIRED"},400);
+  // La suppression auth.users cascade vers profiles, entries, submissions et notifications.
   const {error:deleteError}=await admin.auth.admin.deleteUser(userId);
   if(deleteError){
     console.error("DELETE_MANAGED_USER_FAILED",deleteError.message);
