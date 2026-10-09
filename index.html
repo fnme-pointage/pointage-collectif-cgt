@@ -2182,8 +2182,8 @@
                ? `<label class="checkbox"><input type="checkbox" data-edit-division-manager ${p.is_division_manager?'checked':''}> Responsable de division</label>
                   <label>Division gérée<select data-edit-division>
                     <option value="">Choisir la division</option>
-                    ${divisions.filter(d=>d.active && units.some(u=>u.id===p.unit_id && u.division_id===d.id))
-                        .map(d=>`<option value="${esc(d.id)}" ${p.managed_division_id===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}
+                    ${divisions.filter(d=>d.active)
+                        .map(d=>`<option value="${esc(d.id)}" ${p.managed_division_id===d.id?'selected':''}>${esc(d.name)}${units.find(u=>u.id===p.unit_id)?.division_id===d.id?'':' — transfert d’unité nécessaire'}</option>`).join('')}
                   </select></label>`
                : (p.is_division_manager?'<p class="muted small">Responsable de division : attribution réservée à Admin national.</p>':'')}
            </div>`}
@@ -2222,6 +2222,7 @@
           const hasDivision=!!cell.querySelector('[data-edit-division-manager]')?.checked;
           const divisionId=hasDivision?cell.querySelector('[data-edit-division]').value:null;
           if(hasDivision&&!divisionId){alert('Sélectionne la division à gérer.');return;}
+          if(hasDivision&&units.find(u=>u.id===p.unit_id)?.division_id!==divisionId){alert('Pour attribuer cette division, transfère d’abord l’utilisateur vers une unité de celle-ci, puis modifie son rôle.');return;}
           if(!name){alert('Indique le nom et le prénom.');return;}
           const changed=!!p.is_unit_manager!==isUnitManager||!!p.is_division_manager!==hasDivision||
             (hasDivision&&p.managed_division_id!==divisionId);
