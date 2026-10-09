@@ -754,7 +754,7 @@
     }
     show('authView',false);show('mainView',true);
     renderUserIdentity();
-    $('userRole').textContent=profile.is_admin?'Administrateur national':profile.is_division_manager?'Responsable de division':profile.is_unit_manager?'Responsable d’unité':'Utilisateur';
+    $('userRole').textContent=profile.is_admin?'Administrateur national':['Utilisateur',profile.is_unit_manager?'Responsable d’unité':null,profile.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ');
     show('divisionManagerTab',!!profile.is_division_manager&&!profile.is_admin);
     show('unitManagerTab',!!profile.is_unit_manager&&!profile.is_admin);
     $('unitManagerTab').classList.remove('active');
@@ -1925,7 +1925,7 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur':p.is_unit_manager?'Responsable d’unité':'Utilisateur'}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
@@ -1981,22 +1981,51 @@
         ${profile.is_admin
           ? `<label>Unité<select data-edit-unit>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>`
           : `<label>Unité<input type="text" value="${esc(units.find(u=>u.id===p.unit_id)?.name||'Unité inconnue')}" readonly aria-label="Unité de rattachement en lecture seule"></label>`}
-        <label>Profil<select data-edit-role>
-          <option value="user"${!p.is_admin&&!p.is_unit_manager?' selected':''}>Utilisateur</option>
-          <option value="manager"${p.is_unit_manager?' selected':''}>Responsable d’unité</option>
-          ${isAdminUnit&&profile.is_admin?'<option value="admin"'+(p.is_admin?' selected':'')+'>Administrateur</option>':''}
-        </select></label>
+        ${p.is_admin
+          ? `<label>Profil<select data-edit-role><option value="admin" selected>Administrateur national</option></select></label>`
+          : `<div class="small"><strong>Profils cumulables</strong>
+             <label class="checkbox"><input type="checkbox" checked disabled> Utilisateur (pointage personnel)</label>
+             <label class="checkbox"><input type="checkbox" data-edit-manager ${p.is_unit_manager?'checked':''}> Responsable d’unité</label>
+             ${profile.is_admin
+               ? `<label class="checkbox"><input type="checkbox" data-edit-division-manager ${p.is_division_manager?'checked':''}> Responsable de division</label>
+                  <label>Division gérée<select data-edit-division>
+                    <option value="">Choisir la division</option>
+                    ${divisions.filter(d=>d.active && units.some(u=>u.id===p.unit_id && u.division_id===d.id))
+                        .map(d=>`<option value="${esc(d.id)}" ${p.managed_division_id===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}
+                  </select></label>`
+               : (p.is_division_manager?'<p class="muted small">Responsable de division : attribution réservée à Admin national.</p>':'')}
+           </div>`}
         <button data-edit-save type="button">Enregistrer</button> <button class="secondary" data-edit-cancel type="button">Annuler</button>`;
       cell.querySelector('[data-edit-cancel]').onclick=renderUsers;
       cell.querySelector('[data-edit-save]').onclick=async()=>{
         const name=cell.querySelector('[data-edit-name]').value.trim();
         const unitId=profile.is_admin?cell.querySelector('[data-edit-unit]').value:p.unit_id;
-        const role=cell.querySelector('[data-edit-role]').value;
+        const isUnitManager=p.is_admin?false:!!cell.querySelector('[data-edit-manager]').checked;
+        const role=p.is_admin?'admin':isUnitManager?'manager':'user';
         if(!profile.is_admin){
           if(role==='admin'||p.unit_id!==profile.unit_id){alert('Droits insuffisants.');return;}
           const {error}=await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:name,p_role:role,p_active:p.active});
           if(error){alert(error.message);return;}
           await loadAdminData();return;
+        }
+        if(!p.is_admin){
+          if(unitId!==p.unit_id){
+            alert('Pour changer d’unité, utilise le bouton Transférer afin de conserver les historiques.');
+            return;
+          }
+          const hasDivision=!!cell.querySelector('[data-edit-division-manager]')?.checked;
+          const divisionId=hasDivision?cell.querySelector('[data-edit-division]').value:null;
+          if(hasDivision&&!divisionId){alert('Sélectionne la division à gérer.');return;}
+          if(!name){alert('Indique le nom et le prénom.');return;}
+          const changed=!!p.is_unit_manager!==isUnitManager||!!p.is_division_manager!==hasDivision||
+            (hasDivision&&p.managed_division_id!==divisionId);
+          if(changed&&!await confirmAction('Enregistrer les responsabilités cumulables ? Les onglets correspondants seront disponibles au prochain chargement du profil.',{button:'Confirmer les responsabilités'}))return;
+          const {error}=await sb.rpc('pointage_admin_set_combined_roles',{
+            p_user_id:p.id,p_full_name:name,p_unit_id:unitId,p_is_unit_manager:isUnitManager,p_division_id:divisionId
+          });
+          if(error){alert(error.message);return;}
+          await loadAdminData();
+          return;
         }
         const isNationalUnit=units.find(u=>u.id===unitId)?.name==='ADMIN';
         if(role==='admin'&&(!profile.is_admin||!isAdminUnit)){alert('Le profil Administrateur peut uniquement être attribué depuis l’espace ADMIN.');return;}
