@@ -27,6 +27,18 @@
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions>*{flex:1;min-width:170px}
     .codestable{min-width:950px}.codestable td:nth-child(3){white-space:normal;min-width:300px}.codestable td:nth-child(1){min-width:230px}.codestable td:nth-child(2){min-width:100px}.codestable .icon{width:38px}
     .tablewrap{overflow:auto;border:1px solid #eef0f4;border-radius:12px} table{border-collapse:collapse;width:100%;min-width:680px;background:#fff} th,td{padding:9px 10px;border-bottom:1px solid #eef0f4;text-align:left;white-space:nowrap;font-size:.88rem}th{background:#f8f9fb;position:sticky;top:0;z-index:1}td.num,th.num{text-align:right}
+    /* Tableau Utilisateurs : largeur adaptee, roles et actions empiles. */
+    #usersTable .tablewrap{overflow-x:visible}
+    #usersTable table{min-width:0;table-layout:fixed;width:100%}
+    #usersTable th,#usersTable td{white-space:normal;overflow-wrap:anywhere;vertical-align:top;padding:9px 7px}
+    #usersTable th:nth-last-child(3),#usersTable td:nth-last-child(3){width:17%}
+    #usersTable th:nth-last-child(2),#usersTable td:nth-last-child(2){width:9%}
+    #usersTable th:last-child,#usersTable td:last-child{width:16%}
+    #usersTable td:last-child>button{display:block;width:100%;margin:0 0 5px;padding:7px 5px;font-size:.82rem}
+    #usersTable td:last-child label{white-space:normal}
+    #usersTable td:last-child input:not([type=checkbox]),#usersTable td:last-child select{max-width:100%;min-width:0}
+    #usersTable .user-role{display:block;line-height:1.4}
+    @media(max-width:700px){#usersTable .tablewrap{overflow-x:auto}#usersTable table{min-width:650px}}
     .login{max-width:470px;margin:8vh auto 0}.login h1{margin-top:0}.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}.notice{border-radius:12px;padding:10px 12px;background:#f2f4f7;font-size:.88rem;margin-bottom:10px}.notice.warn{background:var(--warnbg);color:#7a2e0e}.notice.ok{background:var(--okbg);color:#05603a}
     hr{border:0;border-top:1px solid #eef0f4;margin:14px 0}.checkbox{display:flex;align-items:center;gap:7px}.checkbox input{width:auto}
     .adminnav{display:flex;gap:7px;overflow:auto;padding-bottom:2px;margin-bottom:14px}.adminnav button{white-space:nowrap;background:#eef0f4;color:var(--text)}.adminnav button.active{background:var(--accent);color:#fff}
@@ -2034,8 +2046,8 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
-    let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
+    let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
     pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
     if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
