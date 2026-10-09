@@ -304,7 +304,7 @@
 
     <section id="admin-users" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="divisionPendingSignups" class="hidden"><h3>Inscriptions en attente dans ma division</h3><div id="divisionPendingList"></div></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
+        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="divisionPendingSignups" class="hidden"><div class="sectiontitle"><h3>Inscriptions en attente dans ma division</h3><button id="refreshDivisionPending" type="button" class="secondary">Actualiser les demandes</button></div><div id="divisionPendingList"></div></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
         <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
@@ -1691,7 +1691,7 @@
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
-    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
+    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);show('divisionPendingSignups',divisionSpace);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     if(btn.dataset.adminTab==='divisions')loadDivisions();
@@ -1722,7 +1722,9 @@
 
   async function loadDivisionPendingSignups(){
     if(!divisionSpace)return;
+    show('divisionPendingSignups',true);
     const out=$('divisionPendingList');
+    out.textContent='Chargement des inscriptions en attente…';
     const result=await sb.rpc('pointage_division_pending_signups');
     if(result.error){out.textContent=result.error.message;return;}
     out.replaceChildren();
@@ -1744,6 +1746,7 @@
     }
     if(!(result.data||[]).length)out.textContent='Aucune inscription en attente.';
   }
+  $('refreshDivisionPending').onclick=loadDivisionPendingSignups;
   async function loadAdminUsers(){
     try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',selectedUnit));});}
     catch(error){alert(error.message);return;}
