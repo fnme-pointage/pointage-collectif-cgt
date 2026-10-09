@@ -363,7 +363,7 @@
     <section id="admin-divisions" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Divisions</h2><button id="refreshDivisions" type="button" class="secondary">Actualiser</button></div>
-        <p class="muted small">La DTEAM contient initialement OPF, UFPI et ULM. La DPN attend ses unités. Seul Admin national peut affecter un responsable à chaque division.</p>
+        <p class="muted small">La DTEAM contient initialement OPF, UFPI et ULM. La DPN attend ses unités. Seul l’administrateur national peut nommer plusieurs responsables dans chaque division.</p>
         <div id="divisionsList"></div>
         <div class="row"><div class="grow"><label for="newDivisionName">Nouvelle division</label><input id="newDivisionName" maxlength="100" placeholder="Ex. DPN"></div><button id="createDivision" type="button">Créer la division</button></div>
         <h3>Rattacher une unité à une division</h3>
@@ -1345,9 +1345,9 @@
     $('divisionUnitSelect').innerHTML=units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
     $('divisionsList').innerHTML=divisions.map(d=>{
       const members=units.filter(u=>u.division_id===d.id);
-      const manager=persons.find(p=>p.is_division_manager&&p.managed_division_id===d.id);
+      const managers=persons.filter(p=>p.is_division_manager&&p.managed_division_id===d.id);
       return '<div class="notice"><strong>'+esc(d.name)+'</strong> · '+(members.map(u=>esc(u.name)).join(', ')||'Aucune unité')+
-        '<p class="muted small">Responsable : '+esc(manager?.full_name||manager?.email||'À désigner')+'</p></div>';
+        '<p class="muted small">Responsables : '+(managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner')+'</p></div>';
     }).join('');
     function managerChoices(){
       const target=$('divisionManagerDivision').value;
@@ -1369,11 +1369,14 @@
     if(!profile?.is_admin)return;
     const division=$('divisionManagerDivision').value;
     const {data,error:readError}=await sb.from('profiles').select('id,full_name,email')
-      .eq('is_division_manager',true).eq('managed_division_id',division).maybeSingle();
+      .eq('is_division_manager',true).eq('managed_division_id',division);
     if(readError){$('divisionAdminMessage').innerHTML=msg(readError.message,'warn');return;}
-    if(!data){$('divisionAdminMessage').innerHTML=msg('Aucun responsable nommé pour cette division.','warn');return;}
-    if(!await confirmAction('Retirer la fonction de Responsable de division à '+(data.full_name||data.email)+' ?',{button:'Retirer'}))return;
-    const {error}=await sb.rpc('pointage_admin_set_division_manager',{p_user_id:data.id,p_division_id:division,p_enabled:false});
+    if(!data?.length){$('divisionAdminMessage').innerHTML=msg('Aucun responsable nommé pour cette division.','warn');return;}
+    const selected=prompt('Quel responsable retirer ? Indique son adresse e-mail :\\n'+data.map(p=>p.email).join('\\n'));
+    const person=data.find(p=>p.email?.toLowerCase()===selected?.trim().toLowerCase());
+    if(!person)return;
+    if(!await confirmAction('Retirer la fonction de Responsable de division à '+(person.full_name||person.email)+' ?',{button:'Retirer'}))return;
+    const {error}=await sb.rpc('pointage_admin_set_division_manager',{p_user_id:person.id,p_division_id:division,p_enabled:false});
     $('divisionAdminMessage').innerHTML=msg(error?error.message:'Responsable retiré.',error?'warn':'ok');
     if(!error)await loadDivisions();
   };
