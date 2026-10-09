@@ -194,7 +194,7 @@
   <div id="divisionArea" class="hidden">
     <div class="card">
       <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
-      <p class="muted small">Suivi consolidé de la division. Pour gérer les pointages, utilisateurs, documents et messages d’une unité, utilise le sélecteur « Unité » et les onglets de gestion ci-dessous. Seules les unités de ta division sont accessibles.</p>
+      <p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs couvrent toutes les unités de la division. Le catalogue et les bases documentaires peuvent être gérés unité par unité. Aucune autre division n’est accessible.</p>
       <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
       <div id="divisionSummary" aria-live="polite"></div>
       <div class="actions"><button id="exportDivisionCsv" class="secondary" type="button" disabled>Exporter le suivi de ma division CSV</button></div>
@@ -396,6 +396,7 @@
     <div class="card">
       <div class="sectiontitle"><h2 id="documentsTitle">Base documentaire nationale</h2><button id="refreshDocuments" class="secondary" type="button">Actualiser</button></div>
       <p id="documentsDescription" class="muted small">Documents PDF disponibles pour toutes les unités.</p>
+      <div id="divisionDocumentField" class="hidden"><label for="divisionDocumentUnit">Base documentaire de l’unité</label><select id="divisionDocumentUnit"></select><p class="muted small">Le responsable de division peut ajouter, consulter et supprimer les PDF de chaque unité de sa division.</p></div>
       <div id="documentAdminForm" class="hidden">
         <div class="row">
           <div class="grow"><label for="documentTitle">Titre du document</label><input id="documentTitle" maxlength="200" placeholder="Ex. Accord droit syndical"></div>
@@ -466,6 +467,8 @@
 
   let managerSpace=false,divisionSpace=false,divisions=[],divisionOverview=null;
   const divisionManagedUnits=()=>units.filter(u=>u.active&&u.name!=='ADMIN'&&u.division_id===profile?.managed_division_id);
+  const divisionUnitIds=()=>divisionManagedUnits().map(u=>u.id);
+  let divisionDocumentUnit='';
   const divisionCanManageUnit=id=>!!profile?.active&&!!profile.is_division_manager&&!profile.is_admin&&divisionManagedUnits().some(u=>u.id===id);
   const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active) || (divisionSpace && divisionCanManageUnit(selectedUnit));
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
@@ -871,6 +874,7 @@
   async function renderAnnualYears(){
     let yearMonths=months;
     const globalView=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    if(divisionSpace){try{yearMonths=await fetchAll(()=>sb.from('months').select('unit_id,month_key').in('unit_id',divisionUnitIds()).order('month_key'));}catch(error){$('annualStats').textContent=error.message;}}
     show('globalExportArea',globalView);
     show('unitExportActions',!globalView);
     if(globalView){
@@ -906,15 +910,15 @@
     $('monthlyStats').textContent='';$('monthlySummaryTable').innerHTML='<div class="muted small">Chargement du suivi mensuel…</div>';
     try{
       const [codes,ents]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).eq('month_key',key).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).eq('month_key',key).order('id'))
+        fetchAll(()=>{const q=sb.from('month_codes').select('id,unit_id,month_key,code,label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).eq('month_key',key).order('id');}),
+        fetchAll(()=>{const q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).eq('month_key',key).order('id');})
       ]);
       if(request!==monthlyRequest || unitId!==selectedUnit || key!==monthlyYear+'-'+monthlyMonth)return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
       await appendHistoricReportPeople(ents);
       monthlyCodes=codes;monthlyEntries=ents.filter(e=>!adminIds.has(e.user_id));refreshIndividualExportUsers();monthlyReady=true;
       const report=annualReport(monthlyCodes,monthlyEntries);
-      $('monthlyStats').textContent=`${units.find(u=>u.id===unitId)?.name||''} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} utilisateurs · ${monthlyEntries.length} saisies`;
+      $('monthlyStats').textContent=`${divisionSpace?'Toutes les unités de la division':(units.find(u=>u.id===unitId)?.name||'')} · ${$('monthlyMonth').selectedOptions[0].textContent} ${monthlyYear} · ${report.people.length} lignes utilisateur/unité · ${monthlyEntries.length} saisies`;
       $('monthlySummaryTable').innerHTML=reportTable(report);
       $('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=false;
     }catch(error){
@@ -1182,11 +1186,18 @@
   const PDF_ASSET_URL='https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/';
   const PDF_LIBRARY_URL=PDF_ASSET_URL+'legacy/build/';
   const canReadDocuments=()=>!!session && !!profile && (profile.is_admin || profile.active);
-  const documentUnitId=()=>documentsScope==='unit'?(unitManagement()?selectedUnit:profile.unit_id):null;
+  const documentUnitId=()=>documentsScope==='unit'?(divisionSpace&&divisionCanManageUnit(divisionDocumentUnit)?divisionDocumentUnit:unitManagement()?selectedUnit:profile.unit_id):null;
   function openDocumentBase(scope,personal=false){
     if(documentBusy)return;
     closePdfReader();documentsScope=scope;documents=[];
     $('documentSearch').value='';$('documentTitle').value='';$('documentFile').value='';
+    if(divisionSpace&&scope==='unit'){
+      const allowed=divisionManagedUnits();
+      if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=allowed[0]?.id||'';
+      $('divisionDocumentUnit').innerHTML=allowed.map(u=>`<option value="${esc(u.id)}"${u.id===divisionDocumentUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    }
+    if(personal)show('divisionDocumentField',false);
+    else show('divisionDocumentField',divisionSpace&&scope==='unit');
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
@@ -1205,7 +1216,7 @@
     documentRequest++;closePdfReader();
     managerSpace=false;divisionSpace=false;if(!profile.is_admin)show('adminArea',false);
     show('documentsArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminUnitField',profile.is_admin);show('userArea',!profile.is_admin);
-    if(!profile.is_admin && selectedUnit!==profile.unit_id){selectedUnit=profile.unit_id;loadMonths();}
+    if(!profile.is_admin && selectedUnit!==profile.unit_id)selectedUnit=profile.unit_id;
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     if(!profile.is_admin)loadMonths();
@@ -1350,8 +1361,9 @@
     const allowed=divisionManagedUnits();
     if(!allowed.length){alert('Aucune unité disponible dans votre division.');return;}
     if(!divisionCanManageUnit(selectedUnit))selectedUnit=allowed[0].id;
+    if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=selectedUnit;
     show('documentsArea',false);show('userArea',false);show('adminArea',true);show('unitManagerArea',false);show('divisionArea',true);
-    show('adminUnitField',true);
+    show('adminUnitField',false);
     renderAdminUnits();
     ['userPointageTab','userDocumentsTab','userUnitDocumentsTab','unitManagerTab'].forEach(id=>$(id).classList.remove('active'));
     $('divisionManagerTab').classList.add('active');
@@ -1373,6 +1385,11 @@
   $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
   $('refreshDocuments').onclick=()=>loadDocuments();
+  $('divisionDocumentUnit').onchange=()=>{
+    if(!divisionSpace||documentBusy||!divisionCanManageUnit($('divisionDocumentUnit').value))return;
+    divisionDocumentUnit=$('divisionDocumentUnit').value;
+    openDocumentBase('unit',false);
+  };
   $('documentSearch').oninput=()=>renderDocuments();
   async function loadDocuments(){
     if(!canReadDocuments()) return;
@@ -1546,9 +1563,9 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
   function updateFlashEmailLabel(){
     const adminSpace=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const target=adminSpace?$('flashTarget').value:selectedUnit;
+    const target=adminSpace||divisionSpace?$('flashTarget').value:selectedUnit;
     const unit=units.find(u=>u.id===target);
-    $('flashEmailLabel').textContent=target==='all'
+    $('flashEmailLabel').textContent=target==='division-all'?'Envoyer également ce message par mail aux utilisateurs de toutes les unités de ma division':target==='all'
       ?'Envoyer également ce message par mail à tous les utilisateurs'
       :'Envoyer également ce message par mail aux utilisateurs de l’unité '+(unit?.name||'sélectionnée');
   }
@@ -1559,16 +1576,17 @@
     const unit=units.find(u=>u.id===selectedUnit);
     const previousTarget=select.value,previousFilter=filter.value;
     const unitOptions=units.filter(u=>u.active&&u.name!=='ADMIN'&&(profile?.is_admin||!divisionSpace||divisionCanManageUnit(u.id))).map(u=>`<option value="${esc(u.id)}">Unité ${esc(u.name)}</option>`).join('');
-    select.innerHTML='<option value="all">Toutes les unités — message national</option>'+unitOptions;
+    select.innerHTML=(isNational?'<option value="all">Toutes les unités — message national</option>':divisionSpace?'<option value="division-all">Toutes les unités de ma division</option>':'')+unitOptions;
     if(isNational)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:'all';
+    else if(divisionSpace)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:'division-all';
     else if(unit)select.value=unit.id;
-    select.disabled=!isNational;
-    show('flashTargetField',isNational);
-    $('flashTargetHint').textContent=isNational?'Tu peux aussi publier un message local pour une unité.':'Ce message sera publié uniquement dans l’unité '+(unit?.name||'sélectionnée')+'.';
-    $('flashScopeHelp').textContent=isNational?'Dans Admin, tu peux publier un message national, ou sélectionner une seule unité. Les utilisateurs voient simultanément les messages nationaux et ceux de leur unité.':'Dans cet espace, tu gères uniquement les messages flash de '+(unit?.name||"l'unité")+'. Les messages nationaux restent gérés depuis Admin.';
-    filter.innerHTML='<option value="all">Tous les messages</option><option value="national">Messages nationaux</option>'+unitOptions;
+    select.disabled=!isNational&&!divisionSpace;
+    show('flashTargetField',isNational||divisionSpace);
+    $('flashTargetHint').textContent=isNational?'Tu peux aussi publier un message local pour une unité.':divisionSpace?'Cible toutes les unités de ta division, ou une unité précise. Aucun message national ne sera créé.':'Ce message sera publié uniquement dans l’unité '+(unit?.name||'sélectionnée')+'.';
+    $('flashScopeHelp').textContent=isNational?'Dans Admin, tu peux publier un message national, ou sélectionner une seule unité. Les utilisateurs voient simultanément les messages nationaux et ceux de leur unité.':divisionSpace?'Messages flash de l’ensemble de ta division. Tu peux envoyer dans toutes ses unités ou cibler une seule unité. Les messages nationaux restent réservés à Admin.':'Dans cet espace, tu gères uniquement les messages flash de '+(unit?.name||"l'unité")+'. Les messages nationaux restent gérés depuis Admin.';
+    filter.innerHTML='<option value="all">Tous les messages</option>'+(isNational?'<option value="national">Messages nationaux</option>':'')+unitOptions;
     filter.value=Array.from(filter.options).some(o=>o.value===previousFilter)?previousFilter:'all';
-    show('flashHistoryFilterField',isNational);
+    show('flashHistoryFilterField',isNational||divisionSpace);
     updateFlashEmailLabel();
   }
   async function loadFlashHistory(){
@@ -1576,7 +1594,7 @@
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
       const now=Date.parse(data.server_now),isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
       const allMessages=data.messages||[];
-      const filter=isNational?$('flashHistoryFilter').value:selectedUnit;
+      const filter=isNational||divisionSpace?$('flashHistoryFilter').value:selectedUnit;
       const messages=allMessages.filter(m=>filter==='all'||(filter==='national'?!m.unit_id:m.unit_id===filter));
       $('flashHistory').innerHTML=messages.length?messages.map(m=>{
         const status=m.cancelled_at?'Arrêté':Date.parse(m.ends_at)<=now?'Terminé':Date.parse(m.starts_at)>now?'Programmé':'En cours';
@@ -1596,13 +1614,15 @@
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
     event.preventDefault();if(flashBusy||!unitManagement())return;
-    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=units.find(u=>u.id===selectedUnit)?.name==='ADMIN'?$('flashTarget').value:selectedUnit;
-    if((target!=='all'&&!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
-    if(email&&!await confirmAction(target==='all'?'Publier ce message pour toutes les unités et envoyer les mails aux utilisateurs concernés ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
+    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN'||divisionSpace?$('flashTarget').value:selectedUnit;
+    if((target==='division-all'?!divisionSpace:(target==='all'?!profile.is_admin:!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'&&(!divisionSpace||divisionCanManageUnit(u.id)))))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
+    if(email&&!await confirmAction(target==='all'?'Publier ce message pour toutes les unités et envoyer les mails aux utilisateurs concernés ?':target==='division-all'?'Publier ce message dans toutes les unités de ta division et envoyer les mails à leurs utilisateurs ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
     flashBusy=true;$('publishFlash').disabled=true;
     $('flashForm').querySelectorAll('input,textarea').forEach(el=>el.disabled=true);
     flashDraftId=flashDraftId||crypto.randomUUID();
-    try{const {error}=await sb.rpc('pointage_create_flash_message',{p_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email,p_unit_id:target==='all'?null:target});if(error)throw error;
+    try{const {error}=target==='division-all'?
+      await sb.rpc('pointage_create_division_flash',{p_batch_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email}):
+      await sb.rpc('pointage_create_flash_message',{p_id:flashDraftId,p_title:title,p_body:body,p_start:start.toISOString(),p_end:end.toISOString(),p_email:email,p_unit_id:target==='all'?null:target});if(error)throw error;
       $('flashFeedback').innerHTML=msg(email?'Message publié. Les mails sont mis en file pour envoi pendant la période de diffusion.':'Message publié dans les espaces utilisateurs.','ok');
       $('flashTitle').value='';$('flashBody').value='';$('flashEmail').checked=false;flashDraftId=null;await loadFlashHistory();
     }catch(error){$('flashFeedback').innerHTML=msg('Publication non confirmée : '+error.message+' Tu peux réessayer sans doubler le même envoi.','warn');}
@@ -1617,6 +1637,7 @@
     ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     if(btn.dataset.adminTab==='divisions')loadDivisions();
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
+    if(divisionSpace)show('adminUnitField',btn.dataset.adminTab==='codes');
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
@@ -1630,8 +1651,8 @@
 
   async function loadAdminData(){
     const [p,e]=await Promise.all([
-      sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name'),
-      sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit).eq('month_key',selectedMonth)
+      (divisionSpace?sb.from('profiles').select('*').in('unit_id',divisionUnitIds()):sb.from('profiles').select('*').eq('unit_id',selectedUnit)).order('full_name'),
+      (divisionSpace?sb.from('entries').select('*,month_codes(code,label)').in('unit_id',divisionUnitIds()):sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit)).eq('month_key',selectedMonth)
     ]);
     if(p.error||e.error){alert((p.error||e.error).message);return;}
     allProfiles=(p.data||[]); adminEntries=e.data||[];
@@ -1641,7 +1662,7 @@
   }
 
   async function loadAdminUsers(){
-    try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:q.eq('unit_id',selectedUnit);});}
+    try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',selectedUnit));});}
     catch(error){alert(error.message);return;}
     renderUsers();
     show('unitTransferHistoryArea',!!profile?.is_admin);
@@ -1684,8 +1705,8 @@
     const start=`${year}-01`, end=`${Number(year)+1}-01`;
     try {
       const [codes,ents]=await Promise.all([
-        fetchAll(()=>sb.from('month_codes').select('id,month_key,code,label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id')),
-        fetchAll(()=>sb.from('entries').select('id,user_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('unit_id',unitId).gte('month_key',start).lt('month_key',end).order('id'))
+        fetchAll(()=>{const q=sb.from('month_codes').select('id,unit_id,month_key,code,label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).gte('month_key',start).lt('month_key',end).order('id');}),
+        fetchAll(()=>{const q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label');return (divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId)).gte('month_key',start).lt('month_key',end).order('id');})
       ]);
       if(request!==annualRequest) return;
       const adminIds=new Set(adminUserProfiles.filter(p=>p.is_admin).map(p=>p.id));
@@ -1706,12 +1727,14 @@
     const codeById=new Map(codes.map(c=>[Number(c.id),c]));
     const codeNames=[...new Set([...codes.map(c=>c.code),...ents.map(e=>e.saved_code).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
     const historicalIds=new Set(ents.map(e=>e.user_id));
-    const people=allProfiles.filter(p=>!p.is_admin && ((p.unit_id===selectedUnit&&p.active)||historicalIds.has(p.id)));
+    const scoped=allProfiles.filter(p=>!p.is_admin && (((divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)&&p.active) || historicalIds.has(p.id)));
+    const byUser=new Map(scoped.map(p=>[p.id,p]));
+    const people=divisionSpace ? [...new Set([...ents.map(e=>e.user_id+'|'+e.unit_id),...scoped.filter(p=>p.active).map(p=>p.id+'|'+p.unit_id)])].map(key=>{const [userId,unitId]=key.split('|'),p=byUser.get(userId);return p?{...p,id:key,full_name:(p.full_name||p.email||userId)+' — '+(units.find(u=>u.id===unitId)?.name||'Unité')}:null;}).filter(Boolean) : scoped;
     const amounts=new Map(), codeTotals=new Map(codeNames.map(code=>[code,0]));
     for(const e of ents){
       const code=e.saved_code||codeById.get(Number(e.code_id))?.code;
       if(!code) continue;
-      const seconds=entryDurationSeconds(e), key=`${e.user_id}\u0000${code}`;
+      const seconds=entryDurationSeconds(e), key=`${divisionSpace?e.user_id+'|'+e.unit_id:e.user_id}\u0000${code}`;
       amounts.set(key,(amounts.get(key)||0)+seconds);
       codeTotals.set(code,(codeTotals.get(code)||0)+seconds);
     }
@@ -1728,7 +1751,7 @@
     }
     const {people,codeNames,amounts,codeTotals}=annualReport();
     const monthCount=months.filter(m=>String(m.month_key).startsWith(`${annualYear}-`)).length;
-    $('annualStats').textContent=`${units.find(u=>u.id===selectedUnit)?.name||''} · ${monthCount} mois · ${people.length} utilisateurs · ${annualEntries.length} saisies`;
+    $('annualStats').textContent=`${divisionSpace?'Division · '+divisionManagedUnits().map(u=>u.name).join(', '):(units.find(u=>u.id===selectedUnit)?.name||'')} · ${monthCount} mois · ${people.length} lignes utilisateur/unité · ${annualEntries.length} saisies`;
     $('summaryTable').innerHTML=reportTable({people,codeNames,amounts,codeTotals});
   }
 
@@ -1893,7 +1916,7 @@
     const isNational=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const historicalIds=new Set(allProfiles.map(p=>p.id));
     const people=[...new Map([...adminUserProfiles,...allProfiles].map(p=>[p.id,p])).values()];
-    const eligible=people.filter(p=>!p.is_admin&&(isNational||p.unit_id===selectedUnit||historicalIds.has(p.id)))
+    const eligible=people.filter(p=>!p.is_admin&&(isNational||(divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)||historicalIds.has(p.id)))
       .sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
     select.innerHTML=eligible.length
       ? eligible.map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email||p.id)}${!p.active?' (inactif)':''}</option>`).join('')
@@ -1939,7 +1962,7 @@
 
   function renderUsers(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
+    const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
     unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
@@ -1961,7 +1984,7 @@
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
       if(!unitManagement())return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userDelete);
-      if(!person||person.id===profile.id||(!profile.is_admin&&(!unitManagement()||person.unit_id!==selectedUnit||person.is_admin)))return;
+      if(!person||person.id===profile.id||(!profile.is_admin&&(!unitManagement()||!(divisionSpace?divisionCanManageUnit(person.unit_id):person.unit_id===selectedUnit)||person.is_admin)))return;
       const name=person.full_name||person.email||'cet utilisateur';
       if(!await confirmAction('Supprimer définitivement le compte de « '+name+' » ? Cette action coupe son accès et ne pourra pas être annulée. Si ce compte contient des pointages, la suppression sera refusée pour préserver l’historique.',{title:'Supprimer le compte',button:'Supprimer'}))return;
       button.disabled=true;
@@ -2019,7 +2042,7 @@
         const isUnitManager=p.is_admin?false:!!cell.querySelector('[data-edit-manager]').checked;
         const role=p.is_admin?'admin':isUnitManager?'manager':'user';
         if(!profile.is_admin){
-          if(role==='admin'||p.unit_id!==selectedUnit||!unitManagement()){alert('Droits insuffisants.');return;}
+          if(role==='admin'||!(divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)||!unitManagement()){alert('Droits insuffisants.');return;}
           const {error}=await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:name,p_role:role,p_active:p.active});
           if(error){alert(error.message);return;}
           await loadAdminData();return;
@@ -2071,9 +2094,9 @@
     const options=units.filter(u=>u.active && (isAdmin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)));
     const scopedToDivision=divisionSpace&&!isAdmin;
     const previous=$('createUserUnit').value;
-    const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?selectedUnit:profile.unit_id);
+    const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?(options.some(u=>u.id===previous)?previous:selectedUnit):profile.unit_id);
     $('createUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`).join('');
-    $('createUserUnit').disabled=!isAdmin;
+    $('createUserUnit').disabled=!isAdmin&&!divisionSpace;
     const target=units.find(u=>u.id===$('createUserUnit').value);
     const national=isAdmin && target?.name==='ADMIN';
     $('createUserRole').innerHTML=national
@@ -2093,7 +2116,7 @@
     event.preventDefault();
     if(!unitManagement())return;
     const name=$('createUserName').value.trim(),email=$('createUserEmail').value.trim().toLowerCase();
-    const unitId=profile.is_admin?$('createUserUnit').value:(divisionSpace?selectedUnit:profile.unit_id);
+    const unitId=profile.is_admin||divisionSpace?$('createUserUnit').value:profile.unit_id;
     const role=$('createUserRole').value;
     const unit=units.find(u=>u.id===unitId);
     if(!name || name.length>150 || !email || !unit?.active || !['user','manager','admin'].includes(role)
@@ -2145,8 +2168,8 @@
     button.disabled=true;button.textContent='Export en cours…';$('userExportMessage').innerHTML='';
     try{
       const [codes,personEntries]=await Promise.all([
-        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);}),
-        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);})
+        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId));}),
+        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId));})
       ]);
       if(!personEntries.length){$('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');return;}
       const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
@@ -2242,12 +2265,12 @@
     if(!unitManagement())return;
     await loadAdminData();
     if(!annualReady) return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
+    const rows=[divisionSpace?['Mois','Nom','E-mail','Unité','Code','Libellé','Heures décimales']:['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
+      rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
@@ -2271,12 +2294,12 @@
     if(!monthlyAvailable() || monthlyGlobalView()) return;
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
+    const rows=[divisionSpace?['Mois','Nom','E-mail','Unité','Code','Libellé','Heures décimales']:['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
     monthlyEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
+      rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
