@@ -2,7 +2,7 @@
 -- Le serveur détermine le périmètre ; le navigateur ne peut pas ajouter une autre unité.
 CREATE OR REPLACE FUNCTION public.pointage_create_division_flash(
  p_batch_id uuid,p_title text,p_body text,p_start timestamptz,p_end timestamptz,p_email boolean
-) RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path TO '' AS $f$
+) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $f$
 DECLARE caller public.profiles%ROWTYPE; u record; total integer:=0; target_id uuid;
 BEGIN
  SELECT * INTO caller FROM public.profiles WHERE id=auth.uid()
