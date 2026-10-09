@@ -19,6 +19,8 @@ CREATE POLICY months_division_read ON public.months FOR SELECT TO authenticated
  USING (public.pointage_manager_unit_allowed(unit_id));
 CREATE POLICY codes_division_read ON public.month_codes FOR SELECT TO authenticated
  USING (public.pointage_manager_unit_allowed(unit_id));
+CREATE POLICY code_versions_division_read ON public.pointage_code_versions FOR SELECT TO authenticated
+ USING (public.pointage_manager_unit_allowed(unit_id));
 CREATE POLICY documents_division_read ON public.pointage_documents FOR SELECT TO authenticated
  USING (unit_id IS NOT NULL AND public.pointage_manager_unit_allowed(unit_id));
 
