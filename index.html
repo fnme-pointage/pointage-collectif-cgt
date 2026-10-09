@@ -1188,9 +1188,9 @@
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
     if(personal){managerSpace=false;if(!profile.is_admin)show('adminArea',false);}
-    show('userArea',false);show('unitManagerArea',false);show('documentsArea',true);
+    show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('documentsArea',true);
     if(personal){
-      $('unitManagerTab').classList.remove('active');
+      $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
       $('userPointageTab').classList.remove('active');
       $('userDocumentsTab').classList.toggle('active',scope==='national');
       $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
@@ -1241,7 +1241,7 @@
     managerSpace=true;selectedUnit=profile.unit_id;show('divisionArea',false);
     if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}
     documentRequest++;closePdfReader();
-    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('adminArea',true);
+    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminArea',true);
     $('unitManagerTab').classList.add('active');
     $('userPointageTab').classList.remove('active');
     $('userDocumentsTab').classList.remove('active');
