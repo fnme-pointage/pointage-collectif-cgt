@@ -1186,11 +1186,17 @@
   const PDF_ASSET_URL='https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/';
   const PDF_LIBRARY_URL=PDF_ASSET_URL+'legacy/build/';
   const canReadDocuments=()=>!!session && !!profile && (profile.is_admin || profile.active);
-  const documentUnitId=()=>documentsScope==='unit'?(unitManagement()?selectedUnit:profile.unit_id):null;
+  const documentUnitId=()=>documentsScope==='unit'?(divisionSpace&&divisionCanManageUnit(divisionDocumentUnit)?divisionDocumentUnit:unitManagement()?selectedUnit:profile.unit_id):null;
   function openDocumentBase(scope,personal=false){
     if(documentBusy)return;
     closePdfReader();documentsScope=scope;documents=[];
     $('documentSearch').value='';$('documentTitle').value='';$('documentFile').value='';
+    if(divisionSpace&&scope==='unit'){
+      const allowed=divisionManagedUnits();
+      if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=allowed[0]?.id||'';
+      $('divisionDocumentUnit').innerHTML=allowed.map(u=>`<option value="${esc(u.id)}"${u.id===divisionDocumentUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    }
+    show('divisionDocumentField',divisionSpace&&scope==='unit');
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
@@ -1378,6 +1384,11 @@
   $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
   $('refreshDocuments').onclick=()=>loadDocuments();
+  $('divisionDocumentUnit').onchange=()=>{
+    if(!divisionSpace||documentBusy||!divisionCanManageUnit($('divisionDocumentUnit').value))return;
+    divisionDocumentUnit=$('divisionDocumentUnit').value;
+    openDocumentBase('unit',false);
+  };
   $('documentSearch').oninput=()=>renderDocuments();
   async function loadDocuments(){
     if(!canReadDocuments()) return;
