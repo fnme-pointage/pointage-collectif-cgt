@@ -385,6 +385,7 @@
         <div id="unitsList"></div>
         <div class="row">
           <div class="grow"><label for="newUnitName">Nouvelle unité</label><input id="newUnitName" maxlength="100" placeholder="Ex. UFPI"></div>
+          <div class="grow"><label for="newUnitDivision">Division de rattachement</label><select id="newUnitDivision" required></select></div>
           <button id="createUnit">Créer l’unité</button>
         </div>
         <div id="unitMessage" style="margin-top:10px"></div>
@@ -827,8 +828,13 @@
     if(!await allowLeaveCatalogue())return;
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
+    const divisionId=$('newUnitDivision').value;
+    if(!divisionId){$('unitMessage').innerHTML=msg('Sélectionne une division avant de créer une unité.','warn');return;}
     const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
     if(error){$('unitMessage').innerHTML=msg(error.message,'warn');return;}
+    const {error:assignError}=await sb.rpc('pointage_admin_assign_unit_division',{p_unit_id:data.id,p_division_id:divisionId});
+    if(assignError){$('unitMessage').innerHTML=msg('Unité créée mais rattachement impossible : '+assignError.message+'. Affecte-la depuis Divisions.','warn');return;}
+    data.division_id=divisionId;
     units.push(data); units.sort((a,b)=>a.name.localeCompare(b.name,'fr'));
     selectedUnit=data.id; catalogueUnit=data.id; $('newUnitName').value='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();
     $('unitMessage').innerHTML=msg('Unité créée. Elle est disponible lors des inscriptions.','ok');
@@ -1257,6 +1263,7 @@
     const persons=peopleResult.data||[];
     const divisionOptions=divisions.filter(d=>d.active).map(d=>`<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
     $('divisionUnitTarget').innerHTML=divisionOptions;
+    $('newUnitDivision').innerHTML=divisionOptions;
     $('divisionManagerDivision').innerHTML=divisionOptions;
     $('divisionUnitSelect').innerHTML=units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
     $('divisionsList').innerHTML=divisions.map(d=>{
