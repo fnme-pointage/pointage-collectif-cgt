@@ -2036,17 +2036,29 @@
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
     unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
-    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Activer</button></td></tr>');
+    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
     if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
-    document.querySelectorAll('[data-approve-signup]').forEach(button=>button.onclick=async()=>{
+    document.querySelectorAll('[data-approve-signup]').forEach(button=>button.onclick=()=>{
       const person=pending.find(p=>p.id===button.dataset.approveSignup);
-      if(!person||!divisionSpace)return;
-      if(!await confirmAction('Activer le compte de '+(person.full_name||person.email)+' dans l’unité '+(units.find(u=>u.id===person.requested_unit_id)?.name||'demandée')+' ?',{button:'Activer'}))return;
-      button.disabled=true;
-      const {error}=await sb.rpc('pointage_division_approve_signup',{p_user_id:person.id});
-      if(error){alert('Activation impossible : '+error.message);button.disabled=false;return;}
-      await loadAdminData();
+      if(!person)return;
+      const cell=button.closest('td');
+      const name=document.createElement('input');name.value=person.full_name||'';
+      const unit=document.createElement('select');
+      divisionManagedUnits().forEach(u=>{const option=document.createElement('option');option.value=u.id;option.textContent=u.name;option.selected=u.id===person.requested_unit_id;unit.append(option);});
+      const manager=document.createElement('input');manager.type='checkbox';
+      const active=document.createElement('input');active.type='checkbox';
+      const save=document.createElement('button');save.textContent='Enregistrer';
+      const cancel=document.createElement('button');cancel.textContent='Annuler';
+      cell.replaceChildren('Nom et prénom',name,'Unité',unit,'Responsable d’unité',manager,'Actif',active,save,cancel);
+      cancel.onclick=()=>loadAdminUsers();
+      save.onclick=async()=>{
+        if(active.checked&&!await confirmAction('Activer ce compte ?', {button:'Activer'}))return;
+        save.disabled=true;
+        const {error}=await sb.rpc('pointage_division_review_signup',{p_user_id:person.id,p_full_name:name.value,p_unit_id:unit.value,p_role:manager.checked?'manager':'user',p_active:active.checked});
+        if(error){alert(error.message);save.disabled=false;return;}
+        await loadAdminData();
+      };
     });
     document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
       if(!profile?.is_admin)return;
