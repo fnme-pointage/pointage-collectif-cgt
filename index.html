@@ -2056,9 +2056,13 @@
       const userLabel=document.createElement('label');userLabel.className='checkbox';const userCheck=document.createElement('input');userCheck.type='checkbox';userCheck.checked=true;userCheck.disabled=true;userLabel.append(userCheck,' Utilisateur (pointage personnel)');
       const managerLabel=document.createElement('label');managerLabel.className='checkbox';managerLabel.append(manager,' Responsable d’unité');
       roles.append(roleHeading,userLabel,managerLabel);
-      const activeLabel=document.createElement('label');activeLabel.className='checkbox';activeLabel.append(active,' Actif');
+      const activeField=document.createElement('div');activeField.style.marginTop='10px';activeField.style.marginBottom='10px';
+      const activeTitle=document.createElement('strong');activeTitle.textContent='Actif';
+      const activeLabel=document.createElement('label');activeLabel.className='checkbox';activeLabel.style.marginTop='7px';activeLabel.append(active,' Oui — autoriser l’accès au compte');
+      activeField.append(activeTitle,activeLabel);
       const actions=document.createElement('div');actions.className='actions';cancel.className='secondary';actions.append(save,cancel);
-      cell.replaceChildren(field('Nom et prénom',name),field('Unité',unit),roles,activeLabel,actions);
+      cell.style.whiteSpace='normal';
+      cell.replaceChildren(field('Nom et prénom',name),field('Unité',unit),roles,activeField,actions);
       cancel.onclick=()=>loadAdminUsers();
       save.onclick=async()=>{
         if(active.checked&&!await confirmAction('Activer ce compte ?', {button:'Activer'}))return;
