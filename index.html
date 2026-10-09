@@ -316,7 +316,7 @@
 
     <section id="admin-users" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
+        <div class="sectiontitle"><h2>Utilisateurs</h2></div>
         <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
@@ -855,7 +855,6 @@
     updateFlashScopeHelp();
     show('divisionFollowupCard',divisionSpace);
     show('unitFollowupCard',managerSpace);
-    show('unitManagerUsersArea',managerSpace);
 
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
@@ -1294,32 +1293,9 @@
   $('unitFollowupYear').onchange=loadUnitFollowup;
   async function loadUnitManager(){
     if(!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
-    $('unitManagerList').innerHTML='<p class="muted small">Chargement des membres de l’unité…</p>';
-    try {
-      const {data,error}=await sb.rpc('pointage_manager_unit_overview');
-      if(error)throw error;
-      if(!profile?.is_unit_manager||data.unit_id!==profile.unit_id)return;
+    const {data,error}=await sb.rpc('pointage_manager_unit_overview');
+    if(!error&&data?.unit_id===profile.unit_id)
       $('unitManagerTitle').textContent='Gestion de mon unité — '+(data.unit_name||'');
-      const people=data.members||[];
-      $('unitManagerList').innerHTML='<p class="muted small">'+people.length+' membre(s) actif(s) ou en attente dans cette unité.</p>'+
-        '<div class="tablewrap"><table><thead><tr><th>Nom</th><th>Profil</th><th>Statut</th></tr></thead><tbody>'+
-        people.map(p=>'<tr><td>'+esc(p.name)+'</td><td><select data-manager-role="'+esc(p.id)+'" '+(p.id===profile.id?'disabled':'')+'><option value="user" '+(!p.is_manager?'selected':'')+'>Utilisateur</option><option value="manager" '+(p.is_manager?'selected':'')+'>Responsable d’unité</option></select></td><td>'+esc(p.active?'Actif':'Inactif')+'</td></tr>').join('')+
-        '</tbody></table></div><p class="muted small">Un responsable peut nommer ou retirer un responsable dans son unité. Le profil Administrateur reste réservé à Admin.</p>';
-      document.querySelectorAll('[data-manager-role]').forEach(select=>select.onchange=async()=>{
-        const member=people.find(p=>p.id===select.dataset.managerRole);
-        if(!member||member.id===profile.id){await loadUnitManager();return;}
-        const wanted=select.value==='manager';
-        if(!await confirmAction(wanted?'Nommer cette personne responsable de l’unité ?':'Retirer le rôle responsable de cette personne ?',{button:'Confirmer'})){
-          select.value=member.is_manager?'manager':'user';return;
-        }
-        select.disabled=true;
-        const {error}=await sb.rpc('pointage_manager_change_member_role',{p_user_id:member.id,p_is_manager:wanted});
-        if(error)alert('Modification impossible : '+error.message);
-        await loadUnitManager();
-      });
-    } catch(error) {
-      $('unitManagerList').innerHTML=msg('Consultation impossible : '+error.message,'warn');
-    }
   }
   $('unitManagerTab').onclick=async()=>{
     if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
@@ -1449,7 +1425,6 @@
   };
   $('reloadDivisionSummary').onclick=loadDivisionOverview;
   $('divisionYear').onchange=loadDivisionOverview;
-  $('refreshUnitManager').onclick=loadUnitManager;
   $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
   $('refreshDocuments').onclick=()=>loadDocuments();
