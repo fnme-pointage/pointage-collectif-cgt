@@ -2043,14 +2043,14 @@
   $('cancelTransferUser').onclick=()=>{transferUserId=null;show('transferUserForm',false);};
   $('transferUserForm').onsubmit=async event=>{
     event.preventDefault();
-    if(!profile?.is_admin||!transferUserId)return;
+    if(!(profile?.is_admin||divisionSpace)||!transferUserId)return;
     const person=adminUserProfiles.find(p=>p.id===transferUserId);
     const toUnit=$('transferUserUnit').value,role=$('transferUserRole').value,date=$('transferUserDate').value;
-    if(!person||person.is_admin||!units.some(u=>u.id===toUnit&&u.active&&u.name!=='ADMIN')||!['user','manager'].includes(role))return;
+    if(!person||person.is_admin||(divisionSpace&&(!divisionCanManageUnit(person.unit_id)||!divisionCanManageUnit(toUnit)||person.is_division_manager))||!units.some(u=>u.id===toUnit&&u.active&&u.name!=='ADMIN')||!['user','manager'].includes(role))return;
     if(!await confirmAction('Transférer '+(person.full_name||person.email)+' dans '+(units.find(u=>u.id===toUnit)?.name||'la nouvelle unité')+' ? Ses anciens pointages resteront dans son unité d’origine.',{title:'Confirmer le transfert',button:'Transférer'}))return;
     const button=$('confirmTransferUser');button.disabled=true;
     try{
-      const {error}=await sb.rpc('pointage_admin_transfer_user',{p_user_id:person.id,p_to_unit_id:toUnit,p_effective_date:date,p_role:role});
+      const {error}=await sb.rpc(divisionSpace?'pointage_division_transfer_user':'pointage_admin_transfer_user',{p_user_id:person.id,p_to_unit_id:toUnit,p_effective_date:date,p_role:role});
       if(error)throw error;
       transferUserId=null;show('transferUserForm',false);
       await loadAdminData();
@@ -2064,7 +2064,7 @@
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
     let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
     pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
     if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
@@ -2111,12 +2111,12 @@
       };
     });
     document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
-      if(!profile?.is_admin)return;
+      if(!profile?.is_admin&&!divisionSpace)return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userTransfer);
       if(!person||person.is_admin)return;
       transferUserId=person.id;
       $('transferUserName').textContent=(person.full_name||person.email||'Utilisateur')+' — unité actuelle : '+(units.find(u=>u.id===person.unit_id)?.name||'');
-      const options=units.filter(u=>u.active&&u.name!=='ADMIN'&&u.id!==person.unit_id);
+      const options=units.filter(u=>u.active&&u.name!=='ADMIN'&&u.id!==person.unit_id&&(profile.is_admin||divisionCanManageUnit(u.id)));
       $('transferUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
       $('transferUserRole').value=person.is_unit_manager?'manager':'user';
       const today=new Date();$('transferUserDate').value=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
