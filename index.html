@@ -1553,8 +1553,7 @@
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadFlashBanner();});
   function updateFlashEmailLabel(){
-    const adminSpace=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const target=adminSpace||divisionSpace?$('flashTarget').value:selectedUnit;
+    const target=profile?.is_admin||divisionSpace?$('flashTarget').value:selectedUnit;
     const unit=units.find(u=>u.id===target);
     const selectedDivision=target.startsWith('division:')?divisions.find(d=>d.id===target.slice(9)):null;
     $('flashEmailLabel').textContent=selectedDivision?'Envoyer également ce message par mail aux utilisateurs de la division '+selectedDivision.name:target==='division-all'?'Envoyer également ce message par mail aux utilisateurs de toutes les unités de ma division':target==='all'
@@ -1564,13 +1563,13 @@
   $('flashTarget').addEventListener('change',()=>{updateFlashEmailLabel();if(!flashBusy)flashDraftId=null;});
   function refreshFlashTargets(){
     const select=$('flashTarget'),filter=$('flashHistoryFilter');if(!select||!filter)return;
-    const isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const isNational=!!profile?.is_admin;
     const unit=units.find(u=>u.id===selectedUnit);
     const previousTarget=select.value,previousFilter=filter.value;
     const unitOptions=units.filter(u=>u.active&&u.name!=='ADMIN'&&(profile?.is_admin||!divisionSpace||divisionCanManageUnit(u.id))).map(u=>`<option value="${esc(u.id)}">Unité ${esc(u.name)}</option>`).join('');
     const divisionOptions=isNational?divisions.filter(d=>d.active).map(d=>`<option value="division:${esc(d.id)}">Division ${esc(d.name)} — toutes ses unités</option>`).join(''):'';
     select.innerHTML=(isNational?'<option value="all">Toutes les unités — message national</option>':divisionSpace?'<option value="division-all">Toutes les unités de ma division</option>':'')+divisionOptions+unitOptions;
-    if(isNational)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:'all';
+    if(isNational)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:(unit?.name==='ADMIN'?'all':unit?.id||'all');
     else if(divisionSpace)select.value=Array.from(select.options).some(o=>o.value===previousTarget)?previousTarget:'division-all';
     else if(unit)select.value=unit.id;
     select.disabled=!isNational&&!divisionSpace;
@@ -1585,7 +1584,7 @@
   async function loadFlashHistory(){
     if(!unitManagement())return;const request=++flashHistoryRequest;
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
-      const now=Date.parse(data.server_now),isNational=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+      const now=Date.parse(data.server_now),isNational=!!profile?.is_admin;
       const allMessages=data.messages||[];
       const filter=isNational||divisionSpace?$('flashHistoryFilter').value:selectedUnit;
       const messages=allMessages.filter(m=>filter==='all'||(filter==='national'?!m.unit_id:filter.startsWith('division:')?units.some(u=>u.id===m.unit_id&&u.division_id===filter.slice(9)):m.unit_id===filter));
@@ -1607,7 +1606,7 @@
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
     event.preventDefault();if(flashBusy||!unitManagement())return;
-    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN'||divisionSpace?$('flashTarget').value:selectedUnit;
+    const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=profile.is_admin||divisionSpace?$('flashTarget').value:selectedUnit;
     if((target.startsWith('division:')?(!profile.is_admin||!divisions.some(d=>d.active&&d.id===target.slice(9)&&units.some(u=>u.active&&u.division_id===d.id))):target==='division-all'?!divisionSpace:target==='all'?!profile.is_admin:!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'&&(!divisionSpace||divisionCanManageUnit(u.id))))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
     const targetDivision=target.startsWith('division:')?divisions.find(d=>d.id===target.slice(9)):null;
     if(email&&!await confirmAction(target==='all'?'Publier ce message national et envoyer les mails à tous les utilisateurs concernés ?':targetDivision?'Publier ce message pour la division '+targetDivision.name+' et envoyer les mails uniquement aux utilisateurs de ses unités ?':target==='division-all'?'Publier ce message dans toutes les unités de ta division et envoyer les mails à leurs utilisateurs ?':'Publier ce message pour cette unité et envoyer les mails uniquement à ses utilisateurs ?',{button:'Publier et envoyer'}))return;
