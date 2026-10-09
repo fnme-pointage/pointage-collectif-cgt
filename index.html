@@ -330,7 +330,7 @@
           <p class="muted small">Une invitation sera envoyée par e-mail. La personne choisira son propre mot de passe.</p>
           <label for="createUserName">Nom et prénom</label><input id="createUserName" maxlength="150" required autocomplete="off">
           <label for="createUserEmail">Adresse e-mail</label><input id="createUserEmail" type="email" maxlength="320" required autocomplete="off">
-          <label for="createUserUnit">Unité</label><select id="createUserUnit" required></select>
+          <div id="createUserUnitField"><label for="createUserUnit">Unité</label><select id="createUserUnit" required></select></div><div id="createUserFixedUnit" class="hidden"><label>Unité de rattachement</label><p id="createUserFixedUnitName" class="notice"></p></div>
           <label for="createUserRole">Profil</label><select id="createUserRole" required></select>
           <div class="actions"><button id="confirmCreateUser" type="submit">Créer et envoyer l’invitation</button><button id="cancelCreateUser" class="secondary" type="button">Annuler</button></div>
           <div id="createUserFeedback" aria-live="polite"></div>
@@ -2273,6 +2273,9 @@
       const others=options.filter(u=>u.name!=='ADMIN'&&!divisions.some(d=>d.id===u.division_id));
       $('createUserUnit').innerHTML=admin+grouped+(others.length?`<optgroup label="Sans division">${others.map(option).join('')}</optgroup>`:'');
     }else $('createUserUnit').innerHTML=options.map(option).join('');
+    show('createUserUnitField',isAdmin||divisionSpace);
+    show('createUserFixedUnit',!isAdmin&&!divisionSpace);
+    $('createUserFixedUnitName').textContent=units.find(u=>u.id===profile?.unit_id)?.name||'Unité de rattachement';
     $('createUserUnit').disabled=!isAdmin&&!divisionSpace;
     const target=units.find(u=>u.id===$('createUserUnit').value);
     const national=isAdmin && target?.name==='ADMIN';
