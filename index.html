@@ -871,7 +871,8 @@
     nationalTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
-    $('unitsList').innerHTML=units.filter(u=>profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)).map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}</div>`).join('');
+    $('unitsList').innerHTML=units.filter(u=>profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)).map(u=>`<div class="notice">${esc(u.name)}${u.active?'':' (inactive)'}${profile.is_admin&&u.name!=='ADMIN'?` <button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`).join('');
+    document.querySelectorAll('[data-rename-unit]').forEach(button=>button.onclick=()=>renameOrganization('unit',button.dataset.renameUnit));
   }
   $('adminUnit').onchange=async()=>{if(!profile.is_admin && !(divisionSpace&&divisionCanManageUnit($('adminUnit').value))){$('adminUnit').value=selectedUnit;return;}if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && !divisionSpace && !managerSpace && selectedUnit===profile.unit_id);await loadMonths();};
   $('createUnit').onclick=async()=>{
@@ -1316,6 +1317,21 @@
     $('unitFollowupYear').value=String(new Date().getFullYear());
     await Promise.all([loadUnitManager(),loadUnitFollowup()]);
   };
+  async function renameOrganization(kind,id){
+    if(!profile?.is_admin)return;
+    const item=(kind==='unit'?units:divisions).find(x=>x.id===id);
+    if(!item)return;
+    const proposed=prompt('Nouveau nom '+(kind==='unit'?'de l’unité':'de la division')+' :',item.name);
+    if(proposed===null)return;
+    const name=proposed.trim();
+    if(!name||name.length>100){alert('Le nom doit contenir entre 1 et 100 caractères.');return;}
+    if(name===item.name)return;
+    if(!await confirmAction('Renommer « '+item.name+' » en « '+name+' » ? Les rattachements restent inchangés.',{button:'Renommer'}))return;
+    const {error}=await sb.rpc(kind==='unit'?'pointage_admin_rename_unit':'pointage_admin_rename_division',kind==='unit'?{p_unit_id:id,p_name:name}:{p_division_id:id,p_name:name});
+    if(error){alert('Modification impossible : '+error.message);return;}
+    if(kind==='division')await loadDivisions();
+    else {units=units.map(u=>u.id===id?{...u,name}:u).sort((a,b)=>a.name.localeCompare(b.name,'fr'));renderAdminUnits();await loadDivisions();}
+  }
   async function loadDivisions(){
     if(!profile?.is_admin)return;
     const [divisionResult,unitResult,peopleResult]=await Promise.all([
@@ -1336,8 +1352,9 @@
       const members=units.filter(u=>u.division_id===d.id);
       const managers=persons.filter(p=>p.is_division_manager&&p.managed_division_id===d.id);
       return '<div class="notice"><strong>'+esc(d.name)+'</strong> · '+(members.map(u=>esc(u.name)).join(', ')||'Aucune unité')+
-        '<p class="muted small">Responsables : '+(managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner')+'</p></div>';
+        '<p class="muted small">Responsables : '+(managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner')+'</p><button type="button" class="secondary" data-rename-division="'+esc(d.id)+'">Modifier le nom</button></div>';
     }).join('');
+    document.querySelectorAll('[data-rename-division]').forEach(button=>button.onclick=()=>renameOrganization('division',button.dataset.renameDivision));
     function managerChoices(){
       const target=$('divisionManagerDivision').value;
       $('divisionManagerPerson').innerHTML=persons.filter(p=>!p.is_admin && units.some(u=>u.id===p.unit_id&&u.division_id===target))
