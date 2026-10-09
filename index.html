@@ -351,7 +351,7 @@
       </div>
       <div class="card">
         <div class="sectiontitle"><h2>Messages publiés et programmés</h2><button id="refreshFlash" class="secondary" type="button">Actualiser</button></div>
-        <p class="muted small">Admin peut consulter et arrêter tous les messages. Dans l’espace d’une unité, seuls ses propres messages sont gérés. Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.</p><div id="flashHistoryFilterField"><label for="flashHistoryFilter">Filtrer les messages</label><select id="flashHistoryFilter"><option value="all">Tous les messages</option><option value="national">Nationaux uniquement</option></select></div>
+        <p id="flashScopeHelp" class="muted small">Admin peut consulter et arrêter tous les messages. Dans l’espace d’une unité, seuls ses propres messages sont gérés. Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.</p><div id="flashHistoryFilterField"><label for="flashHistoryFilter">Filtrer les messages</label><select id="flashHistoryFilter"><option value="all">Tous les messages</option><option value="national">Nationaux uniquement</option></select></div>
         <div id="flashHistory" aria-live="polite"></div>
       </div>
     </section>
@@ -809,6 +809,19 @@
     await route();
   };
 
+  function updateFlashScopeHelp(){
+    const help=$('flashScopeHelp');
+    if(!help)return;
+    const effect='Arrêter un message interrompt son affichage et les e-mails restant à envoyer, mais ne rappelle pas les e-mails déjà expédiés.';
+    if(divisionSpace){
+      help.textContent='Dans la gestion de votre division, vous pouvez consulter et arrêter les messages relevant de votre division et de ses unités, dans la limite de vos habilitations. '+effect;
+    }else if(managerSpace){
+      help.textContent='Dans la gestion de votre unité, vous pouvez consulter et arrêter les messages de votre unité uniquement. '+effect;
+    }else{
+      help.textContent='L’administration peut consulter et arrêter tous les messages. '+effect;
+    }
+  }
+
   function updateUsersScopeHelp(){
     const help=$('usersScopeHelp');
     if(!help)return;
@@ -823,6 +836,7 @@
 
   function renderAdminUnits(){
     updateUsersScopeHelp();
+    updateFlashScopeHelp();
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
