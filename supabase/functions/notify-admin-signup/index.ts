@@ -41,10 +41,13 @@ Deno.serve(async (request: Request) => {
       let success=false,errorCode="";
       try {
         const name=job.full_name || "Nom non renseigné",unit=job.requested_unit || "Non renseignée";
-        await transport.sendMail({from:{name:"Pointage collectif",address:recipient},to:recipient,
+        const {data:divisionRecipients,error:recipientError}=await sb.rpc("pointage_signup_division_recipients",{p_user_id:job.user_id});
+        if(recipientError)throw recipientError;
+        const copies=[...new Set((divisionRecipients||[]).map((r:{email:string})=>String(r.email||"").trim().toLowerCase()).filter((v:string)=>v&&v!==recipient))];
+        await transport.sendMail({from:{name:"Pointage collectif",address:recipient},to:recipient,bcc:copies,
           messageId:`<signup-${job.user_id}@pointage-collectif.local>`,
           subject:"Pointage collectif — nouvel inscrit à activer",
-          text:`Un nouvel inscrit a confirmé son adresse e-mail par code et attend l’activation de son compte.\n\nNom : ${name}\nUnité demandée : ${unit}\n\nConnecte-toi à l’application, puis ouvre Utilisateurs dans l’onglet ADMIN pour affecter l’unité et activer le compte :\n${appUrl}`,
+          text:`Un nouvel inscrit a confirmé son adresse e-mail par code et attend l’activation de son compte.\n\nNom : ${name}\nUnité demandée : ${unit}\n\nConnecte-toi à l’application, puis ouvre Utilisateurs dans ton espace autorisé pour traiter la demande :\n${appUrl}`,
           html:`<h2>Nouvel inscrit à activer</h2><p>Son adresse e-mail est confirmée.</p><p><strong>Nom :</strong> ${escapeHtml(name)}<br><strong>Unité demandée :</strong> ${escapeHtml(unit)}</p><p><a href="${appUrl}">Ouvrir Pointage collectif</a>, puis Utilisateurs dans l’onglet ADMIN pour affecter l’unité et activer le compte.</p>`});
         success=true;sent++;
       }catch(error){errorCode=String((error as {code?:string}).code || "SMTP_ERROR").replace(/[^A-Z0-9_]/g, "").slice(0,40);failed++;}
