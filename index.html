@@ -2272,7 +2272,7 @@
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
       rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
-    csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
+    csvDownload(`pointage-detail-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${annualYear}.csv`,rows);
   };
   $('exportSummary').onclick=async()=>{
     if(!unitManagement())return;
@@ -2287,7 +2287,7 @@
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal)]);
-    csvDownload(`pointage-recap-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
+    csvDownload(`pointage-recap-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${annualYear}.csv`,rows);
   };
 
   $('exportMonthlyRaw').onclick=async()=>{
@@ -2301,7 +2301,7 @@
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
       rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
-    csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
+    csvDownload(`pointage-detail-mensuel-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
   $('exportMonthlySummary').onclick=async()=>{
     if(!monthlyAvailable() || monthlyGlobalView()) return;
@@ -2316,7 +2316,7 @@
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     rows.push([monthlyYear+'-'+monthlyMonth,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal)]);
-    csvDownload(`pointage-recap-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
+    csvDownload(`pointage-recap-mensuel-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
