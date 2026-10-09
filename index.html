@@ -194,7 +194,7 @@
   <div id="divisionArea" class="hidden">
     <div class="card">
       <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
-      <p class="muted small">Suivi consolidé de la division. Pour gérer les pointages, utilisateurs, documents et messages d’une unité, utilise le sélecteur « Unité » et les onglets de gestion ci-dessous. Seules les unités de ta division sont accessibles.</p>
+      <p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs couvrent toutes les unités de la division. Le catalogue et les bases documentaires peuvent être gérés unité par unité. Aucune autre division n’est accessible.</p>
       <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
       <div id="divisionSummary" aria-live="polite"></div>
       <div class="actions"><button id="exportDivisionCsv" class="secondary" type="button" disabled>Exporter le suivi de ma division CSV</button></div>
@@ -396,6 +396,7 @@
     <div class="card">
       <div class="sectiontitle"><h2 id="documentsTitle">Base documentaire nationale</h2><button id="refreshDocuments" class="secondary" type="button">Actualiser</button></div>
       <p id="documentsDescription" class="muted small">Documents PDF disponibles pour toutes les unités.</p>
+      <div id="divisionDocumentField" class="hidden"><label for="divisionDocumentUnit">Base documentaire de l’unité</label><select id="divisionDocumentUnit"></select><p class="muted small">Le responsable de division peut ajouter, consulter et supprimer les PDF de chaque unité de sa division.</p></div>
       <div id="documentAdminForm" class="hidden">
         <div class="row">
           <div class="grow"><label for="documentTitle">Titre du document</label><input id="documentTitle" maxlength="200" placeholder="Ex. Accord droit syndical"></div>
@@ -466,6 +467,8 @@
 
   let managerSpace=false,divisionSpace=false,divisions=[],divisionOverview=null;
   const divisionManagedUnits=()=>units.filter(u=>u.active&&u.name!=='ADMIN'&&u.division_id===profile?.managed_division_id);
+  const divisionUnitIds=()=>divisionManagedUnits().map(u=>u.id);
+  let divisionDocumentUnit='';
   const divisionCanManageUnit=id=>!!profile?.active&&!!profile.is_division_manager&&!profile.is_admin&&divisionManagedUnits().some(u=>u.id===id);
   const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active) || (divisionSpace && divisionCanManageUnit(selectedUnit));
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
@@ -1350,6 +1353,7 @@
     const allowed=divisionManagedUnits();
     if(!allowed.length){alert('Aucune unité disponible dans votre division.');return;}
     if(!divisionCanManageUnit(selectedUnit))selectedUnit=allowed[0].id;
+    if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=selectedUnit;
     show('documentsArea',false);show('userArea',false);show('adminArea',true);show('unitManagerArea',false);show('divisionArea',true);
     show('adminUnitField',true);
     renderAdminUnits();
@@ -1630,8 +1634,8 @@
 
   async function loadAdminData(){
     const [p,e]=await Promise.all([
-      sb.from('profiles').select('*').eq('unit_id',selectedUnit).order('full_name'),
-      sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit).eq('month_key',selectedMonth)
+      (divisionSpace?sb.from('profiles').select('*').in('unit_id',divisionUnitIds()):sb.from('profiles').select('*').eq('unit_id',selectedUnit)).order('full_name'),
+      (divisionSpace?sb.from('entries').select('*,month_codes(code,label)').in('unit_id',divisionUnitIds()):sb.from('entries').select('*,month_codes(code,label)').eq('unit_id',selectedUnit)).eq('month_key',selectedMonth)
     ]);
     if(p.error||e.error){alert((p.error||e.error).message);return;}
     allProfiles=(p.data||[]); adminEntries=e.data||[];
@@ -1641,7 +1645,7 @@
   }
 
   async function loadAdminUsers(){
-    try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:q.eq('unit_id',selectedUnit);});}
+    try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',selectedUnit));});}
     catch(error){alert(error.message);return;}
     renderUsers();
     show('unitTransferHistoryArea',!!profile?.is_admin);
@@ -1893,7 +1897,7 @@
     const isNational=profile.is_admin&&units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const historicalIds=new Set(allProfiles.map(p=>p.id));
     const people=[...new Map([...adminUserProfiles,...allProfiles].map(p=>[p.id,p])).values()];
-    const eligible=people.filter(p=>!p.is_admin&&(isNational||p.unit_id===selectedUnit||historicalIds.has(p.id)))
+    const eligible=people.filter(p=>!p.is_admin&&(isNational||(divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)||historicalIds.has(p.id)))
       .sort((a,b)=>String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''),'fr'));
     select.innerHTML=eligible.length
       ? eligible.map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email||p.id)}${!p.active?' (inactif)':''}</option>`).join('')
@@ -1939,7 +1943,7 @@
 
   function renderUsers(){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    const unitProfiles=isAdminUnit?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
+    const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
     unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
@@ -1961,7 +1965,7 @@
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
       if(!unitManagement())return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userDelete);
-      if(!person||person.id===profile.id||(!profile.is_admin&&(!unitManagement()||person.unit_id!==selectedUnit||person.is_admin)))return;
+      if(!person||person.id===profile.id||(!profile.is_admin&&(!unitManagement()||!(divisionSpace?divisionCanManageUnit(person.unit_id):person.unit_id===selectedUnit)||person.is_admin)))return;
       const name=person.full_name||person.email||'cet utilisateur';
       if(!await confirmAction('Supprimer définitivement le compte de « '+name+' » ? Cette action coupe son accès et ne pourra pas être annulée. Si ce compte contient des pointages, la suppression sera refusée pour préserver l’historique.',{title:'Supprimer le compte',button:'Supprimer'}))return;
       button.disabled=true;
@@ -2019,7 +2023,7 @@
         const isUnitManager=p.is_admin?false:!!cell.querySelector('[data-edit-manager]').checked;
         const role=p.is_admin?'admin':isUnitManager?'manager':'user';
         if(!profile.is_admin){
-          if(role==='admin'||p.unit_id!==selectedUnit||!unitManagement()){alert('Droits insuffisants.');return;}
+          if(role==='admin'||!(divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)||!unitManagement()){alert('Droits insuffisants.');return;}
           const {error}=await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:name,p_role:role,p_active:p.active});
           if(error){alert(error.message);return;}
           await loadAdminData();return;
@@ -2073,7 +2077,7 @@
     const previous=$('createUserUnit').value;
     const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?selectedUnit:profile.unit_id);
     $('createUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`).join('');
-    $('createUserUnit').disabled=!isAdmin;
+    $('createUserUnit').disabled=!isAdmin&&!divisionSpace;
     const target=units.find(u=>u.id===$('createUserUnit').value);
     const national=isAdmin && target?.name==='ADMIN';
     $('createUserRole').innerHTML=national
@@ -2093,7 +2097,7 @@
     event.preventDefault();
     if(!unitManagement())return;
     const name=$('createUserName').value.trim(),email=$('createUserEmail').value.trim().toLowerCase();
-    const unitId=profile.is_admin?$('createUserUnit').value:(divisionSpace?selectedUnit:profile.unit_id);
+    const unitId=profile.is_admin||divisionSpace?$('createUserUnit').value:profile.unit_id;
     const role=$('createUserRole').value;
     const unit=units.find(u=>u.id===unitId);
     if(!name || name.length>150 || !email || !unit?.active || !['user','manager','admin'].includes(role)
@@ -2145,8 +2149,8 @@
     button.disabled=true;button.textContent='Export en cours…';$('userExportMessage').innerHTML='';
     try{
       const [codes,personEntries]=await Promise.all([
-        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);}),
-        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:q.eq('unit_id',unitId);})
+        fetchAll(()=>{let q=sb.from('month_codes').select('id,unit_id,month_key,code,label').gte('month_key',start).lt('month_key',end).order('id');return national?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId));}),
+        fetchAll(()=>{let q=sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').eq('user_id',userId).gte('month_key',start).lt('month_key',end).order('id');return national?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',unitId));})
       ]);
       if(!personEntries.length){$('userExportMessage').innerHTML=msg('Aucun pointage pour '+(person.full_name||person.email)+' en '+year+'.','warn');return;}
       const name=String(person.full_name||person.email||person.id).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'utilisateur';
