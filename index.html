@@ -194,7 +194,7 @@
   <div id="divisionArea" class="hidden">
     <div class="card">
       <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
-      <p class="muted small">Suivi des unités de la division, en lecture seule. Les autres divisions ne sont pas accessibles.</p>
+      <p class="muted small">Suivi consolidé de la division. Pour gérer les pointages, utilisateurs, documents et messages d’une unité, utilise le sélecteur « Unité » et les onglets de gestion ci-dessous. Seules les unités de ta division sont accessibles.</p>
       <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
       <div id="divisionSummary" aria-live="polite"></div>
       <div class="actions"><button id="exportDivisionCsv" class="secondary" type="button" disabled>Exporter le suivi de ma division CSV</button></div>
@@ -1208,6 +1208,7 @@
     if(!profile.is_admin && selectedUnit!==profile.unit_id){selectedUnit=profile.unit_id;loadMonths();}
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
+    if(!profile.is_admin)loadMonths();
   };
   async function loadUnitManager(){
     if(!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
