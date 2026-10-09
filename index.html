@@ -304,7 +304,7 @@
 
     <section id="admin-users" class="hidden">
       <div class="card">
-        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="divisionPendingSignups" class="hidden"><div class="sectiontitle"><h3>Inscriptions en attente dans ma division</h3><button id="refreshDivisionPending" type="button" class="secondary">Actualiser les demandes</button></div><div id="divisionPendingList"></div></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
+        <div class="sectiontitle"><h2>Utilisateurs</h2></div><div id="unitManagerUsersArea" class="hidden"><div class="sectiontitle"><h3>Responsables de mon unité</h3><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><div id="unitManagerList" aria-live="polite"></div></div>
         <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
@@ -844,7 +844,7 @@
     show('divisionFollowupCard',divisionSpace);
     show('unitFollowupCard',managerSpace);
     show('unitManagerUsersArea',managerSpace);
-    show('divisionPendingSignups',divisionSpace);
+
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
@@ -1691,7 +1691,7 @@
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
-    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);show('divisionPendingSignups',divisionSpace);}
+    if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     if(btn.dataset.adminTab==='divisions')loadDivisions();
@@ -1721,37 +1721,20 @@
   }
 
   async function loadDivisionPendingSignups(){
-    if(!divisionSpace)return;
-    show('divisionPendingSignups',true);
-    const out=$('divisionPendingList');
-    out.textContent='Chargement des inscriptions en attente…';
+    if(!divisionSpace)return [];
     const result=await sb.rpc('pointage_division_pending_signups');
-    if(result.error){out.textContent=result.error.message;return;}
-    out.replaceChildren();
-    for(const person of result.data||[]){
-      const row=document.createElement('div');
-      row.className='notice';
-      const info=document.createElement('span');
-      info.textContent=(person.full_name||person.email)+' — '+(units.find(u=>u.id===person.requested_unit_id)?.name||'Unité inconnue')+' ';
-      const button=document.createElement('button');
-      button.type='button';button.textContent='Activer';
-      button.onclick=async()=>{
-        if(!await confirmAction('Activer cette inscription et la rattacher à son unité demandée ?', {button:'Activer'}))return;
-        button.disabled=true;
-        const response=await sb.rpc('pointage_division_approve_signup',{p_user_id:person.id});
-        if(response.error){alert(response.error.message);button.disabled=false;return;}
-        await loadAdminData();
-      };
-      row.append(info,button);out.append(row);
-    }
-    if(!(result.data||[]).length)out.textContent='Aucune inscription en attente.';
+    if(result.error)throw result.error;
+    return result.data||[];
   }
-  $('refreshDivisionPending').onclick=loadDivisionPendingSignups;
   async function loadAdminUsers(){
     try{adminUserProfiles=await fetchAll(()=>{let q=sb.from('profiles').select('*').order('full_name').order('email');return profile.is_admin?q:(divisionSpace?q.in('unit_id',divisionUnitIds()):q.eq('unit_id',selectedUnit));});}
     catch(error){alert(error.message);return;}
-    renderUsers();
-    if(divisionSpace)await loadDivisionPendingSignups();
+    let pending=[];
+    if(divisionSpace){
+      try{pending=await loadDivisionPendingSignups();}
+      catch(error){alert('Inscriptions en attente indisponibles : '+error.message);}
+    }
+    renderUsers(pending);
     show('unitTransferHistoryArea',!!profile?.is_admin);
     if(profile?.is_admin)loadUnitTransferHistory();
   }
@@ -2047,13 +2030,24 @@
     finally{button.disabled=false;}
   };
 
-  function renderUsers(){
+  function renderUsers(pendingSignups=[]){
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
-    let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
-    if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
+    const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
+    let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
+    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Activer</button></td></tr>');
+    if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
+    document.querySelectorAll('[data-approve-signup]').forEach(button=>button.onclick=async()=>{
+      const person=pending.find(p=>p.id===button.dataset.approveSignup);
+      if(!person||!divisionSpace)return;
+      if(!await confirmAction('Activer le compte de '+(person.full_name||person.email)+' dans l’unité '+(units.find(u=>u.id===person.requested_unit_id)?.name||'demandée')+' ?',{button:'Activer'}))return;
+      button.disabled=true;
+      const {error}=await sb.rpc('pointage_division_approve_signup',{p_user_id:person.id});
+      if(error){alert('Activation impossible : '+error.message);button.disabled=false;return;}
+      await loadAdminData();
+    });
     document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
       if(!profile?.is_admin)return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userTransfer);
