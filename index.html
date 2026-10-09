@@ -268,7 +268,13 @@
         </div>
         <div id="globalExportArea" class="hidden">
           <div class="actions"><button id="exportGlobalSummary" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
-          <div id="globalExportMessage" aria-live="polite"></div>
+          <div id="globalExportMessage" aria-live="polite"></div><div id="multiDivisionExport" style="margin-top:16px">
+            <h3>Exporter plusieurs divisions</h3>
+            <p class="muted small">Sélectionne les divisions à agréger pour l’année du suivi. Les unités et les codes de chaque division sont conservés, y compris les colonnes à zéro.</p>
+            <div id="multiDivisionChoices" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px"></div>
+            <div class="actions"><button id="exportSelectedDivisions" class="secondary" type="button">Exporter les divisions sélectionnées CSV</button></div>
+            <div id="multiDivisionMessage" aria-live="polite"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -1365,6 +1371,8 @@
     const error=divisionResult.error||unitResult.error||peopleResult.error;
     if(error){$('divisionAdminMessage').innerHTML=msg(error.message,'warn');return;}
     divisions=divisionResult.data||[];units=unitResult.data||[];
+    const selectedDivisions=new Set([...document.querySelectorAll('#multiDivisionChoices input:checked')].map(input=>input.value));
+    $('multiDivisionChoices').innerHTML=divisions.filter(d=>d.active).map(d=>`<label class="checkbox"><input type="checkbox" value="${esc(d.id)}"${selectedDivisions.has(d.id)?' checked':''}> ${esc(d.name)}</label>`).join('');
     const persons=peopleResult.data||[];
     unitManagerDirectory=persons;
     renderAdminUnits();
@@ -2378,6 +2386,31 @@
     rows.push([period,'Total par code','','',...codeNames.map(c=>decimalCsv(totals.get(c)||0)),decimalCsv(sum)]);
     return rows;
   }
+
+  $('exportSelectedDivisions').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const chosen=[...document.querySelectorAll('#multiDivisionChoices input:checked')].map(el=>el.value);
+    const year=annualYear;
+    if(!chosen.length){$('multiDivisionMessage').innerHTML=msg('Sélectionne au moins une division.','warn');return;}
+    if(!/^[1-9][0-9]{3}$/.test(year)){$('multiDivisionMessage').innerHTML=msg('Choisis une année valide.','warn');return;}
+    const unitIds=units.filter(u=>chosen.includes(u.division_id)).map(u=>u.id);
+    if(!unitIds.length){$('multiDivisionMessage').innerHTML=msg('Aucune unité dans ces divisions.','warn');return;}
+    const button=$('exportSelectedDivisions'),initial=button.textContent;
+    button.disabled=true;button.textContent='Export en cours…';$('multiDivisionMessage').innerHTML='';
+    try{
+      const start=year+'-01',end=(Number(year)+1)+'-01';
+      const [people,codes,entries]=await Promise.all([
+        fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin,active').order('id')),
+        fetchAll(()=>sb.from('month_codes').select('id,unit_id,month_key,code').in('unit_id',unitIds).gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').in('unit_id',unitIds).gte('month_key',start).lt('month_key',end).order('id'))
+      ]);
+      const scoped=people.filter(p=>unitIds.includes(p.unit_id)||entries.some(e=>e.user_id===p.id));
+      const rows=globalSummaryRows(year,scoped,codes,entries);
+      csvDownload('pointage-divisions-agregees-'+year+'.csv',rows);
+      $('multiDivisionMessage').innerHTML=msg('Export réalisé pour '+chosen.length+' division(s), '+unitIds.length+' unité(s).','ok');
+    }catch(error){$('multiDivisionMessage').innerHTML=msg('Export impossible : '+error.message,'warn');}
+    finally{button.disabled=false;button.textContent=initial;}
+  };
 
   $('exportGlobalSummary').onclick=async()=>{
     if(!profile?.is_admin) return;
