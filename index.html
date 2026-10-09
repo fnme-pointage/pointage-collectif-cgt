@@ -1196,7 +1196,8 @@
       if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=allowed[0]?.id||'';
       $('divisionDocumentUnit').innerHTML=allowed.map(u=>`<option value="${esc(u.id)}"${u.id===divisionDocumentUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     }
-    show('divisionDocumentField',divisionSpace&&scope==='unit');
+    if(personal)show('divisionDocumentField',false);
+    else show('divisionDocumentField',divisionSpace&&scope==='unit');
     const unitName=units.find(u=>u.id===documentUnitId())?.name||'';
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
@@ -1215,7 +1216,7 @@
     documentRequest++;closePdfReader();
     managerSpace=false;divisionSpace=false;if(!profile.is_admin)show('adminArea',false);
     show('documentsArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminUnitField',profile.is_admin);show('userArea',!profile.is_admin);
-    if(!profile.is_admin && selectedUnit!==profile.unit_id){selectedUnit=profile.unit_id;loadMonths();}
+    if(!profile.is_admin && selectedUnit!==profile.unit_id)selectedUnit=profile.unit_id;
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     if(!profile.is_admin)loadMonths();
@@ -1362,7 +1363,7 @@
     if(!divisionCanManageUnit(selectedUnit))selectedUnit=allowed[0].id;
     if(!divisionCanManageUnit(divisionDocumentUnit))divisionDocumentUnit=selectedUnit;
     show('documentsArea',false);show('userArea',false);show('adminArea',true);show('unitManagerArea',false);show('divisionArea',true);
-    show('adminUnitField',true);
+    show('adminUnitField',false);
     renderAdminUnits();
     ['userPointageTab','userDocumentsTab','userUnitDocumentsTab','unitManagerTab'].forEach(id=>$(id).classList.remove('active'));
     $('divisionManagerTab').classList.add('active');
@@ -1636,6 +1637,7 @@
     ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
     if(btn.dataset.adminTab==='divisions')loadDivisions();
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
+    if(divisionSpace)show('adminUnitField',btn.dataset.adminTab==='codes');
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
@@ -2092,7 +2094,7 @@
     const options=units.filter(u=>u.active && (isAdmin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)));
     const scopedToDivision=divisionSpace&&!isAdmin;
     const previous=$('createUserUnit').value;
-    const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?selectedUnit:profile.unit_id);
+    const preferred=isAdmin ? (options.some(u=>u.id===previous)?previous:selectedUnit) : (scopedToDivision?(options.some(u=>u.id===previous)?previous:selectedUnit):profile.unit_id);
     $('createUserUnit').innerHTML=options.map(u=>`<option value="${esc(u.id)}"${u.id===preferred?' selected':''}>${esc(u.name)}</option>`).join('');
     $('createUserUnit').disabled=!isAdmin&&!divisionSpace;
     const target=units.find(u=>u.id===$('createUserUnit').value);
@@ -2263,12 +2265,12 @@
     if(!unitManagement())return;
     await loadAdminData();
     if(!annualReady) return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
+    const rows=[divisionSpace?['Mois','Nom','E-mail','Unité','Code','Libellé','Heures décimales']:['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(annualCodes.map(c=>[Number(c.id),c]));
     annualEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
+      rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${annualYear}.csv`,rows);
   };
@@ -2292,12 +2294,12 @@
     if(!monthlyAvailable() || monthlyGlobalView()) return;
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
-    const rows=[['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
+    const rows=[divisionSpace?['Mois','Nom','E-mail','Unité','Code','Libellé','Heures décimales']:['Mois','Nom','E-mail','Code','Libellé','Heures décimales']];
     const profiles=new Map(allProfiles.map(p=>[p.id,p]));
     const codes=new Map(monthlyCodes.map(c=>[Number(c.id),c]));
     monthlyEntries.slice().sort((a,b)=>a.month_key.localeCompare(b.month_key)||String(a.user_id).localeCompare(String(b.user_id))).forEach(e=>{
       const p=profiles.get(e.user_id), c=codes.get(Number(e.code_id));
-      rows.push([e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
+      rows.push(divisionSpace?[e.month_key,p?.full_name||'',p?.email||'',units.find(u=>u.id===e.unit_id)?.name||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]:[e.month_key,p?.full_name||'',p?.email||'',e.saved_code||c?.code||'',e.saved_label||c?.label||'',decimalCsv(entryDurationSeconds(e))]);
     });
     csvDownload(`pointage-detail-mensuel-${units.find(u=>u.id===selectedUnit)?.name||'unite'}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
