@@ -2302,7 +2302,8 @@
           const key=p.id+'|'+p.unit_id;
           if(!byKey.has(key))byKey.set(key,{user:p,unitId:p.unit_id,values:new Map()});
         }
-        const codeNames=[...codeTotals.keys()].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+        // Afficher tous les codes présents au catalogue de la période, même sans aucune saisie.
+        const codeNames=[...new Set([...codes.map(c=>c.code).filter(Boolean),...codeTotals.keys()])].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
         rows=[['Période','Nom','E-mail','Unité',...codeNames,'Total heures']];
         const ordered=[...byKey.values()].sort((a,b)=>(unitNames.get(a.unitId)||'').localeCompare(unitNames.get(b.unitId)||'','fr')||
           String(a.user?.full_name||'').localeCompare(String(b.user?.full_name||''),'fr'));
