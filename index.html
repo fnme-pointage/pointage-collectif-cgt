@@ -197,7 +197,6 @@
       <p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs couvrent toutes les unités de la division. Le catalogue et les bases documentaires peuvent être gérés unité par unité. Aucune autre division n’est accessible.</p>
       <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
       <div id="divisionSummary" aria-live="polite"></div>
-      <div class="actions"><button id="exportDivisionCsv" class="secondary" type="button" disabled>Exporter le suivi de ma division CSV</button></div>
     </div>
   </div>
   <div id="adminArea" class="hidden">
@@ -1340,7 +1339,7 @@
     const year=Number($('divisionYear').value);
     $('divisionSummary').innerHTML='<p class="muted small">Chargement…</p>';
     const {data,error}=await sb.rpc('pointage_division_overview',{p_year:year});
-    if(error){divisionOverview=null;$('exportDivisionCsv').disabled=true;$('divisionSummary').innerHTML=msg(error.message,'warn');return;}
+    if(error){divisionOverview=null;$('divisionSummary').innerHTML=msg(error.message,'warn');return;}
     divisionOverview=data;
     $('divisionHeading').textContent='Gestion de ma division — '+data.division;
     const rows=data.units||[];
@@ -1349,7 +1348,6 @@
       '<div class="tablewrap"><table><thead><tr><th>Unité</th><th>Utilisateurs</th><th>Saisies</th><th>Heures</th></tr></thead><tbody>'+
       rows.map(u=>'<tr><td>'+esc(u.name)+'</td><td>'+Number(u.members)+'</td><td>'+Number(u.entries)+'</td><td>'+fmt(Number(u.duration_seconds||0)/3600)+'</td></tr>').join('')+
       '</tbody></table></div>';
-    $('exportDivisionCsv').disabled=false;
   }
   $('divisionManagerTab').onclick=async()=>{
     if(!profile?.is_division_manager||profile.is_admin||documentBusy)return;
@@ -1374,13 +1372,6 @@
   };
   $('reloadDivisionSummary').onclick=loadDivisionOverview;
   $('divisionYear').onchange=loadDivisionOverview;
-  $('exportDivisionCsv').onclick=()=>{
-    if(!divisionOverview||!profile?.is_division_manager)return;
-    const rows=[['Année','Division','Unité','Utilisateurs','Saisies','Total heures']];
-    for(const u of divisionOverview.units||[])rows.push([divisionOverview.year,divisionOverview.division,u.name,u.members,u.entries,(Number(u.duration_seconds||0)/3600).toFixed(2).replace('.',',')]);
-    csvDownload('suivi-division-'+divisionOverview.division+'-'+divisionOverview.year+'.csv',rows);
-  };
-
   $('refreshUnitManager').onclick=loadUnitManager;
   $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
@@ -2261,7 +2252,77 @@
     const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
   }
+  // Exports division : relire directement les données de TOUTES les unités au moment du clic.
+  // Une ligne est indexée par (utilisateur, unité du pointage) pour conserver les mutations.
+  async function exportDivisionPeriod(period,detail,button){
+    if(!divisionSpace||!profile?.active||!profile?.is_division_manager||profile.is_admin)return;
+    if(!/^[1-9][0-9]{3}(?:-(?:0[1-9]|1[0-2]))?$/.test(period))return;
+    const ids=divisionUnitIds();
+    if(!ids.length)throw new Error('Aucune unité active dans la division.');
+    const start=period.length===7?period:period+'-01';
+    const end=period.length===7?(Number(period.slice(5,7))===12?(Number(period.slice(0,4))+1)+'-01':period.slice(0,4)+'-'+String(Number(period.slice(5,7))+1).padStart(2,'0')):(Number(period)+1)+'-01';
+    const original=button.textContent;
+    button.disabled=true;button.textContent='Export de la division…';
+    try{
+      const [people,codes,items]=await Promise.all([
+        fetchAll(()=>sb.from('profiles').select('id,full_name,email,unit_id,is_admin').in('unit_id',ids).order('full_name')),
+        fetchAll(()=>sb.from('month_codes').select('id,unit_id,code,label').in('unit_id',ids).gte('month_key',start).lt('month_key',end).order('id')),
+        fetchAll(()=>sb.from('entries').select('id,user_id,unit_id,month_key,code_id,hours,duration_seconds,saved_code,saved_label').in('unit_id',ids).gte('month_key',start).lt('month_key',end).order('id'))
+      ]);
+      const userIds=[...new Set(items.map(e=>e.user_id))];
+      const known=new Map(people.map(p=>[p.id,p]));
+      const missing=userIds.filter(id=>!known.has(id));
+      for(let i=0;i<missing.length;i+=100){
+        const {data,error}=await sb.from('profiles').select('id,full_name,email,is_admin').in('id',missing.slice(i,i+100));
+        if(error)throw error;
+        for(const p of data||[])known.set(p.id,p);
+      }
+      const codeLookup=new Map(codes.map(c=>[Number(c.id),c]));
+      const unitNames=new Map(divisionManagedUnits().map(u=>[u.id,u.name]));
+      const normal=items.filter(e=>!known.get(e.user_id)?.is_admin);
+      let rows;
+      if(detail){
+        rows=[['Mois','Nom','E-mail','Unité du pointage','Code','Libellé','Heures décimales']];
+        for(const e of normal){
+          const p=known.get(e.user_id),code=codeLookup.get(Number(e.code_id));
+          rows.push([e.month_key,p?.full_name||'',p?.email||'',unitNames.get(e.unit_id)||'',
+            e.saved_code||code?.code||'',e.saved_label||code?.label||'',decimalCsv(entryDurationSeconds(e))]);
+        }
+      }else{
+        const byKey=new Map(),codeTotals=new Map();
+        for(const e of normal){
+          const code=e.saved_code||codeLookup.get(Number(e.code_id))?.code||'Code '+e.code_id;
+          const key=e.user_id+'|'+e.unit_id;
+          if(!byKey.has(key))byKey.set(key,{user:known.get(e.user_id),unitId:e.unit_id,values:new Map()});
+          const item=byKey.get(key),seconds=entryDurationSeconds(e);
+          item.values.set(code,(item.values.get(code)||0)+seconds);
+          codeTotals.set(code,(codeTotals.get(code)||0)+seconds);
+        }
+        for(const p of people.filter(p=>!p.is_admin)){
+          const key=p.id+'|'+p.unit_id;
+          if(!byKey.has(key))byKey.set(key,{user:p,unitId:p.unit_id,values:new Map()});
+        }
+        const codeNames=[...codeTotals.keys()].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+        rows=[['Période','Nom','E-mail','Unité',...codeNames,'Total heures']];
+        const ordered=[...byKey.values()].sort((a,b)=>(unitNames.get(a.unitId)||'').localeCompare(unitNames.get(b.unitId)||'','fr')||
+          String(a.user?.full_name||'').localeCompare(String(b.user?.full_name||''),'fr'));
+        for(const row of ordered){
+          const sum=[...row.values.values()].reduce((a,b)=>a+b,0);
+          rows.push([period,row.user?.full_name||'',row.user?.email||'',unitNames.get(row.unitId)||'',
+            ...codeNames.map(code=>decimalCsv(row.values.get(code)||0)),decimalCsv(sum)]);
+        }
+        const total=[...codeTotals.values()].reduce((a,b)=>a+b,0);
+        rows.push([period,'Total division','','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(total)]);
+      }
+      const divisionName=String(divisionOverview?.division||'division').replace(/[^a-zA-Z0-9_-]/g,'-');
+      csvDownload('pointage-'+(detail?'detail':'recap')+'-division-'+divisionName+'-'+period+'.csv',rows);
+    }catch(error){
+      alert('Export division impossible : '+error.message);
+    }finally{button.disabled=false;button.textContent=original;}
+  }
+
   $('exportRaw').onclick=async()=>{
+    if(divisionSpace)return exportDivisionPeriod(annualYear,true,$('exportRaw'));
     if(!unitManagement())return;
     await loadAdminData();
     if(!annualReady) return;
@@ -2275,6 +2336,7 @@
     csvDownload(`pointage-detail-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${annualYear}.csv`,rows);
   };
   $('exportSummary').onclick=async()=>{
+    if(divisionSpace)return exportDivisionPeriod(annualYear,false,$('exportSummary'));
     if(!unitManagement())return;
     await loadAdminData();
     if(!annualReady) return;
@@ -2291,6 +2353,7 @@
   };
 
   $('exportMonthlyRaw').onclick=async()=>{
+    if(divisionSpace)return exportDivisionPeriod(monthlyYear+'-'+monthlyMonth,true,$('exportMonthlyRaw'));
     if(!monthlyAvailable() || monthlyGlobalView()) return;
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
@@ -2304,6 +2367,7 @@
     csvDownload(`pointage-detail-mensuel-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
   $('exportMonthlySummary').onclick=async()=>{
+    if(divisionSpace)return exportDivisionPeriod(monthlyYear+'-'+monthlyMonth,false,$('exportMonthlySummary'));
     if(!monthlyAvailable() || monthlyGlobalView()) return;
     await loadAdminData();
     if(!monthlyReady || !monthlyAvailable() || monthlyGlobalView())return;
