@@ -1242,7 +1242,7 @@
     if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
     if(!await allowLeavePointage())return;
     show('createUserForm',false);
-    managerSpace=true;divisionSpace=false;selectedUnit=profile.unit_id;show('divisionArea',false);
+    managerSpace=true;divisionSpace=false;selectedUnit=profile.unit_id;show('divisionArea',false);show('adminUnitField',false);
     if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}
     documentRequest++;closePdfReader();
     show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminArea',true);
