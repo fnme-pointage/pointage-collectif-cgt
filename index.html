@@ -362,6 +362,7 @@
         <div class="sectiontitle"><h2>Divisions</h2><button id="refreshDivisions" type="button" class="secondary">Actualiser</button></div>
         <p class="muted small">La DTEAM contient initialement OPF, UFPI et ULM. La DPN attend ses unités. Seul Admin national peut affecter un responsable à chaque division.</p>
         <div id="divisionsList"></div>
+        <div class="row"><div class="grow"><label for="newDivisionName">Nouvelle division</label><input id="newDivisionName" maxlength="100" placeholder="Ex. DPN"></div><button id="createDivision" type="button">Créer la division</button></div>
         <h3>Rattacher une unité à une division</h3>
         <div class="row">
           <div class="grow"><label for="divisionUnitSelect">Unité</label><select id="divisionUnitSelect"></select></div>
@@ -373,6 +374,7 @@
           <div class="grow"><label for="divisionManagerDivision">Division</label><select id="divisionManagerDivision"></select></div>
           <div class="grow"><label for="divisionManagerPerson">Utilisateur actif</label><select id="divisionManagerPerson"></select></div>
           <button id="assignDivisionManager" type="button">Nommer</button>
+          <button id="removeDivisionManager" class="secondary" type="button">Retirer le responsable</button>
         </div>
         <div id="divisionAdminMessage" aria-live="polite"></div>
       </div>
@@ -1271,6 +1273,26 @@
     $('divisionManagerDivision').onchange=managerChoices;
     managerChoices();
   }
+  $('createDivision').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const name=$('newDivisionName').value.trim();
+    if(!name)return;
+    const {error}=await sb.rpc('pointage_admin_create_division',{p_name:name});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Division créée.',error?'warn':'ok');
+    if(!error){$('newDivisionName').value='';await loadDivisions();}
+  };
+  $('removeDivisionManager').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const division=$('divisionManagerDivision').value;
+    const {data,error:readError}=await sb.from('profiles').select('id,full_name,email')
+      .eq('is_division_manager',true).eq('managed_division_id',division).maybeSingle();
+    if(readError){$('divisionAdminMessage').innerHTML=msg(readError.message,'warn');return;}
+    if(!data){$('divisionAdminMessage').innerHTML=msg('Aucun responsable nommé pour cette division.','warn');return;}
+    if(!await confirmAction('Retirer la fonction de Responsable de division à '+(data.full_name||data.email)+' ?',{button:'Retirer'}))return;
+    const {error}=await sb.rpc('pointage_admin_set_division_manager',{p_user_id:data.id,p_division_id:division,p_enabled:false});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Responsable retiré.',error?'warn':'ok');
+    if(!error)await loadDivisions();
+  };
   $('refreshDivisions').onclick=loadDivisions;
   $('assignUnitDivision').onclick=async()=>{
     if(!profile?.is_admin)return;
