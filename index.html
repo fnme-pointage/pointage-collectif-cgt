@@ -301,7 +301,7 @@
     <section id="admin-users" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Utilisateurs</h2></div>
-        <p class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
+        <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
           <h3>Créer un utilisateur</h3>
@@ -809,7 +809,20 @@
     await route();
   };
 
+  function updateUsersScopeHelp(){
+    const help=$('usersScopeHelp');
+    if(!help)return;
+    if(divisionSpace){
+      help.textContent='Cette vue affiche les utilisateurs de l’ensemble des unités de votre division. Vous pouvez gérer les comptes et inviter de nouveaux utilisateurs dans les différentes unités de votre division, selon vos habilitations. Lors d’une invitation, vous devez sélectionner l’unité de rattachement de l’utilisateur.';
+    }else if(managerSpace){
+      help.textContent='Cette vue affiche uniquement les utilisateurs rattachés à votre unité. Vous pouvez gérer les comptes et inviter de nouveaux utilisateurs dans la limite de vos habilitations. Les comptes créés par invitation sont directement rattachés à votre unité, avec le profil autorisé.';
+    }else{
+      help.textContent='La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.';
+    }
+  }
+
   function renderAdminUnits(){
+    updateUsersScopeHelp();
     $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
