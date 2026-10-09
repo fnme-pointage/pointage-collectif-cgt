@@ -2142,10 +2142,11 @@
       const p=adminUserProfiles.find(item=>item.id===button.dataset.userEdit);
       if(!p) return;
       const cell=button.closest('td');
+      const pendingDivisionSignup=divisionSpace&&!p.active&&!!p.requested_unit_id&&divisionCanManageUnit(p.requested_unit_id);
       cell.innerHTML=`<label>Nom et prénom<input data-edit-name type="text" maxlength="150" value="${esc(p.full_name||'')}"></label>
         ${profile.is_admin
           ? `<label>Unité<select data-edit-unit>${units.map(u=>`<option value="${esc(u.id)}"${u.id===p.unit_id?' selected':''}${!u.active&&u.id!==p.unit_id?' disabled':''}>${esc(u.name)}${u.active?'':' (inactive)'}</option>`).join('')}</select></label>`
-          : `<label>Unité<input type="text" value="${esc(units.find(u=>u.id===p.unit_id)?.name||'Unité inconnue')}" readonly aria-label="Unité de rattachement en lecture seule"></label>`}
+          : pendingDivisionSignup?`<label>Unité de rattachement<select data-edit-unit>${divisionManagedUnits().map(u=>`<option value="${esc(u.id)}"${u.id===(divisionCanManageUnit(p.unit_id)?p.unit_id:p.requested_unit_id)?' selected':''}>${esc(u.name)}</option>`).join('')}</select></label>`:`<label>Unité<input type="text" value="${esc(units.find(u=>u.id===p.unit_id)?.name||'Unité inconnue')}" readonly aria-label="Unité de rattachement en lecture seule"></label>`}
         ${p.is_admin
           ? `<label>Profil<select data-edit-role><option value="admin" selected>Administrateur national</option></select></label>`
           : `<div class="small"><strong>Profils cumulables</strong>
@@ -2160,13 +2161,23 @@
                   </select></label>`
                : (p.is_division_manager?'<p class="muted small">Responsable de division : attribution réservée à Admin national.</p>':'')}
            </div>`}
+        ${pendingDivisionSignup?'<label class="checkbox"><input type="checkbox" data-edit-pending-active> Actif — autoriser l’accès au compte</label>':''}
         <button data-edit-save type="button">Enregistrer</button> <button class="secondary" data-edit-cancel type="button">Annuler</button>`;
       cell.querySelector('[data-edit-cancel]').onclick=renderUsers;
       cell.querySelector('[data-edit-save]').onclick=async()=>{
         const name=cell.querySelector('[data-edit-name]').value.trim();
-        const unitId=profile.is_admin?cell.querySelector('[data-edit-unit]').value:p.unit_id;
+        const unitId=(profile.is_admin||pendingDivisionSignup)?cell.querySelector('[data-edit-unit]').value:p.unit_id;
         const isUnitManager=p.is_admin?false:!!cell.querySelector('[data-edit-manager]').checked;
         const role=p.is_admin?'admin':isUnitManager?'manager':'user';
+        if(pendingDivisionSignup){
+          if(!divisionCanManageUnit(unitId)){alert('Unité hors de votre division.');return;}
+          const activeField=cell.querySelector('[data-edit-pending-active]');
+          const nextActive=!!activeField?.checked;
+          if(nextActive&&!await confirmAction('Activer le compte dans l’unité '+(units.find(u=>u.id===unitId)?.name||'sélectionnée')+' ?', {button:'Activer'}))return;
+          const {error}=await sb.rpc('pointage_division_review_signup',{p_user_id:p.id,p_full_name:name,p_unit_id:unitId,p_role:role,p_active:nextActive});
+          if(error){alert(error.message);return;}
+          await loadAdminData();return;
+        }
         if(!profile.is_admin){
           if(role==='admin'||!(divisionSpace?divisionCanManageUnit(p.unit_id):p.unit_id===selectedUnit)||!unitManagement()){alert('Droits insuffisants.');return;}
           const {error}=await sb.rpc('pointage_manager_update_member',{p_user_id:p.id,p_full_name:name,p_role:role,p_active:p.active});
