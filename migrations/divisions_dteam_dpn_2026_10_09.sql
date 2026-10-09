@@ -22,7 +22,7 @@ ALTER TABLE public.pointage_divisions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY pointage_divisions_list ON public.pointage_divisions
  FOR SELECT TO authenticated USING (
    EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=auth.uid() AND p.active
-     AND (p.is_admin OR (p.is_division_manager AND p.managed_division_id=pointage_divisions.id)))
+     AND (p.is_admin OR (p.is_division_manager AND p.managed_division_id=pointage_divisions.id AND EXISTS(SELECT 1 FROM public.units u WHERE u.id=p.unit_id AND u.division_id=pointage_divisions.id))))
  );
 GRANT SELECT ON public.pointage_divisions TO authenticated;
 
@@ -72,7 +72,7 @@ BEGIN
  SELECT d.* INTO division_row FROM public.pointage_divisions d
  JOIN public.profiles p ON p.managed_division_id=d.id
  WHERE p.id=auth.uid() AND p.active AND p.is_division_manager AND NOT p.is_admin
- AND d.active;
+ AND d.active AND EXISTS(SELECT 1 FROM public.units u WHERE u.id=p.unit_id AND u.division_id=d.id);
  IF NOT FOUND THEN RAISE EXCEPTION 'Accès Responsable de division requis' USING ERRCODE='42501'; END IF;
  SELECT jsonb_build_object('division',division_row.name,'year',p_year,
  'units',COALESCE(jsonb_agg(jsonb_build_object(
@@ -97,3 +97,18 @@ REVOKE ALL ON FUNCTION public.pointage_division_overview(integer) FROM PUBLIC,an
 GRANT EXECUTE ON FUNCTION public.pointage_admin_assign_unit_division(uuid,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pointage_admin_set_division_manager(uuid,uuid,boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pointage_division_overview(integer) TO authenticated;
+
+-- Création de nouvelles divisions et remplacement des responsables.
+CREATE OR REPLACE FUNCTION public.pointage_admin_create_division(p_name text)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $fn$
+DECLARE new_id uuid;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=auth.uid() AND p.active AND p.is_admin)
+ THEN RAISE EXCEPTION 'Administrateur national requis' USING ERRCODE='42501'; END IF;
+ IF p_name IS NULL OR length(btrim(p_name)) NOT BETWEEN 2 AND 100 THEN
+  RAISE EXCEPTION 'Nom de division invalide'; END IF;
+ INSERT INTO public.pointage_divisions(name) VALUES(upper(btrim(p_name))) RETURNING id INTO new_id;
+ RETURN new_id;
+END;$fn$;
+REVOKE ALL ON FUNCTION public.pointage_admin_create_division(text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.pointage_admin_create_division(text) TO authenticated;
