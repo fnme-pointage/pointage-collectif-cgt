@@ -2022,7 +2022,7 @@
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     let html=`<div class="tablewrap"><table><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id===profile.id?'':` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`}</td></tr>`);
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${p.is_admin?'Administrateur national':['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${profile.is_admin&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${profile.is_admin&&p.id!==profile.id?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
     if(!unitProfiles.length) html+=`<tr><td colspan="${isAdminUnit?7:6}" class="muted small">Aucun utilisateur dans cette unité.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-user-transfer]').forEach(button=>button.onclick=()=>{
@@ -2040,9 +2040,9 @@
       $('transferUserForm').scrollIntoView({behavior:'smooth',block:'nearest'});
     });
     document.querySelectorAll('[data-user-delete]').forEach(button=>button.onclick=async()=>{
-      if(!unitManagement())return;
+      if(!profile?.is_admin)return;
       const person=adminUserProfiles.find(p=>p.id===button.dataset.userDelete);
-      if(!person||person.id===profile.id||(!profile.is_admin&&(!unitManagement()||!(divisionSpace?divisionCanManageUnit(person.unit_id):person.unit_id===selectedUnit)||person.is_admin)))return;
+      if(!person||person.id===profile.id)return;
       const name=person.full_name||person.email||'cet utilisateur';
       if(!await confirmAction('Supprimer définitivement le compte de « '+name+' » ? Cette action coupe son accès et ne pourra pas être annulée. Si ce compte contient des pointages, la suppression sera refusée pour préserver l’historique.',{title:'Supprimer le compte',button:'Supprimer'}))return;
       button.disabled=true;
