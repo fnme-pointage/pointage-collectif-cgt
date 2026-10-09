@@ -790,7 +790,7 @@
     show('userMonthStateField',!profile.is_admin);
     show('monthButtons',!profile.is_admin);
     if(profile.is_admin){
-      const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active').order('name');
+      const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active,division_id').order('name');
       if(ue){alert(ue.message);return;}
       units=allUnits||[];
       if(!units.some(u=>u.id===selectedUnit)) selectedUnit=profile.unit_id;
@@ -856,7 +856,19 @@
     show('divisionFollowupCard',divisionSpace);
     show('unitFollowupCard',managerSpace);
 
-    $('adminUnit').innerHTML=units.filter(u=>u.active && (profile.is_admin || (divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`).join('');
+    const availableUnits=units.filter(u=>u.active&&(profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)));
+    const optionFor=u=>`<option value="${esc(u.id)}"${u.id===selectedUnit?' selected':''}>${esc(u.name)}</option>`;
+    if(profile.is_admin){
+      const adminUnits=availableUnits.filter(u=>u.name==='ADMIN');
+      const grouped=divisions.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(d=>{
+        const members=availableUnits.filter(u=>u.division_id===d.id).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+        return members.length?`<optgroup label="${esc(d.name)}">${members.map(optionFor).join('')}</optgroup>`:'';
+      }).join('');
+      const others=availableUnits.filter(u=>u.name!=='ADMIN'&&!divisions.some(d=>d.id===u.division_id)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+      $('adminUnit').innerHTML=adminUnits.map(optionFor).join('')+grouped+(others.length?`<optgroup label="Sans division">${others.map(optionFor).join('')}</optgroup>`:'');
+    }else{
+      $('adminUnit').innerHTML=availableUnits.map(optionFor).join('');
+    }
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     show('maintenanceAdmin',profile.is_admin && isAdminUnit);
     refreshFlashTargets();
