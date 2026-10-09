@@ -45,3 +45,25 @@ END;$f$;
 
 -- La liste des profils hors de l'unité propre reste exclusivement en lecture RLS.
 -- Les écritures de profils continuent à utiliser les RPC contrôlées.
+
+-- Supabase Storage : autoriser les PDF uniquement sous le préfixe UUID
+-- d'une unité explicitement administrée par le responsable.
+CREATE POLICY pointage_pdfs_division_insert ON storage.objects
+ FOR INSERT TO authenticated WITH CHECK (
+  bucket_id='pointage-documents'
+  AND EXISTS(SELECT 1 FROM public.units u WHERE name LIKE u.id::text||'/%.pdf'
+    AND public.pointage_manager_unit_allowed(u.id))
+ );
+CREATE POLICY pointage_pdfs_division_upload_read ON storage.objects
+ FOR SELECT TO authenticated USING (
+  bucket_id='pointage-documents'
+  AND EXISTS(SELECT 1 FROM public.units u WHERE name LIKE u.id::text||'/%.pdf'
+    AND public.pointage_manager_unit_allowed(u.id))
+ );
+CREATE POLICY pointage_pdfs_division_delete ON storage.objects
+ FOR DELETE TO authenticated USING (
+  bucket_id='pointage-documents'
+  AND EXISTS(SELECT 1 FROM public.pointage_documents d
+   WHERE d.file_path=name AND d.unit_id IS NOT NULL
+      AND public.pointage_manager_unit_allowed(d.unit_id))
+ );
