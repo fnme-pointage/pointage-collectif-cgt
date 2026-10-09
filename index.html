@@ -167,6 +167,7 @@
     <button id="userDocumentsTab" type="button">Base documentaire nationale</button>
     <button id="userUnitDocumentsTab" type="button">Base documentaire d’unité</button>
     <button id="unitManagerTab" class="hidden" type="button">Gestion de mon unité</button>
+    <button id="divisionManagerTab" class="hidden" type="button">Gestion de ma division</button>
   </div>
   <div id="userArea" class="hidden">
     <div class="card">
@@ -190,6 +191,15 @@
 
   <div id="unitManagerArea" class="hidden"><div class="card"><div class="sectiontitle"><h2 id="unitManagerTitle">Gestion de mon unité</h2><button id="refreshUnitManager" class="secondary" type="button">Actualiser</button></div><p class="muted small">Espace réservé aux responsables de cette unité. Les catalogues de codes restent en lecture seule, et seuls les droits explicitement accordés sont accessibles.</p><div id="unitManagerList" aria-live="polite"></div></div></div>
 
+  <div id="divisionArea" class="hidden">
+    <div class="card">
+      <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2><button id="reloadDivisionSummary" type="button" class="secondary">Actualiser</button></div>
+      <p class="muted small">Suivi des unités de la division, en lecture seule. Les autres divisions ne sont pas accessibles.</p>
+      <label for="divisionYear">Année du suivi</label><input id="divisionYear" type="number" min="1900" max="9999" value="2026">
+      <div id="divisionSummary" aria-live="polite"></div>
+      <div class="actions"><button id="exportDivisionCsv" class="secondary" type="button" disabled>Exporter le suivi de ma division CSV</button></div>
+    </div>
+  </div>
   <div id="adminArea" class="hidden">
     <div class="adminnav">
       <button data-admin-tab="results" class="active">Suivi</button>
@@ -197,6 +207,7 @@
       <button data-admin-tab="flash">Messages flash</button>
       <button data-admin-tab="users">Utilisateurs</button>
       <button data-admin-tab="units" class="hidden">Unités</button>
+      <button data-admin-tab="divisions" class="hidden">Divisions</button>
       <button data-admin-tab="documents">Base documentaire nationale</button>
       <button data-admin-tab="unit-documents" class="hidden">Base documentaire d’unité</button>
     </div>
@@ -346,12 +357,35 @@
       </div>
     </section>
 
+    <section id="admin-divisions" class="hidden">
+      <div class="card">
+        <div class="sectiontitle"><h2>Divisions</h2><button id="refreshDivisions" type="button" class="secondary">Actualiser</button></div>
+        <p class="muted small">La DTEAM contient initialement OPF, UFPI et ULM. La DPN attend ses unités. Seul Admin national peut affecter un responsable à chaque division.</p>
+        <div id="divisionsList"></div>
+        <div class="row"><div class="grow"><label for="newDivisionName">Nouvelle division</label><input id="newDivisionName" maxlength="100" placeholder="Ex. DPN"></div><button id="createDivision" type="button">Créer la division</button></div>
+        <h3>Rattacher une unité à une division</h3>
+        <div class="row">
+          <div class="grow"><label for="divisionUnitSelect">Unité</label><select id="divisionUnitSelect"></select></div>
+          <div class="grow"><label for="divisionUnitTarget">Division</label><select id="divisionUnitTarget"></select></div>
+          <button id="assignUnitDivision" type="button">Rattacher</button>
+        </div>
+        <h3>Désigner le Responsable de division</h3>
+        <div class="row">
+          <div class="grow"><label for="divisionManagerDivision">Division</label><select id="divisionManagerDivision"></select></div>
+          <div class="grow"><label for="divisionManagerPerson">Utilisateur actif</label><select id="divisionManagerPerson"></select></div>
+          <button id="assignDivisionManager" type="button">Nommer</button>
+          <button id="removeDivisionManager" class="secondary" type="button">Retirer le responsable</button>
+        </div>
+        <div id="divisionAdminMessage" aria-live="polite"></div>
+      </div>
+    </section>
     <section id="admin-units" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Unités</h2></div>
         <div id="unitsList"></div>
         <div class="row">
           <div class="grow"><label for="newUnitName">Nouvelle unité</label><input id="newUnitName" maxlength="100" placeholder="Ex. UFPI"></div>
+          <div class="grow"><label for="newUnitDivision">Division de rattachement</label><select id="newUnitDivision" required></select></div>
           <button id="createUnit">Créer l’unité</button>
         </div>
         <div id="unitMessage" style="margin-top:10px"></div>
@@ -430,7 +464,7 @@
   let recovering=['recovery','invite'].includes(new URLSearchParams(location.hash.slice(1)).get('type')) || ['recovery','invite'].includes(new URLSearchParams(location.search).get('type'));
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  let managerSpace=false;
+  let managerSpace=false,divisions=[],divisionOverview=null;
   const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active);
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
@@ -697,7 +731,8 @@
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
   async function route(){
-    resetFlashSession();managerSpace=false;
+    resetFlashSession();managerSpace=false;divisionOverview=null;
+    show('divisionArea',false);
     show('documentsArea',false);show('userNav',false);show('unitManagerArea',false);
     closePdfReader();
     show('recoveryView',recovering); show('authView',!session && !recovering); show('pendingView',false); show('mainView',false);
@@ -719,10 +754,12 @@
     }
     show('authView',false);show('mainView',true);
     renderUserIdentity();
-    $('userRole').textContent=profile.is_admin?'Administrateur':profile.is_unit_manager?'Responsable d’unité':'Utilisateur';
+    $('userRole').textContent=profile.is_admin?'Administrateur national':profile.is_division_manager?'Responsable de division':profile.is_unit_manager?'Responsable d’unité':'Utilisateur';
+    show('divisionManagerTab',!!profile.is_division_manager&&!profile.is_admin);
     show('unitManagerTab',!!profile.is_unit_manager&&!profile.is_admin);
     $('unitManagerTab').classList.remove('active');
     show('adminArea',profile.is_admin);
+    if(profile.is_admin)await loadDivisions();
     show('maintenanceAdmin',false);
     show('userNav',!profile.is_admin);
     show('userContact',!profile.is_admin);
@@ -776,8 +813,10 @@
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
     const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
     const unitsTab=document.querySelector('[data-admin-tab="units"]');
+    const divisionsTab=document.querySelector('[data-admin-tab="divisions"]');
+    divisionsTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
     unitsTab.classList.toggle('hidden',!isAdminUnit);
-    if(!isAdminUnit && unitsTab.classList.contains('active'))document.querySelector('[data-admin-tab="results"]').click();
+    if(!isAdminUnit && (unitsTab.classList.contains('active')||divisionsTab.classList.contains('active')))document.querySelector('[data-admin-tab="results"]').click();
     nationalTab.classList.toggle('hidden',!isAdminUnit);
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
@@ -789,8 +828,13 @@
     if(!await allowLeaveCatalogue())return;
     const name=$('newUnitName').value.trim();
     if(!name){$('unitMessage').innerHTML=msg('Indique le nom de l’unité.','warn');return;}
+    const divisionId=$('newUnitDivision').value;
+    if(!divisionId){$('unitMessage').innerHTML=msg('Sélectionne une division avant de créer une unité.','warn');return;}
     const {data,error}=await sb.from('units').insert({name}).select('id,name,active').single();
     if(error){$('unitMessage').innerHTML=msg(error.message,'warn');return;}
+    const {error:assignError}=await sb.rpc('pointage_admin_assign_unit_division',{p_unit_id:data.id,p_division_id:divisionId});
+    if(assignError){$('unitMessage').innerHTML=msg('Unité créée mais rattachement impossible : '+assignError.message+'. Affecte-la depuis Divisions.','warn');return;}
+    data.division_id=divisionId;
     units.push(data); units.sort((a,b)=>a.name.localeCompare(b.name,'fr'));
     selectedUnit=data.id; catalogueUnit=data.id; $('newUnitName').value='';renderAdminUnits();show('userArea',!profile.is_admin && selectedUnit===profile.unit_id);await loadMonths();
     $('unitMessage').innerHTML=msg('Unité créée. Elle est disponible lors des inscriptions.','ok');
@@ -1144,9 +1188,9 @@
     $('documentsTitle').textContent=scope==='unit'?'Base documentaire d’unité — '+unitName:'Base documentaire nationale';
     $('documentsDescription').textContent=scope==='unit'?'Documents PDF réservés aux utilisateurs de l’unité '+unitName+'.':'Documents PDF disponibles pour toutes les unités.';
     if(personal){managerSpace=false;if(!profile.is_admin)show('adminArea',false);}
-    show('userArea',false);show('unitManagerArea',false);show('documentsArea',true);
+    show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('documentsArea',true);
     if(personal){
-      $('unitManagerTab').classList.remove('active');
+      $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
       $('userPointageTab').classList.remove('active');
       $('userDocumentsTab').classList.toggle('active',scope==='national');
       $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
@@ -1157,8 +1201,8 @@
     if(documentBusy)return;
     documentRequest++;closePdfReader();
     managerSpace=false;if(!profile.is_admin)show('adminArea',false);
-    show('documentsArea',false);show('unitManagerArea',false);show('userArea',!profile.is_admin);
-    $('unitManagerTab').classList.remove('active');
+    show('documentsArea',false);show('unitManagerArea',false);show('divisionArea',false);show('userArea',!profile.is_admin);
+    $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
   };
   async function loadUnitManager(){
@@ -1194,10 +1238,10 @@
     if(!profile?.is_unit_manager||profile.is_admin||documentBusy)return;
     if(!await allowLeavePointage())return;
     show('createUserForm',false);
-    managerSpace=true;selectedUnit=profile.unit_id;
+    managerSpace=true;selectedUnit=profile.unit_id;show('divisionArea',false);
     if(!$('flashStart').value){const start=new Date();$('flashStart').value=flashLocalInput(start);$('flashEnd').value=flashLocalInput(new Date(start.getTime()+86400000));}
     documentRequest++;closePdfReader();
-    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('adminArea',true);
+    show('documentsArea',false);show('userArea',false);show('unitManagerArea',false);show('divisionArea',false);show('adminArea',true);
     $('unitManagerTab').classList.add('active');
     $('userPointageTab').classList.remove('active');
     $('userDocumentsTab').classList.remove('active');
@@ -1206,6 +1250,109 @@
     renderAdminUnits();
     await loadMonths();
   };
+  async function loadDivisions(){
+    if(!profile?.is_admin)return;
+    const [divisionResult,unitResult,peopleResult]=await Promise.all([
+      sb.from('pointage_divisions').select('id,name,active').order('name'),
+      sb.from('units').select('id,name,active,division_id').order('name'),
+      sb.from('profiles').select('id,full_name,email,unit_id,is_division_manager,managed_division_id,active,is_admin').eq('active',true).order('full_name')
+    ]);
+    const error=divisionResult.error||unitResult.error||peopleResult.error;
+    if(error){$('divisionAdminMessage').innerHTML=msg(error.message,'warn');return;}
+    divisions=divisionResult.data||[];units=unitResult.data||[];
+    const persons=peopleResult.data||[];
+    const divisionOptions=divisions.filter(d=>d.active).map(d=>`<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+    $('divisionUnitTarget').innerHTML=divisionOptions;
+    $('newUnitDivision').innerHTML=divisionOptions;
+    $('divisionManagerDivision').innerHTML=divisionOptions;
+    $('divisionUnitSelect').innerHTML=units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+    $('divisionsList').innerHTML=divisions.map(d=>{
+      const members=units.filter(u=>u.division_id===d.id);
+      const manager=persons.find(p=>p.is_division_manager&&p.managed_division_id===d.id);
+      return '<div class="notice"><strong>'+esc(d.name)+'</strong> · '+(members.map(u=>esc(u.name)).join(', ')||'Aucune unité')+
+        '<p class="muted small">Responsable : '+esc(manager?.full_name||manager?.email||'À désigner')+'</p></div>';
+    }).join('');
+    function managerChoices(){
+      const target=$('divisionManagerDivision').value;
+      $('divisionManagerPerson').innerHTML=persons.filter(p=>!p.is_admin && units.some(u=>u.id===p.unit_id&&u.division_id===target))
+        .map(p=>`<option value="${esc(p.id)}">${esc(p.full_name||p.email)}${p.is_division_manager?' (déjà responsable)':''}</option>`).join('');
+    }
+    $('divisionManagerDivision').onchange=managerChoices;
+    managerChoices();
+  }
+  $('createDivision').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const name=$('newDivisionName').value.trim();
+    if(!name)return;
+    const {error}=await sb.rpc('pointage_admin_create_division',{p_name:name});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Division créée.',error?'warn':'ok');
+    if(!error){$('newDivisionName').value='';await loadDivisions();}
+  };
+  $('removeDivisionManager').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const division=$('divisionManagerDivision').value;
+    const {data,error:readError}=await sb.from('profiles').select('id,full_name,email')
+      .eq('is_division_manager',true).eq('managed_division_id',division).maybeSingle();
+    if(readError){$('divisionAdminMessage').innerHTML=msg(readError.message,'warn');return;}
+    if(!data){$('divisionAdminMessage').innerHTML=msg('Aucun responsable nommé pour cette division.','warn');return;}
+    if(!await confirmAction('Retirer la fonction de Responsable de division à '+(data.full_name||data.email)+' ?',{button:'Retirer'}))return;
+    const {error}=await sb.rpc('pointage_admin_set_division_manager',{p_user_id:data.id,p_division_id:division,p_enabled:false});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Responsable retiré.',error?'warn':'ok');
+    if(!error)await loadDivisions();
+  };
+  $('refreshDivisions').onclick=loadDivisions;
+  $('assignUnitDivision').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const unit=$('divisionUnitSelect').value,division=$('divisionUnitTarget').value;
+    if(!await confirmAction('Rattacher cette unité à la division sélectionnée ?',{title:'Rattachement de division',button:'Rattacher'}))return;
+    const {error}=await sb.rpc('pointage_admin_assign_unit_division',{p_unit_id:unit,p_division_id:division});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Rattachement enregistré.',error?'warn':'ok');
+    if(!error)await loadDivisions();
+  };
+  $('assignDivisionManager').onclick=async()=>{
+    if(!profile?.is_admin)return;
+    const user=$('divisionManagerPerson').value,division=$('divisionManagerDivision').value;
+    if(!user)return;
+    if(!await confirmAction('Nommer cette personne Responsable de division ? Elle ne pourra gérer que sa division.',{title:'Nomination de division',button:'Nommer'}))return;
+    const {error}=await sb.rpc('pointage_admin_set_division_manager',{p_user_id:user,p_division_id:division,p_enabled:true});
+    $('divisionAdminMessage').innerHTML=msg(error?error.message:'Responsable nommé.',error?'warn':'ok');
+    if(!error)await loadDivisions();
+  };
+  async function loadDivisionOverview(){
+    if(!profile?.is_division_manager||profile.is_admin)return;
+    const year=Number($('divisionYear').value);
+    $('divisionSummary').innerHTML='<p class="muted small">Chargement…</p>';
+    const {data,error}=await sb.rpc('pointage_division_overview',{p_year:year});
+    if(error){divisionOverview=null;$('exportDivisionCsv').disabled=true;$('divisionSummary').innerHTML=msg(error.message,'warn');return;}
+    divisionOverview=data;
+    $('divisionHeading').textContent='Gestion de ma division — '+data.division;
+    const rows=data.units||[];
+    const total=rows.reduce((n,u)=>n+Number(u.duration_seconds||0),0);
+    $('divisionSummary').innerHTML='<p><strong>'+rows.length+' unité(s)</strong> · '+fmt(total/3600)+' h pour '+year+'</p>'+
+      '<div class="tablewrap"><table><thead><tr><th>Unité</th><th>Utilisateurs</th><th>Saisies</th><th>Heures</th></tr></thead><tbody>'+
+      rows.map(u=>'<tr><td>'+esc(u.name)+'</td><td>'+Number(u.members)+'</td><td>'+Number(u.entries)+'</td><td>'+fmt(Number(u.duration_seconds||0)/3600)+'</td></tr>').join('')+
+      '</tbody></table></div>';
+    $('exportDivisionCsv').disabled=false;
+  }
+  $('divisionManagerTab').onclick=async()=>{
+    if(!profile?.is_division_manager||profile.is_admin||documentBusy)return;
+    if(!await allowLeavePointage())return;
+    managerSpace=false;documentRequest++;closePdfReader();
+    show('documentsArea',false);show('userArea',false);show('adminArea',false);show('unitManagerArea',false);show('divisionArea',true);
+    ['userPointageTab','userDocumentsTab','userUnitDocumentsTab','unitManagerTab'].forEach(id=>$(id).classList.remove('active'));
+    $('divisionManagerTab').classList.add('active');
+    $('divisionYear').value=String(new Date().getFullYear());
+    await loadDivisionOverview();
+  };
+  $('reloadDivisionSummary').onclick=loadDivisionOverview;
+  $('divisionYear').onchange=loadDivisionOverview;
+  $('exportDivisionCsv').onclick=()=>{
+    if(!divisionOverview||!profile?.is_division_manager)return;
+    const rows=[['Année','Division','Unité','Utilisateurs','Saisies','Total heures']];
+    for(const u of divisionOverview.units||[])rows.push([divisionOverview.year,divisionOverview.division,u.name,u.members,u.entries,(Number(u.duration_seconds||0)/3600).toFixed(2).replace('.',',')]);
+    csvDownload('suivi-division-'+divisionOverview.division+'-'+divisionOverview.year+'.csv',rows);
+  };
+
   $('refreshUnitManager').onclick=loadUnitManager;
   $('userDocumentsTab').onclick=()=>openDocumentBase('national',true);
   $('userUnitDocumentsTab').onclick=()=>openDocumentBase('unit',true);
@@ -1451,7 +1598,8 @@
     if(btn.classList.contains('hidden') || documentBusy) return;
     if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
-    ['results','codes','users','units','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
+    if(btn.dataset.adminTab==='divisions')loadDivisions();
     const docsTab=['documents','unit-documents'].includes(btn.dataset.adminTab);
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
