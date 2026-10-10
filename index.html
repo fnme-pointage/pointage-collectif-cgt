@@ -533,6 +533,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView select[name*="mois" i] option{
   font-weight:400!important;
 }
+
+/* Le selecteur Mois global n'est pas necessaire dans le bandeau administrateur. */
+#mainView #adminMonthField{display:none!important}
+#userArea #pointageMonthSlot #adminMonthField{display:block!important}
 </style>
 </head>
 <body>
@@ -1321,7 +1325,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     show('userYearField',!profile.is_admin);
     show('userMonthStateField',!profile.is_admin);
     show('monthButtons',false);
-    show('adminMonthField',true);
+    show('adminMonthField',!profile.is_admin);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active,division_id').order('name');
       if(ue){alert(ue.message);return;}
