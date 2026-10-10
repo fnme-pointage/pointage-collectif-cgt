@@ -284,6 +284,21 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #adminMonthField{min-width:180px;max-width:270px}
 #adminMonthField select{font-weight:700;background:#f7faff}
 @media(max-width:620px){#adminMonthField{width:100%;max-width:none}}
+
+/* Disposition de la proposition 3 : Mois | Code d'activite | Nombre d'heures. */
+#userArea .premium-input-layout{display:grid;grid-template-columns:minmax(165px,.75fr) minmax(0,2.3fr);align-items:start;gap:14px;margin-top:20px}
+#userArea #pointageMonthSlot{padding-top:16px}
+#userArea #pointageMonthSlot #adminMonthField{display:block!important;width:100%;max-width:none;min-width:0}
+#userArea #pointageMonthSlot #adminMonthField label{font-weight:750;color:#435b75}
+#userArea #pointageMonthSlot #adminMonthField select{background:#fff;min-height:47px;border:1px solid #cfdeed}
+#userArea .premium-input-layout #entryList{min-width:0}
+#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.7fr) minmax(130px,.75fr) 40px;margin:0 0 12px;padding:15px;align-items:start}
+#userArea .premium-input-layout #entryList .entry>div:first-child>label,#userArea .premium-input-layout #entryList .entry>div:nth-child(2)>label{font-size:.84rem;font-weight:750;color:#435b75}
+#userArea .premium-input-layout #entryList .entry .entry-correction{font-size:.77rem}
+#userArea .premium-input-layout #entryList .entry .entry-reference{margin-top:10px}
+#userArea .premium-pointage-actions{margin-top:13px}
+@media(max-width:800px){#userArea .premium-input-layout{grid-template-columns:1fr;gap:8px}#userArea #pointageMonthSlot{padding-top:0}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.3fr) minmax(120px,.7fr) 40px}}
+@media(max-width:540px){#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1fr) 40px}#userArea .premium-input-layout #entryList .entry>div:nth-child(2){grid-column:1;grid-row:2}#userArea .premium-input-layout #entryList .entry>button.icon{grid-column:2;grid-row:1}#userArea .premium-input-layout #entryList .entry .entry-correction{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -433,7 +448,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       </div>
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
-      <div id="entryList"></div>
+      <div class="premium-input-layout">
+        <div id="pointageMonthSlot"></div>
+        <div id="entryList"></div>
+      </div>
       <div class="actions premium-pointage-actions">
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
         <button id="saveEntries" type="button">Enregistrer mes données</button>
@@ -2875,6 +2893,19 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     csvDownload(`pointage-recap-mensuel-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${monthlyYear}-${monthlyMonth}.csv`,rows);
   };
 
+  // Deplacer uniquement le champ mois, jamais le recreer : son identite et ses ecouteurs restent intacts.
+  const premiumMonthHome=$('adminMonthField').parentNode;
+  const premiumMonthNext=$('adminMonthField').nextSibling;
+  function syncPremiumMonthPosition(){
+    const target=(!$('userArea').classList.contains('hidden') && !profile?.is_admin)
+      ?$('pointageMonthSlot'):premiumMonthHome;
+    const field=$('adminMonthField');
+    if(field.parentNode===target)return;
+    if(target===premiumMonthHome)premiumMonthHome.insertBefore(field,premiumMonthNext);
+    else target.appendChild(field);
+  }
+  new MutationObserver(syncPremiumMonthPosition).observe($('userArea'),{attributes:true,attributeFilter:['class']});
+  syncPremiumMonthPosition();
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
