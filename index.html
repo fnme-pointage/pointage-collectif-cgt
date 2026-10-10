@@ -458,6 +458,13 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px!important;
  }
 }
+
+/* Arrondis complets des bandeaux superieurs, y compris pour l'administrateur. */
+#mainView>.top{border-radius:18px!important;border:1px solid #e5ebf2!important;overflow:hidden!important;margin-bottom:14px!important}
+#mainView>#userNav.adminnav{border-radius:16px!important;overflow:visible!important;border:1px solid #e5ebf2!important;margin-bottom:14px!important}
+#mainView>.card:first-of-type{border-radius:18px!important;border:1px solid #e5ebf2!important;margin-bottom:18px!important}
+#mainView>.adminnav:not(#userNav){border-radius:16px!important;border:1px solid #e5ebf2!important}
+@media(max-width:650px){#mainView>.top{border-radius:16px!important}#mainView>#userNav.adminnav,#mainView>.adminnav:not(#userNav){border-radius:14px!important}#mainView>.card:first-of-type{border-radius:16px!important}}
 </style>
 </head>
 <body>
