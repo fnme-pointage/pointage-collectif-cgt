@@ -489,6 +489,18 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 /* Uniformiser la typographie des menus Annee et Mois. */
 #userArea #pointageMonthSlot #monthSelect{font-weight:400!important}
 #userArea #pointageMonthSlot #monthSelect option{font-weight:400!important}
+
+/* Entete de compte avec avatar initials et informations sur plusieurs lignes. */
+#mainView>.top .premium-userbox{display:flex;align-items:center;justify-content:flex-start;gap:13px;text-align:left;min-width:0;max-width:min(100%,400px)}
+#mainView>.top .premium-user-avatar{display:flex;align-items:center;justify-content:center;flex:0 0 48px;width:48px;height:48px;border-radius:50%;background:#e3effd;color:#225e9b;border:1px solid #cbdff6;font-weight:800;font-size:1rem;letter-spacing:.035em}
+#mainView>.top .premium-user-details{display:flex;flex-direction:column;align-items:flex-start;min-width:0;gap:3px;line-height:1.4}
+#mainView>.top .premium-user-details #userName{font-size:.96rem;color:#1d3654;overflow-wrap:anywhere}
+#mainView>.top .premium-user-details #userUnit,#mainView>.top .premium-user-details #userRole{display:block;font-size:.8rem;line-height:1.4;overflow-wrap:anywhere}
+#mainView>.top .premium-user-details #userUnit.hidden{display:none}
+#mainView>.top .premium-user-links{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:5px;font-size:.79rem}
+#mainView>.top .premium-user-links a{white-space:normal}
+#mainView>.top .premium-user-details #userContact{margin-top:2px}
+@media(max-width:700px){#mainView>.top .premium-userbox{max-width:100%;width:100%;gap:11px}#mainView>.top .premium-user-avatar{flex-basis:43px;width:43px;height:43px}}
 </style>
 </head>
 <body>
@@ -577,10 +589,15 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 <div id="mainView" class="app hidden">
   <div class="top">
     <div class="brand"><img class="brand-logo" src="assets/logo-fnme.png" alt="FNME CGT" width="1763" height="2048" decoding="async"><h1>Pointage collectif</h1></div>
-    <div class="userbox">
-      <strong id="userName"></strong><span id="userUnit" class="muted hidden"></span><br>
-      <span id="userRole" class="muted"></span> · <a href="#" id="changePasswordLink">Changer mon mot de passe</a> · <a href="#" id="logoutLink">Déconnexion</a>
-      <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter l’administrateur</button></div>
+    <div class="userbox premium-userbox">
+      <span id="userInitials" class="premium-user-avatar" aria-hidden="true"></span>
+      <div class="premium-user-details">
+        <strong id="userName"></strong>
+        <span id="userUnit" class="muted hidden"></span>
+        <span id="userRole" class="muted"></span>
+        <div class="premium-user-links"><a href="#" id="changePasswordLink">Changer mon mot de passe</a><a href="#" id="logoutLink">Déconnexion</a></div>
+        <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter l’administrateur</button></div>
+      </div>
     </div>
   </div>
 
@@ -1150,8 +1167,12 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   function renderUserIdentity(){
     if(!profile)return;
     $('userName').textContent=profile.full_name||profile.email;
+    const identity=(profile.full_name||'').trim();
+    const words=identity.split(/\s+/).filter(Boolean);
+    const initials=words.length>=2?(words[0][0]+words[words.length-1][0]):words.length?words[0].slice(0,2):(profile.email||'U').slice(0,2);
+    $('userInitials').textContent=initials.toLocaleUpperCase('fr-FR');
     const unit=units.find(u=>u.id===profile.unit_id);
-    $('userUnit').textContent=unit?' · '+unit.name:'';
+    $('userUnit').textContent=unit?unit.name:'';
     show('userUnit',!profile.is_admin && !!unit);
   }
   async function loadUnits(){
