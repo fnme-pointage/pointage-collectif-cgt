@@ -159,6 +159,68 @@ body{background:radial-gradient(ellipse at 12% 2%,#e2ecf9 0,transparent 42%),lin
 @media(max-width:900px){#mainView>.top{flex-wrap:wrap}#mainView>.top .userbox{width:100%}#mainView .card{padding:20px}#userNav{flex-wrap:wrap}#userNav button{flex:1 1 170px;white-space:normal}}
 @media(max-width:620px){.app{padding:12px 10px 70px}#mainView>.top{padding:16px 18px}#mainView>.top .brand h1{font-size:1.4rem}#mainView>.top .brand-logo{max-width:56px;max-height:56px}#mainView .card{padding:15px;border-radius:16px}#mainView .adminnav:not(#userNav){display:flex;flex-wrap:wrap;overflow:visible}#mainView .adminnav:not(#userNav) button{flex:1 1 130px;white-space:normal}#userNav{padding:8px}#userNav button{width:auto;flex:1 1 145px}#mainView .card>.sectiontitle h2{font-size:1.12rem}#userArea>.card>.sectiontitle:before{width:36px;height:36px}}
 
+
+/* SOBRIETE PREMIUM — direction visuelle validee, integration a l'application reelle */
+:root{--bg:#f2f5fa;--card:#fff;--text:#1c344e;--muted:#728196;--border:#e0e8f1;--accent:#185eae;--premium-blue:#2268ba;--premium-purple:#7857c6;--premium-navy:#1b3657}
+body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.app{max-width:1320px;padding:22px 24px 100px}
+#mainView>.top{padding:20px 25px;background:#fff;border:0;border-bottom:1px solid #e6edf4;border-radius:18px 18px 0 0;box-shadow:none;margin-bottom:0}
+#mainView>.top:before{display:none}
+#mainView>.top .brand{gap:14px}
+#mainView>.top .brand-logo{max-width:63px;max-height:63px}
+#mainView>.top .brand h1{font-size:1.43rem;font-weight:800;color:#203a59}
+#mainView>.top .userbox{background:#fff;border:0;padding:6px 0 6px 15px;text-align:right;line-height:1.7}
+#mainView>.top .userbox strong{display:inline-block;background:#e8f0fb;border-radius:50px;padding:4px 12px;font-weight:750;color:#1d4c80}
+#mainView>.card:first-of-type{border:1px solid #e4eaf1;border-top:0;border-radius:0 0 18px 18px;box-shadow:0 12px 32px #2740650a;padding:17px 25px;background:#fff;margin-bottom:19px}
+#mainView>.card:first-of-type .row{align-items:center;gap:17px}
+#mainView>.card:first-of-type label{font-weight:700}
+#mainView>.card:first-of-type select{background:#f9fbfe;min-height:45px}
+#mainView .card{border:1px solid #e5ebf3;border-radius:19px;box-shadow:0 8px 28px rgba(29,57,90,.06);padding:25px 27px;margin-bottom:18px}
+#mainView .card .card{background:#fbfcff;box-shadow:none;border-color:#e4eaf3}
+#mainView .card h2{font-size:1.27rem;color:#1c3858;letter-spacing:-.02em;font-weight:790}
+#mainView .card h3{font-size:1.03rem;font-weight:740}
+#mainView>.adminnav,#userNav{background:#fff;padding:11px 12px;border:1px solid #e5ebf2;border-radius:16px;box-shadow:0 6px 21px #1c36550a;margin:0 0 19px;gap:8px}
+#userNav button{background:#fff!important;color:#455e79!important;border:1px solid transparent!important;font-size:.85rem;font-weight:710;border-radius:12px;padding:12px 15px;box-shadow:none}
+#userNav button.active{background:#e9f2ff!important;color:#1b60ae!important;border-color:#d3e5fb!important;box-shadow:inset 0 -3px #246bbb}
+#userNav #unitManagerTab{background:#eaf3ff!important;color:#1a60a9!important;border-color:#d5e7fb!important}
+#userNav #unitManagerTab.active{background:#276ebd!important;color:#fff!important;border-color:#276ebd!important;box-shadow:inset 0 -3px #174d90}
+#userNav #divisionManagerTab{background:#f2edff!important;color:#7450b8!important;border-color:#e6dcfa!important}
+#userNav #divisionManagerTab.active{background:#7c5ac5!important;color:#fff!important;border-color:#7c5ac5!important;box-shadow:inset 0 -3px #543c9b}
+#userArea>.card>.sectiontitle:before{border-radius:14px;background:#eaf2fd}
+#mainView .adminnav:not(#userNav){background:#fff;padding:10px;border-color:#e5ebf2;box-shadow:0 5px 20px #233e5c0a;border-radius:14px;gap:7px}
+#mainView .adminnav:not(#userNav) button{background:#f8fafc;color:#405c76;border-color:transparent;padding:10px 13px;font-size:.85rem;font-weight:700}
+#mainView .adminnav:not(#userNav) button.active{background:#e8f1fc;color:#1b5c9e;border-color:#d5e4f7;box-shadow:inset 0 -3px #286cb6}
+#adminArea>.adminnav{border-top:1px solid #e5ebf2!important}
+#mainView .sectiontitle{margin-bottom:17px;border-bottom:0!important;padding-bottom:4px!important}
+#mainView .card>.sectiontitle h2{font-size:1.26rem}
+#mainView .entry{padding:15px 17px;border-radius:13px;background:#f7faff;border-color:#e2eaf4}
+#mainView button{border-radius:10px;min-height:42px}
+#mainView button:not(.secondary):not(.danger):not(.icon):not(.active){background:#185da9}
+#mainView button.secondary{background:#eef4fc;color:#20588e;border:1px solid #d7e6f5}
+#mainView button.danger{background:#fff0f2;color:#ad3341;border:1px solid #f4d8dd}
+#mainView .notice.warn{background:#fff0f1;border:1px solid #f8d5d9;border-left:4px solid #c34859;color:#a42d3f}
+#mainView .notice.ok{background:#eaf8f2;border:1px solid #cde9db}
+#mainView .tablewrap{border:1px solid #e2e9f2;border-radius:13px;box-shadow:none}
+#mainView th{background:#f2f6fb;color:#52677e;border:0;border-bottom:1px solid #dfe8f2;font-size:.8rem;font-weight:760;text-transform:none;padding:13px 12px}
+#mainView td{padding:13px 12px;color:#304b66;border-bottom:1px solid #ebeff5}
+#mainView tbody tr:nth-child(even){background:#fbfcff}
+#mainView tbody tr:hover{background:#f4f8fe}
+#personalYearSummary{background:#fff!important;border:1px solid #e2eaf5!important;padding:21px!important;box-shadow:0 3px 14px #24456707!important}
+#personalYearSummary h3{font-size:1.14rem!important;color:#21476f!important}
+#userArea #entryList{margin-top:10px}
+#mainView input,#mainView select,#mainView textarea{background:#fff;border-color:#d8e2ee;box-shadow:none}
+#mainView label{font-size:.83rem;letter-spacing:.004em;color:#536980;font-weight:685}
+#authView .login{background:#fff;border-radius:22px;padding:35px;box-shadow:0 24px 65px #1b385519}
+#authView .login .brand{justify-content:center}
+#authView .login h1{letter-spacing:-.03em}
+#authView .tabs{background:#f1f5fa;padding:6px}
+#authView .tabs button:not(.secondary){background:#195da8}
+#authView input{background:#fbfdff}
+#monthButtons button{border-radius:11px}
+#premiumTestWarning{background:#fff8ea!important;box-shadow:0 2px 9px #3c2c1210}
+@media(max-width:900px){#mainView>.top{flex-wrap:wrap;padding:16px 18px}#mainView>.top .userbox{width:100%;text-align:left;border-top:1px solid #edf2f7;padding:12px 0 0}#userNav{flex-wrap:wrap}#userNav button{flex:1 1 155px;white-space:normal}}
+@media(max-width:650px){.app{padding:10px 10px 75px}#mainView>.top .brand h1{font-size:1.2rem}#mainView>.top .brand-logo{max-width:49px;max-height:49px}#mainView>.card:first-of-type{padding:13px}#mainView .card{padding:15px;border-radius:14px}#userNav{gap:6px;padding:8px}#userNav button{flex:1 1 145px;font-size:.82rem;padding:10px}#mainView .adminnav:not(#userNav){flex-wrap:wrap;overflow:visible}#mainView .adminnav:not(#userNav) button{flex:1 1 130px;white-space:normal}#mainView td,#mainView th{padding:10px 9px}#personalYearSummary{padding:14px!important}}
+
 </style>
 </head>
 <body>
