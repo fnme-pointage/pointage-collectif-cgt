@@ -508,6 +508,13 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 /* Avatar aligne en haut sur la ligne du nom du profil. */
 #mainView>.top .premium-userbox{align-items:flex-start!important}
 #mainView>.top .premium-user-avatar{align-self:flex-start!important;margin-top:0!important}
+
+/* Profil : nom, division puis unite sur la meme ligne. */
+#mainView>.top .premium-user-identity-line{display:flex;align-items:baseline;gap:5px 13px;flex-wrap:wrap;min-width:0}
+#mainView>.top .premium-user-identity-line #userName{white-space:normal}
+#mainView>.top .premium-user-identity-line #userDivision,#mainView>.top .premium-user-identity-line #userUnit{display:inline;font-size:.81rem;white-space:normal}
+#mainView>.top .premium-user-identity-line #userDivision.hidden,#mainView>.top .premium-user-identity-line #userUnit.hidden{display:none!important}
+#mainView>.top .premium-userbox{max-width:min(100%,720px)}
 </style>
 </head>
 <body>
@@ -599,8 +606,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <div class="userbox premium-userbox">
       <span id="userInitials" class="premium-user-avatar" aria-hidden="true"></span>
       <div class="premium-user-details">
-        <strong id="userName"></strong>
-        <span id="userUnit" class="muted hidden"></span>
+        <div class="premium-user-identity-line"><strong id="userName"></strong><span id="userDivision" class="muted hidden"></span><span id="userUnit" class="muted hidden"></span></div>
         <span id="userRole" class="muted"></span>
         <div class="premium-user-links"><a href="#" id="changePasswordLink">Changer mon mot de passe</a><a href="#" id="logoutLink">Déconnexion</a></div>
         <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter l’administrateur</button></div>
@@ -1172,6 +1178,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       $('verifyRecoveryCode').disabled=false; $('sendRecovery').disabled=false;
     }
   };
+  let identityDivisionNames=new Map();
   function renderUserIdentity(){
     if(!profile)return;
     $('userName').textContent=profile.full_name||profile.email;
@@ -1180,7 +1187,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const initials=words.length>=2?(words[0][0]+words[words.length-1][0]):words.length?words[0].slice(0,2):(profile.email||'U').slice(0,2);
     $('userInitials').textContent=initials.toLocaleUpperCase('fr-FR');
     const unit=units.find(u=>u.id===profile.unit_id);
-    $('userUnit').textContent=unit?unit.name:'';
+    const divisionName=unit?.division_id?identityDivisionNames.get(String(unit.division_id)):'';
+    $('userDivision').textContent=divisionName?'Division : '+divisionName:'';
+    $('userUnit').textContent=unit?'Unité : '+unit.name:'';
+    show('userDivision',!profile.is_admin && !!divisionName);
     show('userUnit',!profile.is_admin && !!unit);
   }
   async function loadUnits(){
@@ -1191,6 +1201,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
     if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
     const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
+    identityDivisionNames=new Map((signupDivisions||[]).map(d=>[String(d.id),d.name]));
+    renderUserIdentity();
     const sortedDivisions=[...divisionNames.entries()].sort((a,b)=>a[1].localeCompare(b[1],'fr'));
     const signupOptions=sortedDivisions.map(([id,name])=>{
       const members=units.filter(u=>u.division_id===id).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
@@ -1887,6 +1899,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const error=divisionResult.error||unitResult.error||peopleResult.error;
     if(error){$('divisionAdminMessage').innerHTML=msg(error.message,'warn');return;}
     divisions=divisionResult.data||[];units=unitResult.data||[];
+    identityDivisionNames=new Map(divisions.map(d=>[String(d.id),d.name]));
+    renderUserIdentity();
     const selectedDivisions=new Set([...document.querySelectorAll('#multiDivisionChoices input:checked')].map(input=>input.value));
     $('multiDivisionChoices').innerHTML=divisions.filter(d=>d.active).map(d=>`<label class="checkbox"><input type="checkbox" value="${esc(d.id)}"${selectedDivisions.has(d.id)?' checked':''}> ${esc(d.name)}</label>`).join('');
     const persons=peopleResult.data||[];
