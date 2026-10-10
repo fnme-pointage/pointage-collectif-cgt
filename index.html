@@ -515,6 +515,24 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView>.top .premium-user-identity-line #userDivision,#mainView>.top .premium-user-identity-line #userUnit{display:inline;font-size:.81rem;white-space:normal}
 #mainView>.top .premium-user-identity-line #userDivision.hidden,#mainView>.top .premium-user-identity-line #userUnit.hidden{display:none!important}
 #mainView>.top .premium-userbox{max-width:min(100%,720px)}
+
+/* Tous les menus deroulants de mois : texte normal, comme le choix de l'annee. */
+#mainView select#monthSelect,
+#mainView select#monthlyMonth,
+#mainView select[id*="month" i],
+#mainView select[id*="mois" i],
+#mainView select[name*="month" i],
+#mainView select[name*="mois" i]{
+  font-weight:400!important;
+}
+#mainView select#monthSelect option,
+#mainView select#monthlyMonth option,
+#mainView select[id*="month" i] option,
+#mainView select[id*="mois" i] option,
+#mainView select[name*="month" i] option,
+#mainView select[name*="mois" i] option{
+  font-weight:400!important;
+}
 </style>
 </head>
 <body>
