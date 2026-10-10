@@ -96,6 +96,69 @@ dialog{border-color:#d9e4f0;border-radius:18px;box-shadow:0 24px 72px #11254338}
 #personalYearSummary h3{font-weight:750;color:#1c486e}
 @media(max-width:760px){.app{padding:12px 10px 78px}.top{padding:12px 13px}.card{padding:15px;border-radius:15px}.adminnav{flex-wrap:wrap;overflow:visible}.adminnav button{white-space:normal;flex:1 1 125px;min-height:44px}.sectiontitle{flex-wrap:wrap}#userNav{display:flex;flex-wrap:wrap;overflow:visible}#userNav button{width:auto;flex:1 1 150px;white-space:normal;min-height:46px}#usersTable .tablewrap{overflow-x:auto}#usersTable table{min-width:650px}}
 @media(max-width:380px){#userNav button{flex-basis:100%}.app{padding-left:8px;padding-right:8px}}
+
+/* Proposition 3 V2 : refonte visuelle plus marquee, sans alteration des traitements. */
+:root{--bg:#edf2f8;--card:#ffffff;--text:#19334f;--muted:#697d93;--border:#d8e3ef;--accent:#145fb6}
+body{background:radial-gradient(ellipse at 12% 2%,#e2ecf9 0,transparent 42%),linear-gradient(180deg,#f6f9fc,#edf2f8 78%);font-family:Inter,"Segoe UI",system-ui,sans-serif;letter-spacing:-.006em}
+.app{max-width:1260px;padding:22px 24px 95px}
+#mainView>.top{background:#fff;min-height:112px;border:1px solid #dbe6f1;border-radius:21px;padding:20px 26px 18px;box-shadow:0 12px 38px #15325412;position:relative;overflow:hidden}
+#mainView>.top:before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(180deg,#206fbd,#7959c8)}
+#mainView>.top .brand{display:flex;align-items:center;gap:17px}
+#mainView>.top .brand h1{font-size:1.65rem;color:#102e50;font-weight:800;letter-spacing:-.035em}
+#mainView>.top .brand-logo{max-height:72px;max-width:72px;width:auto;height:auto;object-fit:contain}
+#mainView>.top .userbox{padding:12px 15px;background:#f1f6fc;border:1px solid #e0eaf5;border-radius:14px;line-height:1.85;color:#465f79;max-width:min(520px,100%)}
+#mainView>.top .userbox strong{font-size:1rem;color:#183654}
+#mainView>.top .userbox a{color:#155da5;font-weight:650;text-decoration:none}
+#authView .login{margin-top:8vh;padding:36px 32px 30px;border-radius:24px;box-shadow:0 28px 65px #1934531b;border-color:#dbe7f3}
+#authView .login .brand{display:flex;gap:16px;align-items:center;margin-bottom:26px}
+#authView .login .brand-logo{max-width:70px;max-height:75px;width:auto;height:auto;object-fit:contain}
+#authView .login h1{font-size:1.7rem;color:#113557}
+#authView .tabs{padding:5px;background:#f1f5fa;border-radius:13px}
+#authView .tabs button{background:transparent;border:0;color:#4d6580}
+#authView .tabs button:not(.secondary){background:#153f70;color:#fff;box-shadow:0 3px 11px #12376320}
+#userNav{display:flex;background:#fff;padding:11px;gap:9px;border:1px solid #dae5f1;border-radius:18px;box-shadow:0 6px 20px #1532540b;margin-top:18px;margin-bottom:18px}
+#userNav button{border-radius:12px;min-height:48px;padding:12px 17px;font-size:.89rem;font-weight:730;border:1px solid #e0e8f1;box-shadow:none}
+#userNav #userPointageTab:before{content:"◷  "}
+#userNav #userDocumentsTab:before,#userNav #userUnitDocumentsTab:before{content:"▤  "}
+#userNav #unitManagerTab:before{content:"♧  "}
+#userNav #divisionManagerTab:before{content:"♧  "}
+#userNav #userPointageTab.active,#userNav #userDocumentsTab.active,#userNav #userUnitDocumentsTab.active{background:#213a53;color:white;border-color:#213a53}
+#userNav #unitManagerTab:not(.hidden){border-color:#c4dcfa}
+#userNav #divisionManagerTab:not(.hidden){border-color:#dfcff8}
+#mainView .card{padding:26px 27px;border-radius:20px;border:1px solid #dfe8f2;box-shadow:0 11px 34px #122a490d;margin-bottom:20px}
+#mainView .card>.sectiontitle{border:0;display:flex;gap:14px;align-items:center;padding-bottom:16px;margin-bottom:17px;border-bottom:1px solid #edf1f7}
+#mainView .card>.sectiontitle h2{font-size:1.3rem;font-weight:800;color:#123657}
+#mainView .card h3{color:#234562}
+#userArea>.card>.sectiontitle:before{content:"◷";display:grid;place-items:center;flex:none;width:43px;height:43px;border-radius:12px;background:#e9f3ff;color:#1862af;font-size:1.3rem}
+#userArea .big{color:#135eaa;font-size:2.1rem}
+#userArea #entryList{margin-top:16px}
+#userArea .entry{background:#f8fbff;border:1px solid #dbe6f2;padding:18px;border-radius:16px;margin-bottom:13px}
+#userArea .actions{margin-top:17px}
+#userArea #saveEntries{background:#125fae;box-shadow:0 7px 18px #145fb620}
+#userArea #addEntry{background:#eaf2fc;border-color:#c9dbf2}
+#personalYearSummary{padding:21px!important;border-radius:16px;background:#f7faff!important;border:1px solid #d5e5f7!important;box-shadow:none!important;margin-top:20px!important}
+#personalYearSummary>.sectiontitle{border:0!important;padding-bottom:0!important;margin-bottom:12px!important}
+#personalYearSummary h3{font-size:1.16rem!important;color:#145b9c!important}
+#personalYearSummary h3:before{content:"▥";display:inline-grid;place-items:center;margin-right:10px;width:36px;height:36px;background:#e2efff;border-radius:9px}
+#mainView .adminnav:not(#userNav){padding:10px;gap:8px;background:#fff;border:1px solid #dce7f2;border-radius:17px;box-shadow:0 5px 17px #1834520b;margin-bottom:21px}
+#mainView .adminnav:not(#userNav) button{padding:12px 15px;min-height:45px;border-radius:11px;background:#f1f5fa;color:#35536f;border:1px solid #e1e9f2;font-weight:720}
+#mainView .adminnav:not(#userNav) button.active{background:#184d83;color:#fff;border-color:#184d83;box-shadow:0 4px 12px #12477d24}
+#adminArea>.adminnav{border-top:4px solid #3f658c!important}
+#divisionArea+.adminnav button.active{background:#7454bd}
+#mainView .tablewrap{border:1px solid #d9e5f1;border-radius:15px;box-shadow:0 2px 8px #172f4e08;background:#fff}
+#mainView th{background:#eaf1f9;color:#294d71;text-transform:none;letter-spacing:.01em;font-weight:770;padding:14px 12px;border-bottom:2px solid #dce8f4}
+#mainView td{padding:12px 12px;color:#344d65;border-bottom:1px solid #ecf1f7}
+#mainView tbody tr:nth-child(even){background:#fbfdff}
+#mainView button{min-height:41px}
+#mainView button:not(.secondary):not(.danger):not(.icon):not(.active){background-color:#1d65b0}
+#mainView .notice.warn{border-left:5px solid #c58724;background:#fff7eb;padding:14px 16px}
+#mainView .notice.ok{border-left:5px solid #279a66}
+#mainView .pill.ok{background:#e5f6ed;color:#126944}
+#mainView input,#mainView select,#mainView textarea{padding:12px 13px;border-radius:12px;border-color:#cfdeeb}
+#mainView form{scroll-margin-top:25px}
+@media(max-width:900px){#mainView>.top{flex-wrap:wrap}#mainView>.top .userbox{width:100%}#mainView .card{padding:20px}#userNav{flex-wrap:wrap}#userNav button{flex:1 1 170px;white-space:normal}}
+@media(max-width:620px){.app{padding:12px 10px 70px}#mainView>.top{padding:16px 18px}#mainView>.top .brand h1{font-size:1.4rem}#mainView>.top .brand-logo{max-width:56px;max-height:56px}#mainView .card{padding:15px;border-radius:16px}#mainView .adminnav:not(#userNav){display:flex;flex-wrap:wrap;overflow:visible}#mainView .adminnav:not(#userNav) button{flex:1 1 130px;white-space:normal}#userNav{padding:8px}#userNav button{width:auto;flex:1 1 145px}#mainView .card>.sectiontitle h2{font-size:1.12rem}#userArea>.card>.sectiontitle:before{width:36px;height:36px}}
+
 </style>
 </head>
 <body>
