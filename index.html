@@ -250,6 +250,34 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView .card:has(#usersTable)>.sectiontitle h2:before{content:"●";color:#7660bd;font-size:.8rem}
 #mainView .card:has(#flashForm)>.sectiontitle h2:before{content:"●";color:#da904d;font-size:.8rem}
 @media(max-width:670px){#userArea #personalYearSummary:after{position:static;display:inline-block;margin-top:8px}#userNav button::before{width:17px;height:17px}}
+
+/* Mon pointage : composition fidele a la proposition 3, sans changement de logique. */
+#userArea{display:grid;grid-template-columns:minmax(0,1fr);gap:3px}
+#userArea .premium-pointage{padding:28px 30px 26px}
+#userArea .premium-pointage>.sectiontitle:before{display:none!important}
+#userArea .premium-pointage-heading{display:flex;align-items:center;gap:15px;min-width:0}
+#userArea .premium-pointage-icon,#userArea .premium-summary-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:#e9f2ff;color:#1867b8;font-size:28px;flex-shrink:0}
+#userArea .premium-summary-icon{background:#edf3fe;color:#2868a9;font-size:26px}
+#userArea .premium-pointage-heading h2{font-size:1.4rem!important;line-height:1.25;margin:0!important}
+#userArea .premium-pointage-subtitle{margin:5px 0 0;line-height:1.5}
+#userArea .premium-month-total{display:flex;flex-direction:column;align-items:flex-end;padding:9px 15px;border:1px solid #d8e6f5;border-radius:14px;background:#f3f8ff;white-space:nowrap}
+#userArea .premium-month-total .big{font-size:1.8rem;line-height:1.3}
+#userArea .premium-pointage .entry{background:#f9fbff;border-color:#e0e8f3}
+#userArea .premium-pointage-actions{justify-content:flex-start;gap:12px;margin:20px 0 16px}
+#userArea .premium-pointage-actions>*{flex:0 1 auto;min-width:200px}
+#userArea .premium-pointage-actions #addEntry{background:#edf5ff!important;color:#205b97!important;border-color:#cfe1f8!important}
+#userArea .premium-pointage-actions #saveEntries{background:#1a62b2!important;color:#fff!important;border-color:#1a62b2!important}
+#userArea .premium-pointage-warning{background:#fff0f2!important;border:1px solid #f4cfd5!important;border-left:4px solid #c04457!important;color:#9d3040!important;padding:16px 18px!important;margin-top:0!important;line-height:1.55}
+#userArea #personalYearSummary.premium-year-summary{margin:0 0 16px!important;padding:25px 30px!important;background:#fff!important;border:1px solid #e1e9f3!important;box-shadow:0 8px 28px #1d395a0f!important}
+#userArea #personalYearSummary.premium-year-summary>.sectiontitle{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;padding:0!important;margin:0 0 18px!important;border:0!important}
+#userArea #personalYearSummary .premium-pointage-heading h3{margin:0!important;font-size:1.22rem!important;color:#1b3858!important}
+#userArea #personalYearSummary .premium-pointage-heading h3:before{display:none!important}
+#userArea #personalYearSummary .premium-summary-pill{position:static!important;display:inline-block;font-size:.76rem;color:#496d90;background:#edf5ff;border:1px solid #d6e7fa;border-radius:100px;padding:7px 11px;font-weight:700}
+#userArea #personalYearSummary:after{display:none!important}
+#userArea #personalYearTable table{min-width:0}
+#userArea #personalYearTable th{background:#f1f5fa!important}
+#userArea #personalYearTable td{white-space:normal}
+@media(max-width:700px){#userArea .premium-pointage,#userArea #personalYearSummary.premium-year-summary{padding:17px!important}#userArea .premium-pointage>.sectiontitle{align-items:flex-start;gap:12px}#userArea .premium-month-total{align-items:flex-start}#userArea .premium-pointage-actions>*{flex:1 1 100%;min-width:0}#userArea .premium-pointage-heading{gap:10px}#userArea .premium-pointage-icon,#userArea .premium-summary-icon{width:39px;height:39px;font-size:23px}}
 </style>
 </head>
 <body>
@@ -385,28 +413,30 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <button id="divisionManagerTab" class="hidden" type="button">Gestion de ma division</button>
   </div>
   <div id="userArea" class="hidden">
-    <div class="card">
+    <div class="card premium-pointage">
       <div class="sectiontitle">
-        <div>
-          <h2>Mon pointage</h2>
-          <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
+        <div class="premium-pointage-heading">
+          <span class="premium-pointage-icon" aria-hidden="true">◷</span>
+          <div>
+            <h2>Mon pointage</h2>
+            <p class="muted small premium-pointage-subtitle">Saisissez vos heures par code d’activité pour le mois sélectionné.</p>
+            <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
+          </div>
         </div>
-        <div><div class="big" id="userTotal">0,00 h</div></div>
+        <div class="premium-month-total"><span class="muted small">Total du mois</span><div class="big" id="userTotal">0,00 h</div></div>
       </div>
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
       <div id="entryList"></div>
-      <div class="actions">
+      <div class="actions premium-pointage-actions">
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
         <button id="saveEntries" type="button">Enregistrer mes données</button>
       </div>
-
-      <div class="notice warn" style="margin-top:8px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
-      <div id="personalYearSummary" class="card" style="margin-top:16px;background:#f8f9fb">
-        <div class="sectiontitle"><h3 id="personalYearTitle" style="margin:0;font-size:1rem">Mon récapitulatif annuel</h3></div>
-        <p class="muted small">Codes pointés depuis le 1er janvier, tous mois confondus.</p>
-        <div id="personalYearTable" aria-live="polite">Chargement…</div>
-      </div>
+      <div class="notice warn premium-pointage-warning" style="margin-top:8px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
+    </div>
+    <div id="personalYearSummary" class="card premium-year-summary">
+      <div class="sectiontitle"><div class="premium-pointage-heading"><span class="premium-summary-icon" aria-hidden="true">▥</span><div><h3 id="personalYearTitle">Mon récapitulatif annuel</h3><p class="muted small premium-pointage-subtitle">Codes pointés depuis le 1er janvier, tous mois confondus.</p></div></div><span class="premium-summary-pill">Codes utilisés uniquement</span></div>
+      <div id="personalYearTable" aria-live="polite">Chargement…</div>
     </div>
   </div>
 
