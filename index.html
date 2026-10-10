@@ -343,6 +343,21 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #userArea #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField label,#userArea #entryList .entry:first-child:has(>#adminMonthField)>div>label{line-height:22px!important;min-height:22px!important;margin:0 0 9px!important;padding:0!important}
 @media(max-width:800px){#userArea #entryList .entry:first-child:has(>#adminMonthField){grid-template-columns:minmax(115px,1fr) minmax(175px,1.8fr) minmax(110px,.9fr) 36px!important;gap:8px!important}}
 @media(max-width:590px){#userArea #entryList .entry:first-child:has(>#adminMonthField){grid-template-columns:minmax(0,1fr) 38px!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1;grid-row:1}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1/-1;grid-row:2}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:1;grid-row:3}#userArea #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:2;grid-row:3;margin-top:30px!important}}
+
+/* Mon pointage : mois sur une ligne independante, codes et heures en dessous. */
+#userArea .premium-input-layout{display:block!important}
+#userArea #pointageMonthSlot{display:block!important;margin:0 0 16px!important;max-width:270px}
+#userArea #pointageMonthSlot #adminMonthField{display:block!important;width:100%!important;max-width:none!important}
+#userArea #entryList .entry:first-child:has(>#adminMonthField){display:grid!important;grid-template-columns:minmax(0,1.9fr) minmax(140px,.85fr) 40px!important;gap:14px!important}
+#userArea #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1!important;grid-row:1!important;width:min(270px,100%)!important;margin-bottom:8px!important}
+#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1!important;grid-row:2!important}
+#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:2!important;grid-row:2!important}
+#userArea #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:3!important;grid-row:2!important}
+#userArea #entryList .entry:not(:first-child){grid-template-columns:minmax(0,1.9fr) minmax(140px,.85fr) 40px!important;gap:14px!important}
+#mainView #contactAdminLink.contact-admin{background:#175fae!important;color:#fff!important;border:1px solid #175fae!important;font-weight:750!important;text-decoration:none!important}
+#mainView #contactAdminLink.contact-admin:hover{background:#104c91!important;color:#fff!important}
+#mainView #contactAdminLink.contact-admin:focus-visible{outline:3px solid #93c7ff!important;outline-offset:2px}
+@media(max-width:590px){#userArea #entryList .entry:first-child:has(>#adminMonthField),#userArea #entryList .entry:not(:first-child){grid-template-columns:minmax(0,1fr) 38px!important;gap:10px!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1!important;grid-row:1!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1/-1!important;grid-row:2!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:1!important;grid-row:3!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:2!important;grid-row:3!important}}
 </style>
 </head>
 <body>
@@ -2945,7 +2960,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   function syncPremiumMonthPosition(){
     const personal=!$('userArea').classList.contains('hidden') && !profile?.is_admin;
     const firstEntry=personal?$('entryList').querySelector('.entry'):null;
-    const target=personal?(firstEntry||$('pointageMonthSlot')):premiumMonthHome;
+    const target=personal?$('pointageMonthSlot'):premiumMonthHome;
     const field=$('adminMonthField');
     if(field.parentNode===target)return;
     if(target===premiumMonthHome)premiumMonthHome.insertBefore(field,premiumMonthNext);
