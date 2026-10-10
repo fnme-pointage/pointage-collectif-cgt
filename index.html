@@ -439,6 +439,25 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
  }
  #userArea .premium-input-layout #entryList>.entry .code-picker>summary{padding-left:9px!important;padding-right:27px!important}
 }
+
+/* Champs code et heures : deux colonnes egales utilisant toute la largeur. */
+#userArea .premium-input-layout #entryList>.entry,
+#userArea .premium-input-layout #entryList>.entry:not(:first-child),
+#userArea .premium-input-layout #entryList>.entry:first-child{
+ grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px!important;
+ justify-content:stretch!important;
+ width:100%!important;max-width:none!important;
+ margin:0 0 14px!important;
+}
+#userArea .premium-input-layout #entryList>.entry>div:nth-child(1),
+#userArea .premium-input-layout #entryList>.entry>div:nth-child(2){min-width:0!important;width:100%!important}
+@media(max-width:600px){
+ #userArea .premium-input-layout #entryList>.entry,
+ #userArea .premium-input-layout #entryList>.entry:not(:first-child),
+ #userArea .premium-input-layout #entryList>.entry:first-child{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px!important;
+ }
+}
 </style>
 </head>
 <body>
