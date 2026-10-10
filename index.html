@@ -197,6 +197,11 @@
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
         <button id="saveEntries" type="button">Enregistrer mes données</button>
       </div>
+      <div id="personalYearSummary" class="card" style="margin-top:16px;background:#f8f9fb">
+        <div class="sectiontitle"><h3 id="personalYearTitle" style="margin:0;font-size:1rem">Mon récapitulatif annuel</h3></div>
+        <p class="muted small">Codes pointés depuis le 1er janvier, tous mois confondus.</p>
+        <div id="personalYearTable" aria-live="polite">Chargement…</div>
+      </div>
       <div class="notice warn" style="margin-top:8px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
     </div>
   </div>
@@ -933,6 +938,7 @@
     selectedMonth = yearMonths.some(m=>m.month_key===selectedMonth) ? selectedMonth :
                     (yearMonths.find(m=>m.month_key===curMonth())?.month_key || yearMonths[0]?.month_key || '');
     renderMonthSelect();
+    if(!profile?.is_admin&&!managerSpace&&!divisionSpace)loadPersonalYearSummary();
     if(unitManagement()) await renderAnnualYears();
     if(selectedMonth){await loadMonthData();return;}
     $('monthState').textContent='Aucun mois';
@@ -1194,6 +1200,34 @@
   window.addEventListener('beforeunload',event=>{
     if(entriesDirty || savingEntries || (profile?.is_admin && catalogueState(catalogueRows)!==catalogueState(catalogueOriginal))){event.preventDefault();event.returnValue='';}
   });
+  let personalYearRequest=0;
+  async function loadPersonalYearSummary(){
+    if(!session?.user?.id||!profile?.active||profile.is_admin)return;
+    const request=++personalYearRequest, year=new Date().getFullYear();
+    $('personalYearTitle').textContent='Mon récapitulatif '+year;
+    $('personalYearTable').textContent='Chargement…';
+    try{
+      const items=await fetchAll(()=>sb.from('entries')
+        .select('id,code_id,saved_code,duration_seconds,hours,month_codes(code)')
+        .eq('user_id',session.user.id)
+        .gte('month_key',year+'-01')
+        .lt('month_key',(year+1)+'-01').order('id'));
+      if(request!==personalYearRequest)return;
+      const totals=new Map();
+      for(const item of items){
+        const code=String(item.saved_code||item.month_codes?.code||'').trim();
+        const seconds=entryDurationSeconds(item);
+        if(!code||!Number.isFinite(seconds)||seconds<=0)continue;
+        totals.set(code,(totals.get(code)||0)+seconds);
+      }
+      if(!totals.size){$('personalYearTable').innerHTML='<p class="muted small">Aucun code pointé depuis le 1er janvier.</p>';return;}
+      const sorted=[...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0],'fr',{numeric:true}));
+      const total=sorted.reduce((sum,[,seconds])=>sum+seconds,0);
+      $('personalYearTable').innerHTML='<table style="min-width:0;table-layout:fixed"><thead><tr><th>Code pointé</th><th class="num">Heures cumulées</th></tr></thead><tbody>'+
+        sorted.map(([code,seconds])=>'<tr><td style="white-space:normal;overflow-wrap:anywhere">'+esc(code)+'</td><td class="num">'+fmt(seconds/3600)+' h</td></tr>').join('')+
+        '<tr><td><strong>Total</strong></td><td class="num"><strong>'+fmt(total/3600)+' h</strong></td></tr></tbody></table>';
+    }catch(error){if(request===personalYearRequest)$('personalYearTable').innerHTML=msg('Récapitulatif indisponible : '+error.message,'warn');}
+  }
   async function saveEntries(){
     if(!canEditOwn() || savingEntries) return false;
     await refreshMaintenance();
@@ -1212,6 +1246,7 @@
       savedEntriesState=savedState;
       if(entryState()===savedState){const {data:fresh}=await sb.from('entries').select('*').eq('unit_id',selectedUnit).eq('month_key',selectedMonth).eq('user_id',session.user.id).order('id');if(fresh && entryState()===savedState){entries=fresh.map(e=>({...e,hours:inputDuration(entryDurationSeconds(e))}));savedEntriesState=entryState();renderUserEntries();}}
       updateEntrySaveState();
+      loadPersonalYearSummary();
       $('userNotice').innerHTML=msg(entriesDirty?'Enregistrement terminé. De nouvelles modifications restent à enregistrer.':'Tes données sont enregistrées. Tu peux quitter l’outil.','ok');
       return true;
     }catch(error){
@@ -1294,7 +1329,7 @@
     if(!profile.is_admin && selectedUnit!==profile.unit_id)selectedUnit=profile.unit_id;
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
-    if(!profile.is_admin)loadMonths();
+    if(!profile.is_admin){loadMonths();loadPersonalYearSummary();}
   };
   async function loadUnitFollowup(){
     if(!managerSpace||!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
