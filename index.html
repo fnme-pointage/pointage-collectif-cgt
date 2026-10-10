@@ -465,6 +465,18 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView>.card:first-of-type{border-radius:18px!important;border:1px solid #e5ebf2!important;margin-bottom:18px!important}
 #mainView>.adminnav:not(#userNav){border-radius:16px!important;border:1px solid #e5ebf2!important}
 @media(max-width:650px){#mainView>.top{border-radius:16px!important}#mainView>#userNav.adminnav,#mainView>.adminnav:not(#userNav){border-radius:14px!important}#mainView>.card:first-of-type{border-radius:16px!important}}
+
+/* Espacement vertical regulier des bandeaux, commun a tous les profils. */
+#mainView>.top,
+#mainView>#userNav.adminnav,
+#mainView>.card:first-of-type,
+#mainView>.adminnav:not(#userNav){margin-top:0!important;margin-bottom:18px!important}
+@media(max-width:650px){
+ #mainView>.top,
+ #mainView>#userNav.adminnav,
+ #mainView>.card:first-of-type,
+ #mainView>.adminnav:not(#userNav){margin-bottom:14px!important}
+}
 </style>
 </head>
 <body>
