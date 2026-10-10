@@ -278,6 +278,12 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #userArea #personalYearTable th{background:#f1f5fa!important}
 #userArea #personalYearTable td{white-space:normal}
 @media(max-width:700px){#userArea .premium-pointage,#userArea #personalYearSummary.premium-year-summary{padding:17px!important}#userArea .premium-pointage>.sectiontitle{align-items:flex-start;gap:12px}#userArea .premium-month-total{align-items:flex-start}#userArea .premium-pointage-actions>*{flex:1 1 100%;min-width:0}#userArea .premium-pointage-heading{gap:10px}#userArea .premium-pointage-icon,#userArea .premium-summary-icon{width:39px;height:39px;font-size:23px}}
+
+/* Mois : selection compacte plutot que grille, quel que soit le profil. */
+#monthButtons{display:none!important}
+#adminMonthField{min-width:180px;max-width:270px}
+#adminMonthField select{font-weight:700;background:#f7faff}
+@media(max-width:620px){#adminMonthField{width:100%;max-width:none}}
 </style>
 </head>
 <body>
@@ -1043,7 +1049,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     show('adminUnitField',profile.is_admin);
     show('userYearField',!profile.is_admin);
     show('userMonthStateField',!profile.is_admin);
-    show('monthButtons',!profile.is_admin);
+    show('monthButtons',false);
+    show('adminMonthField',true);
     if(profile.is_admin){
       const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active,division_id').order('name');
       if(ue){alert(ue.message);return;}
@@ -1361,7 +1368,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       const currentCode=monthCodes.find(c=>Number(c.id)===Number(r.code_id));
       const code=currentCode && r.saved_code ? {...currentCode,code:r.saved_code,label:r.saved_label,document:r.saved_document} : currentCode;
       return `<div class="entry">
-        <div><label id="entryCodeLabel${i}"><strong>Codes et libellés</strong></label>
+        <div><label id="entryCodeLabel${i}"><strong>Code d’activité</strong></label>
           ${can?`<details class="code-picker" data-picker="${i}">
             <summary id="entryCode${i}" aria-labelledby="entryCodeLabel${i} entryCode${i}">${code?`${esc(code.code)} — ${esc(code.label)}`:'Choisir un code…'}</summary>
             <div class="picker-panel">${codesTable(monthCodes.filter(c=>c.active || Number(c.id)===Number(r.code_id)),'',c=>{
