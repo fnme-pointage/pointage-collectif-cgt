@@ -627,7 +627,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         <div class="premium-user-identity-line"><strong id="userName"></strong><span id="userDivision" class="muted hidden"></span><span id="userUnit" class="muted hidden"></span></div>
         <span id="userRole" class="muted"></span>
         <div class="premium-user-links"><a href="#" id="changePasswordLink">Changer mon mot de passe</a><a href="#" id="logoutLink">Déconnexion</a></div>
-        <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter l’administrateur</button></div>
+        <div id="userContact" class="hidden"><button id="contactAdminLink" class="contact-admin" type="button">Contacter un responsable</button></div>
       </div>
     </div>
   </div>
@@ -953,9 +953,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 </dialog>
 
 <dialog id="contactAdminDialog" aria-labelledby="contactAdminTitle">
-  <h2 id="contactAdminTitle">Contacter l’administrateur</h2>
-  <p class="muted small">Ton message sera envoyé à fnme.pointage@gmail.com. L’administrateur pourra répondre à l’adresse de ton compte.</p>
+  <h2 id="contactAdminTitle">Contacter un interlocuteur</h2>
+  <p class="muted small">Choisis la personne à contacter. Les responsables affichés correspondent à ton unité et à ta division actuelles. Une réponse pourra être envoyée à l’adresse de ton compte.</p>
   <form id="contactAdminForm">
+    <label for="contactRecipient">Destinataire</label><select id="contactRecipient" required><option value="">Chargement des interlocuteurs…</option></select>
+    <div style="height:12px"></div>
     <label for="contactSubject">Objet</label><input id="contactSubject" maxlength="160" required value="Demande concernant mon pointage">
     <div style="height:12px"></div>
     <label for="contactMessage">Message</label><textarea id="contactMessage" rows="7" maxlength="5000" required></textarea>
@@ -1770,34 +1772,48 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   }
   $('saveEntries').onclick=()=>saveEntries();
 
-  $('contactAdminLink').onclick=()=>{
+  $('contactAdminLink').onclick=async()=>{
     if(!session || !profile?.active || profile.is_admin)return;
     if(!contactSending)$('contactFeedback').innerHTML='';
+    const select=$('contactRecipient');
+    select.disabled=true;
+    select.innerHTML='<option value="">Chargement des interlocuteurs…</option>';
     $('contactAdminDialog').showModal();
+    try{
+      const {data,error}=await sb.functions.invoke('contact-admin',{body:{action:'list'}});
+      if(error || !Array.isArray(data?.recipients))throw new Error('RECIPIENTS_UNAVAILABLE');
+      select.innerHTML=data.recipients.map(p=>'<option value="'+esc(p.key)+'">'+esc(p.role)+' — '+esc(p.name)+'</option>').join('');
+      select.disabled=false;
+    }catch{
+      $('contactFeedback').innerHTML=msg('Impossible de charger les interlocuteurs. Ferme cette fenêtre et réessaie.','warn');
+      select.innerHTML='<option value="">Indisponible</option>';
+    }
   };
   $('contactClose').onclick=()=>{if(!contactSending)$('contactAdminDialog').close();};
   $('contactAdminDialog').addEventListener('cancel',event=>{if(contactSending)event.preventDefault();});
   $('contactAdminForm').onsubmit=async(event)=>{
     event.preventDefault();
     if(contactSending || !session || !profile?.active || profile.is_admin)return;
-    const subject=$('contactSubject').value.trim(),message=$('contactMessage').value.trim();
-    if(!subject || subject.length>160 || /[\r\n]/.test(subject) || !message || message.length>5000){$('contactFeedback').innerHTML=msg('Renseigne un objet et un message valides.','warn');return;}
+    const recipient=$('contactRecipient').value,subject=$('contactSubject').value.trim(),message=$('contactMessage').value.trim();
+    if(!recipient || !subject || subject.length>160 || /[\r\n]/.test(subject) || !message || message.length>5000){$('contactFeedback').innerHTML=msg('Renseigne un objet et un message valides.','warn');return;}
     contactSending=true;
-    for(const id of ['contactSend','contactClose','contactSubject','contactMessage'])$(id).disabled=true;
+    for(const id of ['contactSend','contactClose','contactRecipient','contactSubject','contactMessage'])$(id).disabled=true;
     $('contactSend').textContent='Envoi en cours…';$('contactFeedback').innerHTML='';
     try{
-      const {data,error}=await sb.functions.invoke('contact-admin',{body:{subject,message}});
+      const {data,error}=await sb.functions.invoke('contact-admin',{body:{recipient,subject,message}});
       if(error){
         let reason='';try{reason=(await error.context?.json())?.error||'';}catch{}
         const text=reason==='RATE_LIMIT'?'Tu as atteint la limite de trois envois par heure. Réessaie plus tard : ton message est conservé.':
           reason==='AUTH_REQUIRED' || reason==='ACCOUNT_NOT_ACTIVE'?'Ton compte ne permet pas cet envoi. Reconnecte-toi et réessaie : ton message est conservé.':
+          reason==='INVALID_RECIPIENT'?'Ce responsable a changé. Ferme la fenêtre puis rouvre-la pour actualiser la liste. Ton message est conservé.':
+          reason==='RECIPIENTS_UNAVAILABLE'?'Les interlocuteurs sont temporairement indisponibles. Ton message est conservé.':
           reason==='MAIL_UNAVAILABLE'?'Le service mail est temporairement indisponible. Ton message est conservé. Réessaie plus tard.':
           'L’envoi n’a pas pu être confirmé. Ton message est conservé. Vérifie auprès de l’administrateur avant de le renvoyer.';
         $('contactFeedback').innerHTML=msg(text,'warn');return;
       }
       if(!data?.sent)throw new Error('SEND_NOT_CONFIRMED');
       $('contactMessage').value='';
-      $('contactFeedback').innerHTML=msg('Ton message a été envoyé à l’administrateur.','ok');
+      $('contactFeedback').innerHTML=msg('Ton message a été envoyé à '+esc(data.recipient||'ton interlocuteur')+'.','ok');
     }catch{$('contactFeedback').innerHTML=msg('L’envoi n’a pas pu être confirmé. Ton message est conservé. Vérifie auprès de l’administrateur avant de le renvoyer.','warn');}
     finally{contactSending=false;for(const id of ['contactSend','contactClose','contactSubject','contactMessage'])$(id).disabled=false;$('contactSend').textContent='Envoyer le message';}
   };
