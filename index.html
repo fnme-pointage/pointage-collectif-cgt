@@ -501,6 +501,9 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView>.top .premium-user-links a{white-space:normal}
 #mainView>.top .premium-user-details #userContact{margin-top:2px}
 @media(max-width:700px){#mainView>.top .premium-userbox{max-width:100%;width:100%;gap:11px}#mainView>.top .premium-user-avatar{flex-basis:43px;width:43px;height:43px}}
+
+#userArea .premium-pointage>.premium-pointage-subtitle{margin:17px 0 8px!important;line-height:1.5}
+#userArea .premium-input-layout{margin-top:8px!important}
 </style>
 </head>
 <body>
@@ -648,7 +651,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
           <span class="premium-pointage-icon" aria-hidden="true">◷</span>
           <div>
             <h2>Mon pointage</h2>
-            <p class="muted small premium-pointage-subtitle">Saisissez vos heures par code d’activité pour le mois sélectionné.</p>
+
             <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
           </div>
         </div>
@@ -656,6 +659,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       </div>
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
+      <p class="muted small premium-pointage-subtitle">Saisissez vos heures par code d’activité pour le mois sélectionné.</p>
       <div class="premium-input-layout">
         <div id="pointageMonthSlot" aria-label="Période de pointage"></div>
         <div id="entryList"></div>
