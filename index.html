@@ -477,6 +477,14 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
  #mainView>.card:first-of-type,
  #mainView>.adminnav:not(#userNav){margin-bottom:14px!important}
 }
+
+/* Annee et mois reunis dans la carte Mon pointage. */
+#mainView>.card.premium-period-hidden{display:none!important}
+#userArea #pointageMonthSlot{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;max-width:560px!important;width:100%!important;margin:0 0 22px!important;padding:0!important}
+#userArea #pointageMonthSlot #userYearField,#userArea #pointageMonthSlot #adminMonthField{display:block!important;min-width:0!important;max-width:none!important;width:100%!important;margin:0!important;padding:0!important}
+#userArea #pointageMonthSlot label{display:block!important;min-height:22px!important;line-height:22px!important;margin:0 0 9px!important}
+#userArea #pointageMonthSlot select{width:100%!important;min-height:48px!important;box-sizing:border-box!important}
+@media(max-width:500px){#userArea #pointageMonthSlot{gap:10px!important}}
 </style>
 </head>
 <body>
@@ -628,7 +636,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       <div id="userNotice"></div>
       <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
       <div class="premium-input-layout">
-        <div id="pointageMonthSlot"></div>
+        <div id="pointageMonthSlot" aria-label="Période de pointage"></div>
         <div id="entryList"></div>
       </div>
       <div class="actions premium-pointage-actions">
@@ -3076,16 +3084,22 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 
   // Deplacer uniquement le champ mois, jamais le recreer : son identite et ses ecouteurs restent intacts.
   const premiumMonthHome=$('adminMonthField').parentNode;
+  const premiumYearHome=$('userYearField').parentNode;
+  const premiumYearNext=$('userYearField').nextSibling;
+  const premiumPeriodCard=premiumMonthHome.closest('.card');
   const premiumMonthNext=$('adminMonthField').nextSibling;
   function syncPremiumMonthPosition(){
     const personal=!$('userArea').classList.contains('hidden') && !profile?.is_admin;
-    const firstEntry=personal?$('entryList').querySelector('.entry'):null;
     const target=personal?$('pointageMonthSlot'):premiumMonthHome;
+    const year=$('userYearField');
+    if(personal && year.parentNode!==target)target.insertBefore(year,target.firstChild);
+    if(!personal && year.parentNode!==premiumYearHome)premiumYearHome.insertBefore(year,premiumYearNext);
     const field=$('adminMonthField');
-    if(field.parentNode===target)return;
-    if(target===premiumMonthHome)premiumMonthHome.insertBefore(field,premiumMonthNext);
-    else if(target.classList?.contains('entry'))target.insertBefore(field,target.firstChild);
-    else target.appendChild(field);
+    if(field.parentNode!==target){
+      if(target===premiumMonthHome)premiumMonthHome.insertBefore(field,premiumMonthNext);
+      else target.appendChild(field);
+    }
+    premiumPeriodCard.classList.toggle('premium-period-hidden',personal);
   }
   new MutationObserver(syncPremiumMonthPosition).observe($('userArea'),{attributes:true,attributeFilter:['class']});
   syncPremiumMonthPosition();
