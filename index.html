@@ -320,6 +320,9 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 @media(max-width:850px){#userArea .premium-input-layout{grid-template-columns:minmax(125px,.7fr) minmax(0,2.3fr)!important;gap:10px!important}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.7fr) minmax(110px,1fr) 36px!important;gap:9px!important}#userArea .premium-input-layout .entry .icon{width:36px!important}}
 @media(max-width:590px){#userArea .premium-input-layout{grid-template-columns:1fr!important;gap:13px!important}#userArea #pointageMonthSlot{max-width:none}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.5fr) minmax(95px,.8fr) 35px!important;gap:8px!important}#userArea .premium-pointage-actions>*{flex:1 1 100%!important;min-width:0!important}#userArea .premium-input-layout .entry .icon{margin-top:31px!important;width:35px!important}}
 @media(max-width:390px){#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1fr) 38px!important}#userArea .premium-input-layout #entryList .entry>div:nth-child(2){grid-column:1;grid-row:2}#userArea .premium-input-layout #entryList .entry>button.icon{grid-column:2;grid-row:1}#userArea .premium-input-layout #entryList .entry .entry-correction{grid-column:1/-1}}
+
+/* Bandeau unique de correction, avant le rappel de sauvegarde. */
+#userArea .premium-correction-warning{margin:0 0 10px!important;background:#fff4e5!important;border:1px solid #f0d4a6!important;border-left:4px solid #d68b26!important;color:#855009!important;padding:16px 18px!important;line-height:1.55;border-radius:12px}
 </style>
 </head>
 <body>
@@ -477,6 +480,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         <button id="addEntry" class="secondary" type="button">+ Ajouter un code</button>
         <button id="saveEntries" type="button">Enregistrer mes données</button>
       </div>
+      <div class="notice premium-correction-warning">En cas d’erreur sur une saisie déjà enregistrée, corrige la ligne concernée, puis clique à nouveau sur « Enregistrer mes données » pour sauvegarder la correction.</div>
       <div class="notice warn premium-pointage-warning" style="margin-top:8px">Important : l’enregistrement n’est pas automatique. Clique sur « Enregistrer mes données » avant de changer de mois, de te déconnecter ou de fermer l’outil.</div>
     </div>
     <div id="personalYearSummary" class="card premium-year-summary">
@@ -1418,7 +1422,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         </div>
         <div><label for="entryHours${i}"><strong>${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</strong></label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'} aria-describedby="entryHoursHelp${i}"><p id="entryHoursHelp${i}" class="entry-hours-help">Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.</p></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
-        <p class="entry-correction">En cas d’erreur sur une saisie déjà enregistrée, corrige la ligne concernée, puis clique à nouveau sur « Enregistrer mes données » pour sauvegarder la correction.</p>
+        
       </div>`;
     }).join(''):'<div class="muted small">Aucune saisie pour ce mois.</div>';
     document.querySelectorAll('[data-pick-code]').forEach(el=>el.onclick=e=>{
