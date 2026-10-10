@@ -3164,9 +3164,14 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       if(target===premiumMonthHome)premiumMonthHome.insertBefore(field,premiumMonthNext);
       else target.appendChild(field);
     }
-    premiumPeriodCard.classList.toggle('premium-period-hidden',personal);
+    const inDocuments=!$('documentsArea').classList.contains('hidden');
+    const inManagement=!profile?.is_admin && (managerSpace || divisionSpace);
+    premiumPeriodCard.classList.toggle('premium-period-hidden',personal || inDocuments || inManagement);
   }
   new MutationObserver(syncPremiumMonthPosition).observe($('userArea'),{attributes:true,attributeFilter:['class']});
+  new MutationObserver(syncPremiumMonthPosition).observe($('documentsArea'),{attributes:true,attributeFilter:['class']});
+  new MutationObserver(syncPremiumMonthPosition).observe($('unitManagerArea'),{attributes:true,attributeFilter:['class']});
+  new MutationObserver(syncPremiumMonthPosition).observe($('divisionArea'),{attributes:true,attributeFilter:['class']});
   syncPremiumMonthPosition();
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
