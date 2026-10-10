@@ -358,6 +358,47 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #mainView #contactAdminLink.contact-admin:hover{background:#104c91!important;color:#fff!important}
 #mainView #contactAdminLink.contact-admin:focus-visible{outline:3px solid #93c7ff!important;outline-offset:2px}
 @media(max-width:590px){#userArea #entryList .entry:first-child:has(>#adminMonthField),#userArea #entryList .entry:not(:first-child){grid-template-columns:minmax(0,1fr) 38px!important;gap:10px!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1!important;grid-row:1!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1/-1!important;grid-row:2!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:1!important;grid-row:3!important}#userArea #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:2!important;grid-row:3!important}}
+
+/* Largeurs uniformes et centrage des lignes de pointage, independamment des codes. */
+#userArea .premium-input-layout #entryList{width:100%!important;min-width:0!important}
+#userArea .premium-input-layout #entryList .entry,
+#userArea .premium-input-layout #entryList .entry:not(:first-child){
+  display:grid!important;
+  grid-template-columns:minmax(0,310px) minmax(0,190px) 40px!important;
+  justify-content:center!important;
+  gap:14px!important;
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+#userArea .premium-input-layout #entryList .entry>div{min-width:0!important;max-width:100%!important}
+#userArea .premium-input-layout #entryList .entry .code-picker,
+#userArea .premium-input-layout #entryList .entry .code-picker>summary,
+#userArea .premium-input-layout #entryList .entry .picker-current,
+#userArea .premium-input-layout #entryList .entry input[data-hours]{
+  width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
+}
+#userArea .premium-input-layout #entryList .entry .code-picker>summary{
+  overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;
+}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField){
+  grid-template-columns:minmax(0,310px) minmax(0,190px) 40px!important;
+}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1!important;grid-row:1!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1!important;grid-row:2!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:2!important;grid-row:2!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:3!important;grid-row:2!important}
+@media(max-width:590px){
+#userArea .premium-input-layout #entryList .entry,
+#userArea .premium-input-layout #entryList .entry:not(:first-child),
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField){
+ grid-template-columns:minmax(0,1fr) minmax(0,0.65fr) 35px!important;gap:8px!important
+}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>#adminMonthField{grid-column:1/-1!important;grid-row:1!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(2){grid-column:1!important;grid-row:2!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>div:nth-child(3){grid-column:2!important;grid-row:2!important}
+#userArea .premium-input-layout #entryList .entry:first-child:has(>#adminMonthField)>button.icon{grid-column:3!important;grid-row:2!important}
+}
 </style>
 </head>
 <body>
