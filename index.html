@@ -1415,7 +1415,6 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
               return `<tr><td>${esc(c.label)}${c.active?'':' (inactif)'}</td><td><button class="code-choice" type="button" data-pick-entry="${i}" data-pick-code="${c.id}" aria-label="Choisir ${esc(c.code)} — ${esc(c.label)}" ${used?'disabled':''}>${esc(c.code)}${Number(c.id)===Number(r.code_id)?' ✓':''}</button></td><td>${esc(referenceFor(c))}</td></tr>`;
             })}</div>
           </details>`:`<div class="picker-current">${code?`${esc(code.code)} — ${esc(code.label)}`:'Aucun code'}</div>`}
-          <div class="entry-reference">${code?`<strong>Accords de référence</strong><br>${esc(referenceFor(code))}`:'Les accords seront affichés après le choix du code.'}</div>
         </div>
         <div><label for="entryHours${i}"><strong>${timeInputMode==='clock'?'Heures : minutes':'Heures décimales'}</strong></label><input id="entryHours${i}" data-hours="${i}" type="text" inputmode="${timeInputMode==='clock'?'text':'decimal'}" placeholder="${timeInputMode==='clock'?'Ex. 7:30':'Ex. 7,50'}" value="${esc(r.hours)}" ${can && code?'':'disabled'} aria-describedby="entryHoursHelp${i}"><p id="entryHoursHelp${i}" class="entry-hours-help">Saisis des heures décimales : 7,25 = 7 h 15 min ; 7,50 = 7 h 30 min ; 7,75 = 7 h 45 min.</p></div>
         <button class="icon" type="button" aria-label="Retirer cette ligne" data-del="${i}" ${can && entries.length?'':'disabled'}>×</button>
