@@ -299,6 +299,27 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 #userArea .premium-pointage-actions{margin-top:13px}
 @media(max-width:800px){#userArea .premium-input-layout{grid-template-columns:1fr;gap:8px}#userArea #pointageMonthSlot{padding-top:0}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.3fr) minmax(120px,.7fr) 40px}}
 @media(max-width:540px){#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1fr) 40px}#userArea .premium-input-layout #entryList .entry>div:nth-child(2){grid-column:1;grid-row:2}#userArea .premium-input-layout #entryList .entry>button.icon{grid-column:2;grid-row:1}#userArea .premium-input-layout #entryList .entry .entry-correction{grid-column:1/-1}}
+
+/* Mon pointage : alignement maquette - 3 champs de tailles proportionnees. */
+#userArea .premium-pointage>.sectiontitle{margin-bottom:10px!important}
+#userArea .premium-input-layout{display:grid!important;grid-template-columns:minmax(170px,1fr) minmax(0,3fr)!important;gap:19px!important;align-items:start!important;margin:18px 0 0!important}
+#userArea #pointageMonthSlot{padding-top:0!important;min-width:0}
+#userArea #pointageMonthSlot #adminMonthField{min-width:0!important;max-width:none!important;width:100%!important}
+#userArea #pointageMonthSlot label,#userArea .premium-input-layout .entry label{display:block;font-size:.85rem!important;color:#435972!important;font-weight:720!important;line-height:1.35;min-height:22px;margin:0 0 9px!important}
+#userArea #pointageMonthSlot #monthSelect,#userArea .premium-input-layout .entry .code-picker>summary,#userArea .premium-input-layout .entry .picker-current,#userArea .premium-input-layout .entry input[data-hours]{width:100%;min-height:48px;height:auto;border:1px solid #cbdbea!important;border-radius:11px!important;background:#fff!important;box-shadow:0 2px 5px #173d6508!important;padding:12px 14px!important;line-height:1.35}
+#userArea .premium-input-layout #entryList{min-width:0}
+#userArea .premium-input-layout #entryList .entry{display:grid!important;grid-template-columns:minmax(0,2fr) minmax(155px,1fr) 38px!important;column-gap:15px!important;row-gap:11px!important;align-items:start!important;background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;margin:0 0 12px!important;padding:0!important}
+#userArea .premium-input-layout .entry .icon{margin-top:30px!important;height:43px!important;width:38px!important;border-radius:10px!important}
+#userArea .premium-input-layout .entry-reference{margin:9px 0 0!important;color:#718096;line-height:1.45}
+#userArea .premium-input-layout .entry-hours-help{margin:9px 0 0!important;color:#748296;line-height:1.45;font-size:.76rem}
+#userArea .premium-input-layout .entry-correction{border:0!important;padding:4px 0 0!important;color:#78869a;font-size:.76rem}
+#userArea .premium-input-layout .picker-panel{top:calc(100% + 4px);width:min(780px,calc(100vw - 55px))}
+#userArea .premium-pointage-actions{margin:10px 0 18px!important;justify-content:flex-start!important;gap:12px!important}
+#userArea .premium-pointage-actions>*{flex:0 1 auto!important;min-width:205px!important;min-height:46px!important;padding:11px 18px!important}
+#userArea .premium-pointage-warning{margin-top:0!important}
+@media(max-width:850px){#userArea .premium-input-layout{grid-template-columns:minmax(125px,.7fr) minmax(0,2.3fr)!important;gap:10px!important}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.7fr) minmax(110px,1fr) 36px!important;gap:9px!important}#userArea .premium-input-layout .entry .icon{width:36px!important}}
+@media(max-width:590px){#userArea .premium-input-layout{grid-template-columns:1fr!important;gap:13px!important}#userArea #pointageMonthSlot{max-width:none}#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1.5fr) minmax(95px,.8fr) 35px!important;gap:8px!important}#userArea .premium-pointage-actions>*{flex:1 1 100%!important;min-width:0!important}#userArea .premium-input-layout .entry .icon{margin-top:31px!important;width:35px!important}}
+@media(max-width:390px){#userArea .premium-input-layout #entryList .entry{grid-template-columns:minmax(0,1fr) 38px!important}#userArea .premium-input-layout #entryList .entry>div:nth-child(2){grid-column:1;grid-row:2}#userArea .premium-input-layout #entryList .entry>button.icon{grid-column:2;grid-row:1}#userArea .premium-input-layout #entryList .entry .entry-correction{grid-column:1/-1}}
 </style>
 </head>
 <body>
