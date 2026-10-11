@@ -1426,13 +1426,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     show('monthButtons',false);
     show('adminMonthField',!profile.is_admin);
     if(profile.is_admin){
-      // Afficher immediatement le bon accueil, puis charger les donnees secondaires.
+      // Une seule lecture des divisions/unites : loadDivisions les charge deja.
       showNationalAdminHome();
       show('mainView',true);
       await loadDivisions();
-      const {data:allUnits,error:ue}=await sb.from('units').select('id,name,active,division_id').order('name');
-      if(ue){alert(ue.message);return;}
-      units=allUnits||[];
       if(!units.some(u=>u.id===selectedUnit)) selectedUnit=profile.unit_id;
       renderAdminUnits();
     } else selectedUnit=profile.unit_id;
@@ -1441,8 +1438,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     await refreshMaintenance();
     if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
-    if(profile.is_admin)renderNationalAdminHome();
-    else show('mainView',true);
+    if(!profile.is_admin)show('mainView',true);
   }
 
   $('saveNewPassword').onclick=async()=>{
@@ -2439,12 +2435,12 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   }
   async function selectNationalAdminScope(unitId,tab){
     if(!profile?.is_admin || !units.some(u=>u.id===unitId) || documentBusy)return;
-    if(!await allowLeaveCatalogue())return;
     if(selectedUnit!==unitId){
+      // Le handler de changement gere deja la confirmation et le chargement du mois.
       $('adminUnit').value=unitId;
       await $('adminUnit').onchange();
       if(selectedUnit!==unitId)return;
-    }
+    }else if(!await allowLeaveCatalogue())return;
     openNationalAdminWorkspace(tab);
   }
   function openNationalAdminDivision(id){
