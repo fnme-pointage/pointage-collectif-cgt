@@ -802,15 +802,6 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   <section id="nationalAdminHome" class="card hidden">
     <div class="sectiontitle"><h2>Administration nationale</h2></div>
     <p class="muted">Accédez aux fonctions nationales ou choisissez une unité pour consulter et modifier ses données.</p>
-    <div class="admin-home-actions">
-      <button type="button" data-home-tab="codes" class="secondary">Catalogue national des codes</button>
-      <button type="button" data-home-tab="users" class="secondary">Utilisateurs</button>
-      <button type="button" data-home-tab="flash" class="secondary">Messages flash</button>
-      <button type="button" data-home-tab="results" class="secondary">Suivi et exports</button>
-      <button type="button" data-home-tab="documents" class="secondary">Base documentaire nationale</button>
-      <button type="button" data-home-tab="divisions" class="secondary">Divisions</button>
-      <button type="button" data-home-tab="units" class="secondary">Unités</button>
-    </div>
     <div class="sectiontitle"><h2>Accéder à une unité</h2></div>
     <p class="muted small">Chaque unité conserve son propre catalogue de codes modifiable, ses suivis et ses fonctions de gestion.</p>
     <label for="adminHomeSearch">Rechercher une unité</label><input id="adminHomeSearch" type="search" placeholder="Nom de l’unité ou de la division">
@@ -820,8 +811,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <button id="returnNationalHome" type="button" class="secondary">← Accueil administration nationale</button>
     <strong id="adminCurrentScope"></strong>
   </div>
-  <div id="adminArea" class="hidden">
-    <div class="adminnav">
+  <div id="adminGlobalNav" class="adminnav hidden">
       <button data-admin-tab="results" class="active">Suivi</button>
       <button data-admin-tab="codes">Catalogue des codes</button>
       <button data-admin-tab="flash">Messages flash</button>
@@ -830,7 +820,9 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       <button data-admin-tab="divisions" class="hidden">Divisions</button>
       <button data-admin-tab="documents">Base documentaire nationale</button>
       <button data-admin-tab="unit-documents" class="hidden">Base documentaire d’unité</button>
-    </div>
+  </div>
+  <div id="adminArea" class="hidden">
+
 
     <section id="admin-results">
       <div id="unitFollowupCard" class="card hidden"><div class="sectiontitle"><h2>Suivi de mon unité</h2><button id="refreshUnitFollowup" class="secondary" type="button">Actualiser</button></div><label for="unitFollowupYear">Année du suivi</label><input id="unitFollowupYear" type="number" min="1900" max="9999" value="2026"><div id="unitFollowupSummary" aria-live="polite"></div></div>
@@ -1124,7 +1116,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
   const $ = id => document.getElementById(id);
-  const show = (id,on=true)=>$(id).classList.toggle('hidden',!on);
+  const show = (id,on=true)=>{ $(id).classList.toggle('hidden',!on); if(id==='adminArea')$('adminGlobalNav').classList.toggle('hidden',!on && $('nationalAdminHome').classList.contains('hidden')); };
   const fmt = n => Number(n||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   // Duration helpers: one second is the common unit for all calculations.
@@ -2422,6 +2414,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     if(!profile?.is_admin)return;
     show('nationalAdminHome',true);show('adminArea',false);show('adminHomeReturn',false);
     show('adminUnitField',false);show('maintenanceAdmin',true);
+    show('adminGlobalNav',true);
+    ['results','codes','flash','users','units','divisions','documents'].forEach(tab=>document.querySelector('[data-admin-tab="'+tab+'"]').classList.remove('hidden'));
+    document.querySelector('[data-admin-tab="unit-documents"]').classList.add('hidden');
+    document.querySelectorAll('[data-admin-tab]').forEach(button=>button.classList.remove('active'));
     renderNationalAdminHome();
   }
   function openNationalAdminWorkspace(tab){
@@ -2454,6 +2450,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
     if(btn.classList.contains('hidden') || documentBusy) return;
+    if(profile?.is_admin && !$('nationalAdminHome').classList.contains('hidden')){
+      const admin=units.find(u=>u.name==='ADMIN');
+      if(admin)selectNationalAdminScope(admin.id,btn.dataset.adminTab);
+      return;
+    }
     if(btn.dataset.adminTab==='users'){show('createUserForm',false);show('transferUserForm',false);}
     document.querySelectorAll('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));
     ['results','codes','users','units','divisions','flash'].forEach(t=>show('admin-'+t,t===btn.dataset.adminTab));
