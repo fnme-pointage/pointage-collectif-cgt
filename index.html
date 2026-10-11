@@ -741,12 +741,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   <div id="calendarMessage" aria-live="polite"></div>
 
   <div id="maintenanceBanner" aria-live="polite"></div>
-  <div id="maintenanceAdmin" class="card hidden">
-    <div class="sectiontitle"><h2>Maintenance de l’application</h2><span id="maintenanceState" class="pill"></span></div>
-    <p class="muted small">Bloque les enregistrements de tous les utilisateurs, dans toutes les unités et pour tous les mois, pendant tes modifications. La consultation reste accessible.</p>
-    <button id="toggleMaintenance" type="button" disabled>Vérification du blocage…</button>
-    <div id="maintenanceAdminMessage" aria-live="polite" style="margin-top:10px"></div>
-  </div>
+
 
   <div id="userArea" class="hidden">
     <div class="card premium-pointage">
@@ -788,6 +783,13 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2></div>
       <p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs couvrent toutes les unités de la division. Le catalogue et les bases documentaires peuvent être gérés unité par unité. Aucune autre division n’est accessible.</p>
     </div>
+  </div>
+
+  <div id="maintenanceAdmin" class="card hidden">
+    <div class="sectiontitle"><h2>Maintenance de l’application</h2><span id="maintenanceState" class="pill"></span></div>
+    <p class="muted small">Bloque les enregistrements de tous les utilisateurs, dans toutes les unités et pour tous les mois, pendant tes modifications. La consultation reste accessible.</p>
+    <button id="toggleMaintenance" type="button" disabled>Vérification du blocage…</button>
+    <div id="maintenanceAdminMessage" aria-live="polite" style="margin-top:10px"></div>
   </div>
 
   <section id="nationalAdminHome" class="card hidden">
@@ -1503,7 +1505,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       $('adminUnit').innerHTML=availableUnits.map(optionFor).join('');
     }
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
-    show('maintenanceAdmin',profile.is_admin && isAdminUnit);
+    // Le blocage global est reserve a l'accueil national, quel que soit le perimetre selectionne.
     refreshFlashTargets();
     renderCataloguePanels();
     const nationalTab=document.querySelector('[data-admin-tab="documents"]');
@@ -2409,13 +2411,13 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   function showNationalAdminHome(){
     if(!profile?.is_admin)return;
     show('nationalAdminHome',true);show('adminArea',false);show('adminHomeReturn',false);
-    show('adminUnitField',false);show('maintenanceAdmin',false);
+    show('adminUnitField',false);show('maintenanceAdmin',true);
     renderNationalAdminHome();
   }
   function openNationalAdminWorkspace(tab){
     if(!profile?.is_admin)return;
     show('nationalAdminHome',false);show('adminArea',true);show('adminHomeReturn',true);
-    show('adminUnitField',false);
+    show('maintenanceAdmin',false);show('adminUnitField',false);
     const chosen=units.find(u=>u.id===selectedUnit);
     $('adminCurrentScope').textContent=' · '+(chosen?.name==='ADMIN'?'Périmètre national':chosen?.name||'Unité');
     const target=document.querySelector('[data-admin-tab="'+tab+'"]');
