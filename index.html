@@ -537,6 +537,47 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 /* Le selecteur Mois global n'est pas necessaire dans le bandeau administrateur. */
 #mainView #adminMonthField{display:none!important}
 #userArea #pointageMonthSlot #adminMonthField{display:block!important}
+
+/* Ergonomie telephone uniquement ; les regles desktop restent intactes. */
+@media(max-width:620px){
+ #mainView #contactAdminLink.contact-admin{font-size:0!important;min-height:44px!important;padding:11px 16px!important;white-space:nowrap!important}
+ #mainView #contactAdminLink.contact-admin:after{content:"Contacts";font-size:14px!important;font-weight:750!important;vertical-align:middle;color:#fff!important}
+ #userArea .premium-input-layout #entryList>.entry,
+ #userArea .premium-input-layout #entryList>.entry:first-child,
+ #userArea .premium-input-layout #entryList>.entry:not(:first-child){
+  display:grid!important;grid-template-columns:minmax(0,1fr) 42px!important;
+  column-gap:10px!important;row-gap:12px!important;align-items:start!important;
+  width:100%!important;min-width:0!important;max-width:100%!important
+ }
+ #userArea .premium-input-layout #entryList>.entry>div:first-child{
+  grid-column:1!important;grid-row:1!important;min-width:0!important;width:100%!important
+ }
+ #userArea .premium-input-layout #entryList>.entry>div:nth-child(2){
+  grid-column:1!important;grid-row:2!important;min-width:0!important;width:100%!important
+ }
+ #userArea .premium-input-layout #entryList>.entry>button.icon{
+  grid-column:2!important;grid-row:1!important;align-self:end!important;
+  margin:29px 0 0!important;height:48px!important;width:42px!important
+ }
+ #userArea .premium-input-layout #entryList>.entry .code-picker,
+ #userArea .premium-input-layout #entryList>.entry .code-picker>summary,
+ #userArea .premium-input-layout #entryList>.entry .picker-current,
+ #userArea .premium-input-layout #entryList>.entry input[data-hours]{
+  width:100%!important;min-width:0!important;max-width:100%!important;
+  box-sizing:border-box!important;min-height:48px!important;height:48px!important
+ }
+ #userArea .premium-input-layout #entryList>.entry .code-picker>summary{
+  text-overflow:ellipsis!important;overflow:hidden!important;white-space:nowrap!important
+ }
+ #userArea .premium-input-layout #entryList>.entry .picker-panel{
+  max-width:calc(100vw - 42px)!important;width:calc(100vw - 42px)!important;
+  max-height:60vh!important;overflow:auto!important
+ }
+ #userArea .premium-input-layout #entryList>.entry .picker-panel .codestable{min-width:650px}
+ #userArea #pointageMonthSlot{grid-template-columns:repeat(2,minmax(0,1fr))!important;max-width:100%!important}
+ #userArea .premium-pointage-actions{display:grid!important;grid-template-columns:1fr!important}
+ #userArea .premium-pointage-actions>button{width:100%!important;min-width:0!important}
+}
 </style>
 </head>
 <body>
