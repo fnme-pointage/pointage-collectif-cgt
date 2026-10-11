@@ -2426,7 +2426,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     if(!await allowLeaveCatalogue())return;
     if(selectedUnit!==unitId){
       $('adminUnit').value=unitId;
-      $('adminUnit').dispatchEvent(new Event('change'));
+      await $('adminUnit').onchange();
+      if(selectedUnit!==unitId)return;
     }
     openNationalAdminWorkspace(tab);
   }
