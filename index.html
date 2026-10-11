@@ -1411,7 +1411,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       $('pendingIdentity').textContent=`${profile.full_name||profile.email} — ${profile.email}`;
       return;
     }
-    show('authView',false);show('mainView',true);
+    show('authView',false);
+    // Conserver l'interface masquee jusqu'a la fin de l'initialisation.
     renderUserIdentity();
     $('userRole').textContent=profile.is_admin?'Administrateur national':['Utilisateur',profile.is_unit_manager?'Responsable d’unité':null,profile.is_division_manager?'Responsable de division':null].filter(Boolean).join(' · ');
     show('divisionManagerTab',!!profile.is_division_manager&&!profile.is_admin);
@@ -1443,6 +1444,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
     if(profile.is_admin)showNationalAdminHome();
+    show('mainView',true);
   }
 
   $('saveNewPassword').onclick=async()=>{
