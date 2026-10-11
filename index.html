@@ -600,6 +600,15 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
  text-align:right!important;
 }
 #mainView>.top #contactAdminLink{margin-left:auto!important;margin-right:0!important}
+
+/* Accueil administrateur : composants propres, responsive, sans changement des formulaires. */
+.admin-home-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0 28px}
+.admin-home-actions button{min-height:58px;text-align:left}
+.admin-home-group{padding:14px 0;border-bottom:1px solid var(--border)}
+.admin-home-group>strong{display:block;margin-bottom:11px}
+.admin-home-unit{margin:0 8px 8px 0;min-height:44px}
+#adminHomeSearch{width:100%;max-width:500px}
+@media(max-width:600px){.admin-home-actions{grid-template-columns:1fr}.admin-home-unit{width:100%;text-align:left}}
 </style>
 </head>
 <body>
@@ -779,6 +788,28 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       <div class="sectiontitle"><h2 id="divisionHeading">Gestion de ma division</h2></div>
       <p class="muted small">Les onglets Suivi, Messages flash et Utilisateurs couvrent toutes les unités de la division. Le catalogue et les bases documentaires peuvent être gérés unité par unité. Aucune autre division n’est accessible.</p>
     </div>
+  </div>
+
+  <section id="nationalAdminHome" class="card hidden">
+    <div class="sectiontitle"><h2>Administration nationale</h2></div>
+    <p class="muted">Accédez aux fonctions nationales ou choisissez une unité pour consulter et modifier ses données.</p>
+    <div class="admin-home-actions">
+      <button type="button" data-home-tab="codes" class="secondary">Catalogue national des codes</button>
+      <button type="button" data-home-tab="users" class="secondary">Utilisateurs</button>
+      <button type="button" data-home-tab="flash" class="secondary">Messages flash</button>
+      <button type="button" data-home-tab="results" class="secondary">Suivi et exports</button>
+      <button type="button" data-home-tab="documents" class="secondary">Base documentaire nationale</button>
+      <button type="button" data-home-tab="divisions" class="secondary">Divisions</button>
+      <button type="button" data-home-tab="units" class="secondary">Unités</button>
+    </div>
+    <div class="sectiontitle"><h2>Accéder à une unité</h2></div>
+    <p class="muted small">Chaque unité conserve son propre catalogue de codes modifiable, ses suivis et ses fonctions de gestion.</p>
+    <label for="adminHomeSearch">Rechercher une unité</label><input id="adminHomeSearch" type="search" placeholder="Nom de l’unité ou de la division">
+    <div id="adminHomeUnits"></div>
+  </section>
+  <div id="adminHomeReturn" class="hidden" style="margin:12px 0">
+    <button id="returnNationalHome" type="button" class="secondary">← Accueil administration nationale</button>
+    <strong id="adminCurrentScope"></strong>
   </div>
   <div id="adminArea" class="hidden">
     <div class="adminnav">
@@ -1401,6 +1432,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     await refreshMaintenance();
     if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
+    if(profile.is_admin)showNationalAdminHome();
   }
 
   $('saveNewPassword').onclick=async()=>{
@@ -2355,6 +2387,56 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     }catch(error){$('flashFeedback').innerHTML=msg('Publication non confirmée : '+error.message+' Tu peux réessayer sans doubler le même envoi.','warn');}
     finally{flashBusy=false;$('publishFlash').disabled=false;$('flashForm').querySelectorAll('input,textarea,select').forEach(el=>el.disabled=false);}
   };
+
+
+  // Accueil d'administration : reutilise strictement les ecrans et handlers historiques.
+  function renderNationalAdminHome(){
+    if(!profile?.is_admin)return;
+    const filter=$('adminHomeSearch').value.trim().toLocaleLowerCase('fr');
+    const grouped=new Map();
+    units.filter(u=>u.active&&u.name!=='ADMIN').forEach(u=>{
+      const division=divisions.find(d=>d.id===u.division_id)?.name||'Sans division';
+      if(filter && !(u.name+' '+division).toLocaleLowerCase('fr').includes(filter))return;
+      if(!grouped.has(division))grouped.set(division,[]);
+      grouped.get(division).push(u);
+    });
+    $('adminHomeUnits').innerHTML=[...grouped.entries()].sort((a,b)=>a[0].localeCompare(b[0],'fr'))
+      .map(([division,list])=>'<div class="admin-home-group"><strong>'+esc(division)+'</strong>'+
+       list.map(u=>'<button type="button" class="secondary admin-home-unit" data-home-unit="'+esc(u.id)+'">'+esc(u.name)+' →</button>').join('')+'</div>')
+      .join('')||'<p class="muted">Aucune unité trouvée.</p>';
+    $('adminHomeUnits').querySelectorAll('[data-home-unit]').forEach(b=>b.onclick=()=>openNationalAdminUnit(b.dataset.homeUnit));
+  }
+  function showNationalAdminHome(){
+    if(!profile?.is_admin)return;
+    show('nationalAdminHome',true);show('adminArea',false);show('adminHomeReturn',false);
+    show('adminUnitField',false);show('maintenanceAdmin',false);
+    renderNationalAdminHome();
+  }
+  function openNationalAdminWorkspace(tab){
+    if(!profile?.is_admin)return;
+    show('nationalAdminHome',false);show('adminArea',true);show('adminHomeReturn',true);
+    show('adminUnitField',false);
+    const chosen=units.find(u=>u.id===selectedUnit);
+    $('adminCurrentScope').textContent=' · '+(chosen?.name==='ADMIN'?'Périmètre national':chosen?.name||'Unité');
+    const target=document.querySelector('[data-admin-tab="'+tab+'"]');
+    if(target&&!target.classList.contains('hidden'))target.click();
+  }
+  async function selectNationalAdminScope(unitId,tab){
+    if(!profile?.is_admin || !units.some(u=>u.id===unitId) || documentBusy)return;
+    if(!await allowLeaveCatalogue())return;
+    if(selectedUnit!==unitId){
+      $('adminUnit').value=unitId;
+      $('adminUnit').dispatchEvent(new Event('change'));
+    }
+    openNationalAdminWorkspace(tab);
+  }
+  function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
+  $('adminHomeSearch').oninput=renderNationalAdminHome;
+  $('returnNationalHome').onclick=showNationalAdminHome;
+  document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
+    const admin=units.find(u=>u.name==='ADMIN');
+    if(admin)selectNationalAdminScope(admin.id,b.dataset.homeTab);
+  });
 
   // ADMIN
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.onclick=()=>{
