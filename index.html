@@ -959,7 +959,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     </section>
 
     <section id="admin-flash" class="hidden">
-      <div class="card">
+      <div id="flashComposerCard" class="card">
         <div class="sectiontitle"><h2>Messages flash</h2></div>
         <p id="flashScopeHelp" class="notice">Depuis Admin, tu peux publier un message national ou ciblé sur une seule unité. Les utilisateurs reçoivent les messages nationaux et les messages de leur unité.</p><div id="flashTargetField"><label for="flashTarget">Destinataires du message</label><select id="flashTarget"><option value="all">Toutes les unités — Admin</option></select></div><p id="flashTargetHint" class="muted small"></p>
         <form id="flashForm">
@@ -2338,6 +2338,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const select=$('flashTarget'),filter=$('flashHistoryFilter');if(!select||!filter)return;
     const isNational=!!profile?.is_admin;
     const unit=units.find(u=>u.id===selectedUnit);
+    const adminUnitView=isNational&&!!unit&&unit.name!=='ADMIN';
+    show('flashComposerCard',!adminUnitView);
     const previousTarget=select.value,previousFilter=filter.value;
     const unitOptions=units.filter(u=>u.active&&u.name!=='ADMIN'&&(profile?.is_admin||!divisionSpace||divisionCanManageUnit(u.id))).map(u=>`<option value="${esc(u.id)}">Unité ${esc(u.name)}</option>`).join('');
     const divisionOptions=isNational?divisions.filter(d=>d.active).map(d=>`<option value="division:${esc(d.id)}">Division ${esc(d.name)} — toutes ses unités</option>`).join(''):'';
@@ -2351,7 +2353,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     $('flashScopeHelp').textContent=isNational?'Depuis Admin national, choisis toutes les unités, une division ou une unité. Le message et les éventuels e-mails sont envoyés uniquement aux utilisateurs du périmètre sélectionné.':divisionSpace?'Messages flash de l’ensemble de ta division. Tu peux envoyer dans toutes ses unités ou cibler une seule unité. Les messages nationaux restent réservés à Admin.':'Dans cet espace, tu gères uniquement les messages flash de '+(unit?.name||"l'unité")+'. Les messages nationaux restent gérés depuis Admin.';
     filter.innerHTML='<option value="all">Tous les messages</option>'+(isNational?'<option value="national">Messages nationaux</option>':'')+divisionOptions+unitOptions;
     filter.value=Array.from(filter.options).some(o=>o.value===previousFilter)?previousFilter:'all';
-    show('flashHistoryFilterField',isNational||divisionSpace);
+    show('flashHistoryFilterField',(isNational&&!adminUnitView)||divisionSpace);
+    if(adminUnitView)$('flashHistoryScopeHelp').textContent='Messages en cours visibles par les utilisateurs de cette unité (messages nationaux, de division et d’unité). Consultation uniquement : la publication et l’arrêt des messages se gèrent depuis l’administration nationale.';
     updateFlashEmailLabel();
   }
   async function loadFlashHistory(){
@@ -2359,14 +2362,22 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     try{const {data,error}=await sb.rpc('pointage_list_flash_messages');if(request!==flashHistoryRequest)return;if(error)throw error;
       const now=Date.parse(data.server_now),isNational=!!profile?.is_admin;
       const allMessages=data.messages||[];
-      const filter=isNational||divisionSpace?$('flashHistoryFilter').value:selectedUnit;
-      const messages=allMessages.filter(m=>filter==='all'||(filter==='national'?!m.unit_id:filter.startsWith('division:')?units.some(u=>u.id===m.unit_id&&u.division_id===filter.slice(9)):m.unit_id===filter));
+      const unitView=isNational&&units.some(u=>u.id===selectedUnit&&u.name!=='ADMIN');
+      const filter=unitView?selectedUnit:isNational||divisionSpace?$('flashHistoryFilter').value:selectedUnit;
+      const messages=allMessages.filter(m=>{
+        if(unitView){
+          const active=!m.cancelled_at&&Date.parse(m.starts_at)<=now&&Date.parse(m.ends_at)>now;
+          // Les diffusions par division sont developpees en messages par unite par les RPC existantes.
+          return active&&(!m.unit_id||m.unit_id===selectedUnit);
+        }
+        return filter==='all'||(filter==='national'?!m.unit_id:filter.startsWith('division:')?units.some(u=>u.id===m.unit_id&&u.division_id===filter.slice(9)):m.unit_id===filter);
+      });
       $('flashHistory').innerHTML=messages.length?messages.map(m=>{
         const status=m.cancelled_at?'Arrêté':Date.parse(m.ends_at)<=now?'Terminé':Date.parse(m.starts_at)>now?'Programmé':'En cours';
         const name=m.unit_id?units.find(u=>u.id===m.unit_id)?.name:null;
         const origin=m.unit_id?`Unité ${esc(name||'inconnue')}`:'Toutes les unités · Admin';
         const mail=m.send_email?`${m.email_sent} mail(s) accepté(s) par le serveur · ${m.email_pending} en attente · ${m.email_failed} en échec · ${m.email_skipped} non envoyé(s)`:'Affichage dans l’application uniquement';
-        return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status} · ${origin}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
+        return `<div class="notice" style="margin-top:12px;overflow-wrap:anywhere"><div class="sectiontitle"><strong>${esc(m.title)}</strong><span class="pill">${status} · ${origin}</span></div><p style="white-space:pre-wrap">${esc(m.body)}</p><p class="small">Du ${esc(flashDate(m.starts_at))} au ${esc(flashDate(m.ends_at))}</p><p class="muted small">${esc(mail)}</p>${!unitView&&!m.cancelled_at&&Date.parse(m.ends_at)>now?`<button class="secondary" type="button" data-stop-flash="${esc(m.id)}">Arrêter la diffusion</button>`:''}</div>`;
       }).join(''):'<p class="muted">Aucun message flash publié.</p>';
       document.querySelectorAll('[data-stop-flash]').forEach(btn=>btn.onclick=async()=>{
         if(flashBusy||!await confirmAction('Arrêter ce message et les mails restant à envoyer ?'))return;
@@ -2378,7 +2389,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   $('flashHistoryFilter').onchange=loadFlashHistory;
   $('flashForm').addEventListener('input',()=>{if(!flashBusy)flashDraftId=null;});
   $('flashForm').onsubmit=async event=>{
-    event.preventDefault();if(flashBusy||!unitManagement())return;
+    event.preventDefault();if(flashBusy||!unitManagement()||(profile.is_admin&&units.some(u=>u.id===selectedUnit&&u.name!=='ADMIN')))return;
     const title=$('flashTitle').value.trim(),body=$('flashBody').value.trim(),start=new Date($('flashStart').value),end=new Date($('flashEnd').value),email=$('flashEmail').checked,target=profile.is_admin||divisionSpace?$('flashTarget').value:selectedUnit;
     if((target.startsWith('division:')?(!profile.is_admin||!divisions.some(d=>d.active&&d.id===target.slice(9)&&units.some(u=>u.active&&u.division_id===d.id))):target==='division-all'?!divisionSpace:target==='all'?!profile.is_admin:!units.some(u=>u.id===target&&u.active&&u.name!=='ADMIN'&&(!divisionSpace||divisionCanManageUnit(u.id))))||!title||!body||/[\r\n]/.test(title)||!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||end<=new Date()){$('flashFeedback').innerHTML=msg('Renseigne un titre, un message et une fin postérieure au début et à maintenant.','warn');return;}
     const targetDivision=target.startsWith('division:')?divisions.find(d=>d.id===target.slice(9)):null;
