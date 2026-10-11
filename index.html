@@ -578,6 +578,18 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
  #userArea .premium-pointage-actions{display:grid!important;grid-template-columns:1fr!important}
  #userArea .premium-pointage-actions>button{width:100%!important;min-width:0!important}
 }
+
+/* Mobile : bouton Contacts aligne au bord gauche interieur du bandeau. */
+@media(max-width:620px){
+ #mainView>.top .premium-user-details #userContact{
+  position:relative!important;
+  align-self:stretch!important;
+  margin-left:-54px!important;
+  width:calc(100% + 54px)!important;
+  text-align:left!important;
+ }
+ #mainView>.top #contactAdminLink{margin-left:0!important}
+}
 </style>
 </head>
 <body>
