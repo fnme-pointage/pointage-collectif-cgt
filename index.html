@@ -988,6 +988,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         <div class="sectiontitle"><h2>Divisions</h2><button id="refreshDivisions" type="button" class="secondary">Actualiser</button></div>
         <p class="muted small">La DTEAM contient initialement OPF, UFPI et ULM. La DPN attend ses unités. Seul l’administrateur national peut nommer plusieurs responsables dans chaque division.</p>
         <div id="divisionsList"></div>
+        <div id="divisionDrilldown" class="notice hidden" aria-live="polite"></div>
         <div class="row"><div class="grow"><label for="newDivisionName">Nouvelle division</label><input id="newDivisionName" maxlength="100" placeholder="Ex. DPN"></div><button id="createDivision" type="button">Créer la division</button></div>
         <h3>Rattacher une unité à une division</h3>
         <div class="row">
@@ -1525,7 +1526,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     nationalTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
-    $('unitsList').innerHTML=units.filter(u=>profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id)).map(u=>{const managers=unitManagerDirectory.filter(p=>p.active&&p.unit_id===u.id&&(u.name==='ADMIN'?p.is_admin:p.is_unit_manager));return `<div class="notice"><strong>${esc(u.name)}</strong>${u.active?'':' (inactive)'}<p class="muted small">Responsables : ${managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner'}</p>${profile.is_admin&&u.name!=='ADMIN'?`<button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`;}).join('');
+    $('unitsList').innerHTML=units.filter(u=>u.name!=='ADMIN'&&(profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>{const managers=unitManagerDirectory.filter(p=>p.active&&p.unit_id===u.id&&p.is_unit_manager);return `<div class="notice"><button type="button" class="secondary" data-open-unit="${esc(u.id)}">${esc(u.name)} → Accéder à l’unité</button><p class="muted small">Responsables : ${managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner'}</p>${profile.is_admin?`<button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`;}).join('');
+    document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'codes'));
     document.querySelectorAll('[data-rename-unit]').forEach(button=>button.onclick=()=>renameOrganization('unit',button.dataset.renameUnit));
   }
   $('adminUnit').onchange=async()=>{if(!profile.is_admin && !(divisionSpace&&divisionCanManageUnit($('adminUnit').value))){$('adminUnit').value=selectedUnit;return;}if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && !divisionSpace && !managerSpace && selectedUnit===profile.unit_id);await loadMonths();};
@@ -2056,10 +2058,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     $('divisionsList').innerHTML=divisions.map(d=>{
       const members=units.filter(u=>u.division_id===d.id);
       const managers=persons.filter(p=>p.is_division_manager&&p.managed_division_id===d.id);
-      return '<div class="notice"><strong>'+esc(d.name)+'</strong> · '+(members.map(u=>esc(u.name)).join(', ')||'Aucune unité')+
+      return '<div class="notice"><button type="button" class="secondary" data-open-division="'+esc(d.id)+'">'+esc(d.name)+' → Accéder à la division</button> · '+(members.map(u=>esc(u.name)).join(', ')||'Aucune unité')+
         '<p class="muted small">Responsables : '+(managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner')+'</p><button type="button" class="secondary" data-rename-division="'+esc(d.id)+'">Modifier le nom</button></div>';
     }).join('');
     document.querySelectorAll('[data-rename-division]').forEach(button=>button.onclick=()=>renameOrganization('division',button.dataset.renameDivision));
+    document.querySelectorAll('[data-open-division]').forEach(button=>button.onclick=()=>openNationalAdminDivision(button.dataset.openDivision));
     function managerChoices(){
       const target=$('divisionManagerDivision').value;
       $('divisionManagerPerson').innerHTML=persons.filter(p=>!p.is_admin && units.some(u=>u.id===p.unit_id&&u.division_id===target))
@@ -2444,7 +2447,19 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     }
     openNationalAdminWorkspace(tab);
   }
-  function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
+  function openNationalAdminDivision(id){
+    if(!profile?.is_admin)return;
+    const division=divisions.find(d=>String(d.id)===String(id));
+    if(!division)return;
+    const members=units.filter(u=>u.active&&u.name!=='ADMIN'&&String(u.division_id)===String(id));
+    const detail=$('divisionDrilldown');
+    detail.classList.remove('hidden');
+    detail.innerHTML='<h3>Division '+esc(division.name)+'</h3><p class="muted small">Sélectionner une unité pour accéder à ses fonctions de gestion.</p>'+
+      (members.length?members.map(u=>'<button type="button" class="secondary admin-home-unit" data-division-unit="'+esc(u.id)+'">'+esc(u.name)+' →</button>').join(''):'<p>Aucune unité rattachée.</p>');
+    detail.querySelectorAll('[data-division-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.divisionUnit,'codes'));
+    detail.scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+    function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
   $('adminHomeSearch').oninput=renderNationalAdminHome;
   $('returnNationalHome').onclick=showNationalAdminHome;
   document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
