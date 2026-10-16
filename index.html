@@ -1915,10 +1915,21 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       conventionCurrentCodes=[...unique.values()].filter(c=>c.active).sort((a,b)=>a.code.localeCompare(b.code,'fr',{numeric:true}));
       const previous=new Map((current?.codes||[]).map(c=>[c.code,c.hours]));
       $('conventionRows').innerHTML=conventionCurrentCodes.length?'<table><thead><tr><th>Code</th><th>Libellé</th><th>Heures annuelles prévues</th></tr></thead><tbody>'+
-        conventionCurrentCodes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.label)+'</td><td><input type="number" min="0" step="0.01" inputmode="decimal" data-convention-code="'+esc(c.code)+'" value="'+esc(previous.get(c.code)??'')+'" placeholder="Heures"></td></tr>').join('')+'</tbody></table>':'<p>Aucun code actif trouvé pour cette unité.</p>';
+        conventionCurrentCodes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.label)+'</td><td><input type="number" min="0" step="0.01" inputmode="decimal" data-convention-code="'+esc(c.code)+'" value="'+esc(previous.get(c.code)??'')+'" placeholder="Heures"></td></tr>').join('')+'</tbody><tfoot><tr><th colspan="2">Total des heures de convention</th><th id="conventionTotal" class="num">0 h</th></tr></tfoot></table>':'<p>Aucun code actif trouvé pour cette unité.</p>';
+      updateConventionTotal();
       $('conventionHistory').innerHTML=versions.length?'<details><summary>Historique des conventions et avenants ('+versions.length+')</summary><ul>'+versions.map(v=>'<li>'+esc(v.effective_from)+' — validité : '+esc(v.valid_from)+' au '+esc(v.valid_until)+(v.reason?' — '+esc(v.reason):'')+'</li>').join('')+'</ul></details>':'';
     }catch(e){$('conventionRows').textContent='Chargement impossible : '+e.message;}
   }
+  function updateConventionTotal(){
+    const total=[...document.querySelectorAll('#conventionRows [data-convention-code]')].reduce((sum,input)=>{
+      const n=Number(input.value.replace(',','.'));
+      return sum+(input.value.trim()!==''&&Number.isFinite(n)&&n>=0?n:0);
+    },0);
+    if($('conventionTotal'))$('conventionTotal').textContent=total.toLocaleString('fr-FR',{maximumFractionDigits:2})+' h';
+  }
+  $('conventionRows').addEventListener('input',event=>{
+    if(event.target.matches('[data-convention-code]'))updateConventionTotal();
+  });
   $('conventionOpen').onclick=openConvention;
   $('conventionClose').onclick=()=>$('conventionDialog').close();
   $('conventionManagerClose').onclick=()=>$('conventionManagerDialog').close();
