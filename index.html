@@ -723,7 +723,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
-    <button id="conventionOpen" type="button">☐ Militant détaché</button>
+
     <button id="userDocumentsTab" type="button">Base documentaire nationale</button>
     <button id="userUnitDocumentsTab" type="button">Base documentaire d’unité</button>
     <button id="unitManagerTab" class="hidden" type="button">Gestion de mon unité</button>
@@ -761,7 +761,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <h2>Militant détaché — Convention</h2>
     <p>Merci de remplir les heures présentes dans votre convention.</p>
     <p class="muted small">Renseigne les heures prévues pour chaque code validé dans ton unité. Les heures de convention sont distinctes des heures pointées.</p>
-    <label>Année <select id="conventionYear"></select></label>
+    <div style="display:flex;flex-wrap:wrap;gap:10px"><label>Début de convention <input type="date" id="conventionStart"></label><label>Fin de convention <input type="date" id="conventionEnd"></label><label>Prise d’effet de cette version <input type="date" id="conventionEffective"></label></div>
+    <label>Motif de modification (facultatif) <input id="conventionReason" type="text" maxlength="300" placeholder="Ex. avenant"></label>
+    <p class="muted small">Une modification crée une nouvelle version sans effacer les précédentes.</p>
+    <div id="conventionHistory"></div>
     <div id="conventionRows" class="tablewrap" style="margin-top:12px"></div>
     <div id="conventionNotice" aria-live="polite"></div>
     <div class="actions"><button id="conventionSave" type="button">Enregistrer et fermer</button><button id="conventionClose" class="secondary" type="button">Fermer</button></div>
@@ -777,7 +780,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         <div class="premium-pointage-heading">
           <span class="premium-pointage-icon" aria-hidden="true">◷</span>
           <div>
-            <h2>Mon pointage</h2>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h2>Mon pointage</h2><button id="conventionOpen" type="button" class="secondary">Militant détaché</button></div>
 
             <div id="entrySaveStatus" class="muted small" aria-live="polite"></div>
           </div>
@@ -1877,51 +1880,64 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     if(entriesDirty || savingEntries || (profile?.is_admin && catalogueState(catalogueRows)!==catalogueState(catalogueOriginal))){event.preventDefault();event.returnValue='';}
   });
   let conventionCurrentCodes=[];
-  const conventionYear=()=>Number($('conventionYear').value);
-  function conventionYears(){
-    const now=new Date().getFullYear();
-    $('conventionYear').innerHTML=[now-1,now,now+1].map(y=>'<option value="'+y+'"'+(y===now?' selected':'')+'>'+y+'</option>').join('');
+  const todayIso=()=>new Date().toISOString().slice(0,10);
+  async function getConventionVersions(userId){
+    const {data:versions,error}=await sb.from('pointage_convention_versions').select('id,valid_from,valid_until,effective_from,reason,created_at').eq('user_id',userId).order('effective_from',{ascending:false});
+    if(error)throw error;
+    const ids=(versions||[]).map(v=>v.id);
+    const {data:codes,error:ce}=ids.length?await sb.from('pointage_convention_version_codes').select('version_id,code,hours').in('version_id',ids):{data:[]};
+    if(ce)throw ce;
+    return (versions||[]).map(v=>({...v,codes:(codes||[]).filter(c=>c.version_id===v.id)}));
   }
+  const validConvention=(versions,date)=>versions.filter(v=>v.effective_from<=date&&v.valid_from<=date&&v.valid_until>=date).sort((a,b)=>b.effective_from.localeCompare(a.effective_from))[0]||null;
   async function openConvention(){
     if(!profile?.active||profile.is_admin)return;
-    conventionYears();$('conventionNotice').textContent='';
+    $('conventionNotice').textContent='';
     $('conventionDialog').showModal();
     await loadConventionEditor();
   }
   async function loadConventionEditor(){
-    const year=conventionYear(),unit=profile.unit_id;
     $('conventionRows').textContent='Chargement…';
     try{
-      const [catalogue, saved]=await Promise.all([
-        sb.from('month_codes').select('code,label,active').eq('unit_id',unit).gte('month_key',year+'-01').lte('month_key',year+'-12').order('month_key',{ascending:false}),
-        sb.from('pointage_convention_hours').select('code,hours').eq('user_id',profile.id).eq('year',year)
-      ]);
-      if(catalogue.error||saved.error)throw catalogue.error||saved.error;
+      const versions=await getConventionVersions(profile.id);
+      const current=versions[0];
+      const date=todayIso();
+      $('conventionStart').value=current?.valid_from||date;
+      $('conventionEnd').value=current?.valid_until||date;
+      $('conventionEffective').value=current?date:date;
+      $('conventionReason').value='';
+      const y=new Date().getFullYear();
+      const {data,error}=await sb.from('month_codes').select('code,label,active,month_key').eq('unit_id',profile.unit_id).gte('month_key',(y-1)+'-01').lte('month_key',(y+1)+'-12').order('month_key',{ascending:false});
+      if(error)throw error;
       const unique=new Map();
-      for(const c of catalogue.data||[])if(!unique.has(String(c.code).trim()))unique.set(String(c.code).trim(),c);
+      for(const c of data||[])if(!unique.has(String(c.code).trim()))unique.set(String(c.code).trim(),c);
       conventionCurrentCodes=[...unique.values()].filter(c=>c.active).sort((a,b)=>a.code.localeCompare(b.code,'fr',{numeric:true}));
-      const previous=new Map((saved.data||[]).map(x=>[x.code,x.hours]));
-      $('conventionRows').innerHTML=conventionCurrentCodes.length?'<table><thead><tr><th>Code</th><th>Libellé</th><th>Heures de convention</th></tr></thead><tbody>'+
-        conventionCurrentCodes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.label)+'</td><td><input type="number" min="0" step="0.01" inputmode="decimal" data-convention-code="'+esc(c.code)+'" value="'+esc(previous.get(c.code)??'')+'" placeholder="Heures"></td></tr>').join('')+'</tbody></table>':
-        '<p>Aucun code actif trouvé pour cette année et cette unité.</p>';
+      const previous=new Map((current?.codes||[]).map(c=>[c.code,c.hours]));
+      $('conventionRows').innerHTML=conventionCurrentCodes.length?'<table><thead><tr><th>Code</th><th>Libellé</th><th>Heures annuelles prévues</th></tr></thead><tbody>'+
+        conventionCurrentCodes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.label)+'</td><td><input type="number" min="0" step="0.01" inputmode="decimal" data-convention-code="'+esc(c.code)+'" value="'+esc(previous.get(c.code)??'')+'" placeholder="Heures"></td></tr>').join('')+'</tbody></table>':'<p>Aucun code actif trouvé pour cette unité.</p>';
+      $('conventionHistory').innerHTML=versions.length?'<details><summary>Historique des conventions et avenants ('+versions.length+')</summary><ul>'+versions.map(v=>'<li>'+esc(v.effective_from)+' — validité : '+esc(v.valid_from)+' au '+esc(v.valid_until)+(v.reason?' — '+esc(v.reason):'')+'</li>').join('')+'</ul></details>':'';
     }catch(e){$('conventionRows').textContent='Chargement impossible : '+e.message;}
   }
   $('conventionOpen').onclick=openConvention;
-  $('conventionYear').onchange=loadConventionEditor;
   $('conventionClose').onclick=()=>$('conventionDialog').close();
   $('conventionManagerClose').onclick=()=>$('conventionManagerDialog').close();
   $('conventionSave').onclick=async()=>{
-    const inputs=[...document.querySelectorAll('[data-convention-code]')],year=conventionYear();
-    const rows=inputs.filter(el=>el.value.trim()!=='').map(el=>({user_id:profile.id,year,code:el.dataset.conventionCode,hours:Number(el.value)}));
-    if(rows.some(row=>!Number.isFinite(row.hours)||row.hours<0)||inputs.some(el=>el.value.trim()!==''&&!el.checkValidity())){
-      $('conventionNotice').textContent='Vérifiez les heures saisies (positives, deux décimales maximum).';return;
+    const inputs=[...document.querySelectorAll('[data-convention-code]')];
+    const rows=inputs.filter(el=>el.value.trim()!=='').map(el=>({code:el.dataset.conventionCode,hours:Number(el.value)}));
+    const valid_from=$('conventionStart').value,valid_until=$('conventionEnd').value,effective_from=$('conventionEffective').value;
+    if(!valid_from||!valid_until||!effective_from||valid_from>valid_until||effective_from<valid_from||effective_from>valid_until){
+      $('conventionNotice').textContent='Vérifie les dates de la convention et de prise d’effet.';return;
+    }
+    if(rows.some(r=>!Number.isFinite(r.hours)||r.hours<0)||inputs.some(el=>el.value.trim()!==''&&!el.checkValidity())){
+      $('conventionNotice').textContent='Vérifie les heures (positives, deux décimales maximum).';return;
     }
     const button=$('conventionSave');button.disabled=true;
     try{
-      // Replace the user's convention for the chosen year atomically from the UI perspective.
-      const {error:deleteError}=await sb.from('pointage_convention_hours').delete().eq('user_id',profile.id).eq('year',year);
-      if(deleteError)throw deleteError;
-      if(rows.length){const {error}=await sb.from('pointage_convention_hours').insert(rows);if(error)throw error;}
+      const old=await getConventionVersions(profile.id);
+      if(old.some(v=>v.effective_from===effective_from))throw new Error('Une version existe déjà à cette date. Choisis une autre date de prise d’effet.');
+      const {data:v,error}=await sb.from('pointage_convention_versions').insert({user_id:profile.id,valid_from,valid_until,effective_from,reason:$('conventionReason').value.trim()||null}).select('id').single();
+      if(error)throw error;
+      if(rows.length){const {error:ce}=await sb.from('pointage_convention_version_codes').insert(rows.map(r=>({...r,version_id:v.id})));if(ce)throw ce;}
       $('conventionDialog').close();loadPersonalYearSummary();
     }catch(e){$('conventionNotice').textContent='Enregistrement impossible : '+e.message;}
     finally{button.disabled=false;}
@@ -1929,9 +1945,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   async function showManagedConvention(p){
     $('conventionManagerTitle').textContent='Convention — '+(p.full_name||p.email);
     $('conventionManagerRows').textContent='Chargement…';$('conventionManagerDialog').showModal();
-    const year=new Date().getFullYear();
-    const {data,error}=await sb.from('pointage_convention_hours').select('code,hours').eq('user_id',p.id).eq('year',year).order('code');
-    $('conventionManagerRows').innerHTML=error?'<p>'+esc(error.message)+'</p>':(data||[]).length?'<p>Année '+year+'</p><table><thead><tr><th>Code</th><th>Heures de convention</th></tr></thead><tbody>'+data.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.hours)+' h</td></tr>').join('')+'</tbody></table>':'<p>Aucune heure de convention enregistrée pour '+year+'.</p>';
+    try{
+      const versions=await getConventionVersions(p.id);
+      $('conventionManagerRows').innerHTML=versions.length?versions.map(v=>'<section style="margin:12px 0"><strong>Effet au '+esc(v.effective_from)+'</strong><p>Convention du '+esc(v.valid_from)+' au '+esc(v.valid_until)+(v.reason?' — '+esc(v.reason):'')+'</p><table><thead><tr><th>Code</th><th>Heures annuelles</th></tr></thead><tbody>'+v.codes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.hours)+' h</td></tr>').join('')+'</tbody></table></section>').join(''):'<p>Aucune convention enregistrée.</p>';
+    }catch(e){$('conventionManagerRows').textContent='Lecture impossible : '+e.message;}
   }
   let personalYearRequest=0;
   async function loadPersonalYearSummary(){
@@ -1953,9 +1970,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         if(!code||!Number.isFinite(seconds)||seconds<=0)continue;
         totals.set(code,(totals.get(code)||0)+seconds);
       }
-      const {data:convention}=await sb.from('pointage_convention_hours').select('code,hours').eq('user_id',session.user.id).eq('year',year);
+      const versions=await getConventionVersions(session.user.id);
+      const applicable=validConvention(versions,todayIso())||validConvention(versions,year+'-12-31');
+      const {data:legacy}=applicable?{data:[]}:await sb.from('pointage_convention_hours').select('code,hours').eq('user_id',session.user.id).eq('year',year);
       if(request!==personalYearRequest)return;
-      const limits=new Map((convention||[]).map(x=>[x.code,Number(x.hours)]));
+      const limits=new Map((applicable?.codes||legacy||[]).map(x=>[x.code,Number(x.hours)]));
       if(!totals.size){$('personalYearTable').innerHTML='<p class="muted small">Aucun code pointé depuis le 1er janvier.</p>';return;}
       const sorted=[...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0],'fr',{numeric:true}));
       const total=sorted.reduce((sum,[,seconds])=>sum+seconds,0);
