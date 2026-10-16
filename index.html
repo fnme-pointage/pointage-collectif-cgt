@@ -1675,6 +1675,31 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const {data:ents,error:ee}=await sb.from('entries').select('*').eq('unit_id',unitId).eq('month_key',key).eq('user_id',session.user.id).order('id');
     if(request!==monthRequest)return;
     if(ee){alert(ee.message);return;} entries=(ents||[]).map(x=>({...x,hours:inputDuration(entryDurationSeconds(x))}));
+    // Ne proposer les codes precedents que si le mois n'a aucune saisie enregistree.
+    // Les heures ne sont jamais reprises et les suggestions ne sont pas enregistrees automatiquement.
+    if(!entries.length && profile?.carry_codes_next_month!==false && mrec?.is_open && unitId===profile.unit_id && !profile.is_admin){
+      const [year,month]=key.split('-').map(Number);
+      if(year && month>=1 && month<=12){
+        const prev=new Date(Date.UTC(year,month-2,1)).toISOString().slice(0,7);
+        const [oldEntries,oldCodes]=await Promise.all([
+          sb.from('entries').select('code_id,saved_code').eq('unit_id',unitId).eq('month_key',prev).eq('user_id',session.user.id).order('id'),
+          sb.from('month_codes').select('id,code').eq('unit_id',unitId).eq('month_key',prev)
+        ]);
+        if(request!==monthRequest)return;
+        if(!oldEntries.error && !oldCodes.error){
+          const previousById=new Map((oldCodes.data||[]).map(c=>[Number(c.id),String(c.code).trim()]));
+          const currentByCode=new Map(monthCodes.filter(c=>c.active).map(c=>[String(c.code).trim(),c]));
+          const seen=new Set();
+          entries=(oldEntries.data||[]).map(e=>{
+            const code=String(e.saved_code||previousById.get(Number(e.code_id))||'').trim();
+            const current=currentByCode.get(code);
+            if(!current || seen.has(current.id))return null;
+            seen.add(current.id);
+            return {id:null,user_id:session.user.id,unit_id:unitId,month_key:key,code_id:current.id,hours:''};
+          }).filter(Boolean);
+        }
+      }
+    }
     savedEntriesState=entryState();entriesDirty=false;
     renderUserEntries();
     if(unitManagement()){
@@ -2829,11 +2854,20 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
-    let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
-    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>En attente d’activation</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
-    if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
+    let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Codes reconduits</th><th>Gestion</th></tr></thead><tbody>`;
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td>${p.is_admin?'—':`<label class="checkbox"><input data-carry-codes="${esc(p.id)}" type="checkbox" ${p.carry_codes_next_month!==false?'checked':''} aria-label="Reconduire les codes du mois précédent pour ${esc(p.full_name||p.email)}"> Oui</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
+    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>En attente d’activation</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td>Oui</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
+    if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?8:7}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
+    document.querySelectorAll('[data-carry-codes]').forEach(box=>box.onchange=async()=>{
+      const p=adminUserProfiles.find(person=>person.id===box.dataset.carryCodes);
+      if(!p){box.checked=!box.checked;return;}
+      box.disabled=true;
+      const {error}=await sb.rpc('pointage_set_carry_codes',{p_user_id:p.id,p_enabled:box.checked});
+      if(error){alert('Préférence non enregistrée : '+error.message);box.checked=!box.checked;}
+      else p.carry_codes_next_month=box.checked;
+      box.disabled=false;
+    });
     document.querySelectorAll('[data-approve-signup]').forEach(button=>button.onclick=()=>{
       const person=pending.find(p=>p.id===button.dataset.approveSignup);
       if(!person)return;
