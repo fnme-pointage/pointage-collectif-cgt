@@ -9,7 +9,7 @@ begin
  if not exists (
   select 1 from public.profiles caller join public.profiles target on target.id=p_user_id
   where caller.id=auth.uid() and caller.active and
-   (caller.is_admin or (not target.is_admin and
+   (caller.id=target.id or caller.is_admin or (not target.is_admin and
     ((caller.is_unit_manager and caller.unit_id=target.unit_id)
      or (caller.is_division_manager and exists
        (select 1 from public.units u where u.id=target.unit_id and u.division_id=caller.managed_division_id)))))
