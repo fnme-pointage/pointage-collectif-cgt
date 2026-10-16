@@ -1143,7 +1143,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   let documents=[], documentRequest=0, readerRequest=0, readerPdf=null, readerPageNumber=1, readerZoom=1, readerRender=null, pdfLibrary=null;
 
   const $ = id => document.getElementById(id);
-  const show = (id,on=true)=>{ $(id).classList.toggle('hidden',!on); if(id==='adminArea')$('adminGlobalNav').classList.toggle('hidden',!on && $('nationalAdminHome').classList.contains('hidden')); };
+  const show = (id,on=true)=>{ $(id).classList.toggle('hidden',!on); if(id==='adminArea'||id==='nationalAdminHome')$('adminGlobalNav').classList.toggle('hidden',!(!!profile?.is_admin && (!$('adminArea').classList.contains('hidden') || !$('nationalAdminHome').classList.contains('hidden'))) && !(!!profile?.active && (managerSpace||divisionSpace) && !$('adminArea').classList.contains('hidden'))); };
   const fmt = n => Number(n||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   // Duration helpers: one second is the common unit for all calculations.
@@ -1410,6 +1410,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 
   async function route(){
     resetFlashSession();managerSpace=false;divisionSpace=false;divisionOverview=null;
+    show('nationalAdminHome',false);show('adminHomeReturn',false);show('adminGlobalNav',false);show('adminArea',false);show('maintenanceAdmin',false);
     show('divisionArea',false);
     show('documentsArea',false);show('userNav',false);show('unitManagerArea',false);
     closePdfReader();
