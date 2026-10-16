@@ -771,6 +771,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       </div>
       <div id="userNotice"></div>
       <p class="muted small premium-pointage-subtitle">Saisissez vos heures par code d’activité pour le mois sélectionné.</p>
+      <label class="checkbox" style="display:flex;align-items:flex-start;gap:10px;margin:12px 0 6px;line-height:1.45"><input id="carryCodesPreference" type="checkbox" checked style="width:19px;height:19px;flex-shrink:0;margin-top:2px"> <span><strong>Conserver mes codes de pointage le mois suivant</strong><span class="muted small" style="display:block">Les codes du mois précédent seront proposés automatiquement, sans recopier les heures.</span></span></label><div id="carryCodesPreferenceStatus" class="muted small" aria-live="polite"></div>
       <div class="premium-input-layout">
         <div id="pointageMonthSlot" aria-label="Période de pointage"></div>
         <p class="muted small">Ouvre la liste déroulante pour consulter les codes puis sélectionne un code et renseigne les heures en tenant compte de tes CRI.</p>
@@ -1404,6 +1405,8 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
+    if($('carryCodesPreference'))$('carryCodesPreference').checked=profile.carry_codes_next_month!==false;
+    if($('carryCodesPreferenceStatus'))$('carryCodesPreferenceStatus').textContent='';
     if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
     if(!profile.active && !profile.is_admin){
       show('authView',false);show('pendingView',true);
@@ -1707,6 +1710,16 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     }
   }
 
+  $('carryCodesPreference').onchange=async()=>{
+    const box=$('carryCodesPreference'),status=$('carryCodesPreferenceStatus');
+    const original=profile.carry_codes_next_month!==false;
+    box.disabled=true;status.textContent='Enregistrement…';
+    const {error}=await sb.rpc('pointage_set_carry_codes',{p_user_id:profile.id,p_enabled:box.checked});
+    if(error){box.checked=original;status.textContent='Modification impossible : '+error.message;}
+    else{profile.carry_codes_next_month=box.checked;status.textContent=box.checked?'Codes reconduits au prochain mois.':'Reprise automatique désactivée.';}
+    box.disabled=false;
+  };
+  
   function canEditOwn(){return !profile.is_admin && selectedUnit===profile.unit_id && !!currentMonthRec()?.is_open ;}
 
   function canSaveOwn(){return canEditOwn() && maintenanceKnown && !maintenanceLocked;}
