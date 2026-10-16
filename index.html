@@ -932,7 +932,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <section id="admin-users" class="hidden">
       <div class="card">
         <div class="sectiontitle"><h2>Utilisateurs</h2></div>
-        <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
+        <p id="usersScopeHelp" class="muted small">La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les nouvelles inscriptions sont rattachées directement à l’unité choisie et doivent être validées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.</p>
         <div class="actions"><button id="openCreateUser" class="secondary" type="button">+ Créer un utilisateur</button></div>
         <form id="createUserForm" class="notice hidden" style="margin:12px 0">
           <h3>Créer un utilisateur</h3>
@@ -1363,7 +1363,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       $('signupPassword').value='';$('signupPasswordConfirm').value='';
       if(data?.session){session=data.session;await route();return;}
       openSignupVerification(email);
-      $('authMsg').innerHTML=msg('Un code de confirmation a été envoyé par mail. Recopie-le ci-dessous. L’administrateur choisira ensuite ton unité et activera ton compte.','ok');
+      $('authMsg').innerHTML=msg('Un code de confirmation a été envoyé par mail. Recopie-le ci-dessous. Ton unité demandée est enregistrée. Ton compte restera inactif jusqu’à sa validation par un responsable.','ok');
     }catch(error){$('authMsg').innerHTML=msg('Inscription impossible. Vérifie ta connexion et réessaie.','warn');}
     finally{$('signupBtn').disabled=false;}
   };
@@ -1488,7 +1488,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     }else if(managerSpace){
       help.textContent='Cette vue affiche uniquement les utilisateurs rattachés à votre unité. Vous pouvez gérer les comptes et inviter de nouveaux utilisateurs dans la limite de vos habilitations. Les comptes créés par invitation sont directement rattachés à votre unité, avec le profil autorisé.';
     }else{
-      help.textContent='La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les inscriptions personnelles arrivent dans ADMIN et doivent être affectées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.';
+      help.textContent='La vue ADMIN affiche tous les comptes. Les autres unités affichent uniquement leurs utilisateurs. Les nouvelles inscriptions sont rattachées directement à l’unité choisie et doivent être validées puis activées. Les comptes créés ici par invitation sont directement rattachés à l’unité choisie, avec le profil autorisé. La colonne « Unité demandée » concerne les inscriptions personnelles.';
     }
   }
 
@@ -2831,7 +2831,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
     let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Gestion</th></tr></thead><tbody>`;
     unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
-    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>ADMIN (en attente)</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
+    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>En attente d’activation</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
     if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?7:6}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
     document.querySelectorAll('[data-approve-signup]').forEach(button=>button.onclick=()=>{
@@ -2925,7 +2925,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
       const p=adminUserProfiles.find(item=>item.id===button.dataset.userEdit);
       if(!p) return;
       const cell=button.closest('td');
-      const pendingDivisionSignup=divisionSpace&&!p.active&&!!p.requested_unit_id&&p.unit_id!==p.requested_unit_id&&divisionCanManageUnit(p.requested_unit_id);
+      const pendingDivisionSignup=divisionSpace&&!p.active&&!!p.requested_unit_id&&divisionCanManageUnit(p.requested_unit_id);
       const inactiveDivisionMember=divisionSpace&&!p.active&&!pendingDivisionSignup&&!p.is_admin&&!p.is_division_manager;
       cell.innerHTML=`<label>Nom et prénom<input data-edit-name type="text" maxlength="150" value="${esc(p.full_name||'')}"></label>
         ${profile.is_admin
