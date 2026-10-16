@@ -2861,7 +2861,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     $('catalogueSourceUnit').value=adminScope?(catalogueView==='template'?'template':catalogueUnit):catalogueUnit;
     renderCataloguePanels();
     if(adminScope && catalogueView==='template'){catalogueRows=[];catalogueOriginal=[];return;}
-    $('catalogueEffective').min=curMonth();
+    $('catalogueEffective').removeAttribute('min');
     if(!$('catalogueEffective').value) $('catalogueEffective').value=curMonth();
     $('catalogueUnits').innerHTML=choices.map(u=>`<label class="checkbox"><input type="checkbox" data-catalogue-unit="${esc(u.id)}" ${u.id===catalogueUnit?'checked':''}> ${esc(u.name)}</label>`).join('');
     $('catalogueAllUnits').checked=false;
@@ -2894,7 +2894,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   $('catalogueSourceUnit').onchange=async()=>{if(!await allowLeaveCatalogue()){$('catalogueSourceUnit').value=catalogueView==='template'?'template':catalogueUnit;return;}const value=$('catalogueSourceUnit').value;catalogueView=value==='template'?'template':'unit';if(value!=='template')catalogueUnit=value;await loadCatalogue();};
   let catalogueDate='';
   $('catalogueEffective').onfocus=()=>{catalogueDate=$('catalogueEffective').value;};
-  $('catalogueEffective').onchange=async()=>{if(!$('catalogueEffective').value || $('catalogueEffective').value<curMonth()){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
+  $('catalogueEffective').onchange=async()=>{if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test($('catalogueEffective').value)){$('catalogueEffective').value=catalogueDate||curMonth();return;}if(!await allowLeaveCatalogue()){$('catalogueEffective').value=catalogueDate;return;}await loadCatalogue();};
   $('catalogueAllUnits').onchange=()=>document.querySelectorAll('[data-catalogue-unit]').forEach(el=>el.checked=$('catalogueAllUnits').checked);
   $('addAdminCode').onclick=()=>{if(units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;catalogueRows.push({catalogue_id:null,code:'',label:'',document:'',active:true});renderCatalogue();};
   $('saveAdminCodes').onclick=async()=>{
@@ -2908,7 +2908,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const targets=[catalogueUnit];
     const effective=$('catalogueEffective').value;
     if(!changes.length){$('codeAdminMessage').innerHTML=msg('Aucune modification à enregistrer.','ok');return;}
-    if(!targets.length||effective<curMonth()){ $('codeAdminMessage').innerHTML=msg('Choisis au moins une unité et le mois en cours ou un mois futur.','warn');return;}
+    if(!targets.length||!/^\\d{4}-(0[1-9]|1[0-2])$/.test(effective)){ $('codeAdminMessage').innerHTML=msg('Choisis une unité et un mois valide.','warn');return;}
     const names=units.filter(u=>targets.includes(u.id)).map(u=>u.name).join(', ');
     if(!await confirmAction(`Appliquer ${changes.length} modification(s) à ${names} à partir de ${monthLabel(effective)} ? Les pointages enregistrés et les mois fermés seront conservés.`))return;
     const button=$('saveAdminCodes');button.disabled=true;
