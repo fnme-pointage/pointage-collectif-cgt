@@ -723,6 +723,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 
   <div id="userNav" class="adminnav hidden">
     <button id="userPointageTab" class="active" type="button">Mon pointage</button>
+    <button id="conventionOpen" type="button">☐ Militant détaché</button>
     <button id="userDocumentsTab" type="button">Base documentaire nationale</button>
     <button id="userUnitDocumentsTab" type="button">Base documentaire d’unité</button>
     <button id="unitManagerTab" class="hidden" type="button">Gestion de mon unité</button>
@@ -756,6 +757,20 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   <div id="maintenanceBanner" aria-live="polite"></div>
 
 
+  <dialog id="conventionDialog" style="width:min(740px,95vw);max-height:90vh;overflow:auto;border:1px solid #dce5f0;border-radius:16px;padding:20px;background:#fff;color:#24374c">
+    <h2>Militant détaché — Convention</h2>
+    <p>Merci de remplir les heures présentes dans votre convention.</p>
+    <p class="muted small">Renseignez les heures prévues pour chaque code validé dans votre unité. Les heures de convention sont distinctes des heures pointées.</p>
+    <label>Année <select id="conventionYear"></select></label>
+    <div id="conventionRows" class="tablewrap" style="margin-top:12px"></div>
+    <div id="conventionNotice" aria-live="polite"></div>
+    <div class="actions"><button id="conventionSave" type="button">Enregistrer et fermer</button><button id="conventionClose" class="secondary" type="button">Fermer</button></div>
+  </dialog>
+  <dialog id="conventionManagerDialog" style="width:min(740px,95vw);max-height:90vh;overflow:auto;border:1px solid #dce5f0;border-radius:16px;padding:20px;background:#fff;color:#24374c">
+    <h2 id="conventionManagerTitle">Heures de convention</h2>
+    <div id="conventionManagerRows" class="tablewrap"></div>
+    <div class="actions"><button id="conventionManagerClose" type="button">Fermer</button></div>
+  </dialog>
   <div id="userArea" class="hidden">
     <div class="card premium-pointage">
       <div class="sectiontitle">
@@ -1861,6 +1876,63 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
   window.addEventListener('beforeunload',event=>{
     if(entriesDirty || savingEntries || (profile?.is_admin && catalogueState(catalogueRows)!==catalogueState(catalogueOriginal))){event.preventDefault();event.returnValue='';}
   });
+  let conventionCurrentCodes=[];
+  const conventionYear=()=>Number($('conventionYear').value);
+  function conventionYears(){
+    const now=new Date().getFullYear();
+    $('conventionYear').innerHTML=[now-1,now,now+1].map(y=>'<option value="'+y+'"'+(y===now?' selected':'')+'>'+y+'</option>').join('');
+  }
+  async function openConvention(){
+    if(!profile?.active||profile.is_admin)return;
+    conventionYears();$('conventionNotice').textContent='';
+    $('conventionDialog').showModal();
+    await loadConventionEditor();
+  }
+  async function loadConventionEditor(){
+    const year=conventionYear(),unit=profile.unit_id;
+    $('conventionRows').textContent='Chargement…';
+    try{
+      const [catalogue, saved]=await Promise.all([
+        sb.from('month_codes').select('code,label,active').eq('unit_id',unit).gte('month_key',year+'-01').lte('month_key',year+'-12').order('month_key',{ascending:false}),
+        sb.from('pointage_convention_hours').select('code,hours').eq('user_id',profile.id).eq('year',year)
+      ]);
+      if(catalogue.error||saved.error)throw catalogue.error||saved.error;
+      const unique=new Map();
+      for(const c of catalogue.data||[])if(!unique.has(String(c.code).trim()))unique.set(String(c.code).trim(),c);
+      conventionCurrentCodes=[...unique.values()].filter(c=>c.active).sort((a,b)=>a.code.localeCompare(b.code,'fr',{numeric:true}));
+      const previous=new Map((saved.data||[]).map(x=>[x.code,x.hours]));
+      $('conventionRows').innerHTML=conventionCurrentCodes.length?'<table><thead><tr><th>Code</th><th>Libellé</th><th>Heures de convention</th></tr></thead><tbody>'+
+        conventionCurrentCodes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.label)+'</td><td><input type="number" min="0" step="0.01" inputmode="decimal" data-convention-code="'+esc(c.code)+'" value="'+esc(previous.get(c.code)??'')+'" placeholder="Heures"></td></tr>').join('')+'</tbody></table>':
+        '<p>Aucun code actif trouvé pour cette année et cette unité.</p>';
+    }catch(e){$('conventionRows').textContent='Chargement impossible : '+e.message;}
+  }
+  $('conventionOpen').onclick=openConvention;
+  $('conventionYear').onchange=loadConventionEditor;
+  $('conventionClose').onclick=()=>$('conventionDialog').close();
+  $('conventionManagerClose').onclick=()=>$('conventionManagerDialog').close();
+  $('conventionSave').onclick=async()=>{
+    const inputs=[...document.querySelectorAll('[data-convention-code]')],year=conventionYear();
+    const rows=inputs.filter(el=>el.value.trim()!=='').map(el=>({user_id:profile.id,year,code:el.dataset.conventionCode,hours:Number(el.value)}));
+    if(rows.some(row=>!Number.isFinite(row.hours)||row.hours<0)||inputs.some(el=>el.value.trim()!==''&&!el.checkValidity())){
+      $('conventionNotice').textContent='Vérifiez les heures saisies (positives, deux décimales maximum).';return;
+    }
+    const button=$('conventionSave');button.disabled=true;
+    try{
+      // Replace the user's convention for the chosen year atomically from the UI perspective.
+      const {error:deleteError}=await sb.from('pointage_convention_hours').delete().eq('user_id',profile.id).eq('year',year);
+      if(deleteError)throw deleteError;
+      if(rows.length){const {error}=await sb.from('pointage_convention_hours').insert(rows);if(error)throw error;}
+      $('conventionDialog').close();loadPersonalYearSummary();
+    }catch(e){$('conventionNotice').textContent='Enregistrement impossible : '+e.message;}
+    finally{button.disabled=false;}
+  };
+  async function showManagedConvention(p){
+    $('conventionManagerTitle').textContent='Convention — '+(p.full_name||p.email);
+    $('conventionManagerRows').textContent='Chargement…';$('conventionManagerDialog').showModal();
+    const year=new Date().getFullYear();
+    const {data,error}=await sb.from('pointage_convention_hours').select('code,hours').eq('user_id',p.id).eq('year',year).order('code');
+    $('conventionManagerRows').innerHTML=error?'<p>'+esc(error.message)+'</p>':(data||[]).length?'<p>Année '+year+'</p><table><thead><tr><th>Code</th><th>Heures de convention</th></tr></thead><tbody>'+data.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.hours)+' h</td></tr>').join('')+'</tbody></table>':'<p>Aucune heure de convention enregistrée pour '+year+'.</p>';
+  }
   let personalYearRequest=0;
   async function loadPersonalYearSummary(){
     if(!session?.user?.id||!profile?.active||profile.is_admin)return;
@@ -1881,11 +1953,14 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
         if(!code||!Number.isFinite(seconds)||seconds<=0)continue;
         totals.set(code,(totals.get(code)||0)+seconds);
       }
+      const {data:convention}=await sb.from('pointage_convention_hours').select('code,hours').eq('user_id',session.user.id).eq('year',year);
+      if(request!==personalYearRequest)return;
+      const limits=new Map((convention||[]).map(x=>[x.code,Number(x.hours)]));
       if(!totals.size){$('personalYearTable').innerHTML='<p class="muted small">Aucun code pointé depuis le 1er janvier.</p>';return;}
       const sorted=[...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0],'fr',{numeric:true}));
       const total=sorted.reduce((sum,[,seconds])=>sum+seconds,0);
       $('personalYearTable').innerHTML='<table style="min-width:0;table-layout:fixed"><thead><tr><th>Code pointé</th><th class="num">Heures cumulées</th></tr></thead><tbody>'+
-        sorted.map(([code,seconds])=>'<tr><td style="white-space:normal;overflow-wrap:anywhere">'+esc(code)+'</td><td class="num">'+fmt(seconds/3600)+' h</td></tr>').join('')+
+        sorted.map(([code,seconds])=>'<tr><td style="white-space:normal;overflow-wrap:anywhere">'+esc(code)+'</td><td class="num">'+fmt(seconds/3600)+(limits.has(code)?' / '+fmt(limits.get(code)):'')+' h</td></tr>').join('')+
         '<tr><td><strong>Total</strong></td><td class="num"><strong>'+fmt(total/3600)+' h</strong></td></tr></tbody></table>';
     }catch(error){if(request===personalYearRequest)$('personalYearTable').innerHTML=msg('Récapitulatif indisponible : '+error.message,'warn');}
   }
@@ -2867,11 +2942,15 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     const unitProfiles=isAdminUnit||divisionSpace?adminUserProfiles:adminUserProfiles.filter(p=>p.unit_id===selectedUnit);
     const pending=divisionSpace?pendingSignups.filter(p=>!unitProfiles.some(u=>u.id===p.id)):[];
-    let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Codes reconduits</th><th>Gestion</th></tr></thead><tbody>`;
-    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td>${p.is_admin?'—':`<label class="checkbox"><input data-carry-codes="${esc(p.id)}" type="checkbox" ${p.carry_codes_next_month!==false?'checked':''} aria-label="Reconduire les codes du mois précédent pour ${esc(p.full_name||p.email)}"> Oui</label>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
-    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>En attente d’activation</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td>Oui</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
-    if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?8:7}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
+    let html=`<div class="tablewrap"><table class="users-compact"><thead><tr><th>Nom</th><th>E-mail</th><th>Unité affectée</th>${isAdminUnit||divisionSpace?'<th>Unité demandée</th>':''}<th>Rôle</th><th>Actif</th><th>Codes reconduits</th><th>Convention</th><th>Gestion</th></tr></thead><tbody>`;
+    unitProfiles.forEach(p=>html+=`<tr><td>${esc(p.full_name||'Nom à renseigner')}</td><td>${esc(p.email||'')}</td><td>${esc(units.find(u=>u.id===p.unit_id)?.name||'Inconnue')}</td>${isAdminUnit||divisionSpace?`<td>${esc(p.is_admin?'—':(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée'))}</td>`:''}<td>${(p.is_admin?['Administrateur national']:['Utilisateur',p.is_unit_manager?'Responsable d’unité':null,p.is_division_manager?'Responsable de division':null].filter(Boolean)).map(r=>`<span class="user-role">${esc(r)}</span>`).join('')}</td><td>${p.is_admin?'<span class="pill ok">Oui</span>':`<label class="checkbox"><input data-user-active="${esc(p.id)}" type="checkbox" ${p.active?'checked':''}> ${p.active?'Oui':'Non'}</label>`}</td><td>${p.is_admin?'—':`<label class="checkbox"><input data-carry-codes="${esc(p.id)}" type="checkbox" ${p.carry_codes_next_month!==false?'checked':''} aria-label="Reconduire les codes du mois précédent pour ${esc(p.full_name||p.email)}"> Oui</label>`}</td><td>${p.is_admin?'—':`<button type="button" class="secondary" data-view-convention="${esc(p.id)}">Consulter</button>`}</td><td><button class="secondary" data-user-edit="${esc(p.id)}" type="button">Modifier</button>${(profile.is_admin||(divisionSpace&&!p.is_division_manager&&divisionCanManageUnit(p.unit_id)))&&!p.is_admin? ` <button class="secondary" data-user-transfer="${esc(p.id)}" type="button">Transférer</button>`:''}${p.id!==profile.id&&(profile.is_admin||!p.is_admin)?` <button class="danger" data-user-delete="${esc(p.id)}" type="button">Supprimer</button>`:''}</td></tr>`);
+    pending.forEach(p=>html+='<tr><td>'+esc(p.full_name||'Nom à renseigner')+'</td><td>'+esc(p.email||'')+'</td><td>En attente d’activation</td><td>'+esc(units.find(u=>u.id===p.requested_unit_id)?.name||'Non renseignée')+'</td><td>Utilisateur</td><td>Non</td><td>Oui</td><td>—</td><td><button class="secondary" data-approve-signup="'+esc(p.id)+'" type="button">Modifier</button></td></tr>');
+    if(!unitProfiles.length&&!pending.length) html+=`<tr><td colspan="${isAdminUnit||divisionSpace?9:8}" class="muted small">Aucun utilisateur dans ce périmètre.</td></tr>`;
     html+='</tbody></table></div>'; $('usersTable').innerHTML=html;
+    document.querySelectorAll('[data-view-convention]').forEach(button=>button.onclick=()=>{
+      const p=adminUserProfiles.find(person=>person.id===button.dataset.viewConvention);
+      if(p)showManagedConvention(p);
+    });
     document.querySelectorAll('[data-carry-codes]').forEach(box=>box.onchange=async()=>{
       const p=adminUserProfiles.find(person=>person.id===box.dataset.carryCodes);
       if(!p){box.checked=!box.checked;return;}
