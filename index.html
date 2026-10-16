@@ -1959,7 +1959,10 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     $('conventionManagerRows').textContent='Chargement…';$('conventionManagerDialog').showModal();
     try{
       const versions=await getConventionVersions(p.id);
-      $('conventionManagerRows').innerHTML=versions.length?versions.map(v=>'<section style="margin:12px 0"><strong>Effet au '+esc(v.effective_from)+'</strong><p>Convention du '+esc(v.valid_from)+' au '+esc(v.valid_until)+(v.reason?' — '+esc(v.reason):'')+'</p><table><thead><tr><th>Code</th><th>Heures annuelles</th></tr></thead><tbody>'+v.codes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.hours)+' h</td></tr>').join('')+'</tbody></table></section>').join(''):'<p>Aucune convention enregistrée.</p>';
+      const signature=v=>JSON.stringify([v.valid_from,v.valid_until,[...v.codes].sort((a,b)=>a.code.localeCompare(b.code)).map(c=>[c.code,Number(c.hours)])]);
+      const distinct=versions.filter((v,i)=>!versions.slice(0,i).some(previous=>signature(previous)===signature(v)));
+      const renderVersion=v=>'<section style="margin:12px 0"><strong>Effet au '+esc(v.effective_from)+'</strong><p>Convention du '+esc(v.valid_from)+' au '+esc(v.valid_until)+(v.reason?' — '+esc(v.reason):'')+'</p><table><thead><tr><th>Code</th><th>Heures annuelles</th></tr></thead><tbody>'+v.codes.map(c=>'<tr><td>'+esc(c.code)+'</td><td>'+esc(c.hours)+' h</td></tr>').join('')+'</tbody></table></section>';
+      $('conventionManagerRows').innerHTML=distinct.length?renderVersion(distinct[0])+(distinct.length>1?'<details style="margin-top:16px"><summary>Historique des modifications ('+(distinct.length-1)+')</summary>'+distinct.slice(1).map(renderVersion).join('')+'</details>':''):'<p>Aucune convention enregistrée.</p>';
     }catch(e){$('conventionManagerRows').textContent='Lecture impossible : '+e.message;}
   }
   let personalYearRequest=0;
