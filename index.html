@@ -2790,7 +2790,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     try{
       const {data,error}=await sb.rpc('pointage_get_code_template');if(error)throw error;
       templateRows=orderedCodes(data.codes||[]);templateOriginal=structuredClone(templateRows);templateRevision=data.revision;templateLoaded=true;
-      $('nationalEffective').min=curMonth();if(!$('nationalEffective').value)$('nationalEffective').value=curMonth();
+      $('nationalEffective').removeAttribute('min');if(!$('nationalEffective').value)$('nationalEffective').value=curMonth();
       $('templateMessage').innerHTML='';
     }catch(error){$('templateMessage').innerHTML=msg('Impossible de charger la liste type : '+error.message,'warn');}
     finally{templateBusy=false;renderCodeTemplate();}
@@ -2819,7 +2819,7 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     if(new Set(clean.map(c=>c.code)).size!==clean.length){$('templateMessage').innerHTML=msg('Deux codes identiques sont présents.','warn');return;}
     if(!clean.length){$('templateMessage').innerHTML=msg('Conserve au moins un code dans la liste type.','warn');return;}
     const apply=$('applyNationalToUnits').checked,effective=$('nationalEffective').value;
-    if(apply && (!effective || effective<curMonth())){$('templateMessage').innerHTML=msg('Choisis le mois en cours ou un mois futur.','warn');return;}
+    if(apply && (!effective || !/^\d{4}-(0[1-9]|1[0-2])$/.test(effective))){$('templateMessage').innerHTML=msg('Choisis un mois valide.','warn');return;}
     if(catalogueState(clean)===catalogueState(templateOriginal)){$('templateMessage').innerHTML=msg('Aucune modification à enregistrer.','ok');return;}
     if(apply && !await confirmAction('Appliquer les codes ajoutés ou modifiés à toutes les unités actives à partir de '+monthLabel(effective)+' ? Les codes propres aux unités et les heures déjà enregistrées seront conservés.'))return;
     templateBusy=true;renderCodeTemplate();
