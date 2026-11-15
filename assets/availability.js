@@ -68,7 +68,7 @@
       const k=key(v.unit_id,v.catalogue_id);
       if(!versionsMap.has(k))versionsMap.set(k,v);
     }
-    const codeById=new Map(), rowMap=new Map(), codeMap=new Map(), unknownCodes=new Set();
+    const codeById=new Map(), rowMap=new Map(), codeMap=new Map(), historicalNames=new Map(), unknownCodes=new Set();
     const availMap=new Map(avail.map(a=>[key(a.unit_id,a.catalogue_id),a]));
     const unitsWithYearCodes=new Set(codes.map(c=>c.unit_id));
     for(const v of versionsMap.values()){
@@ -81,12 +81,20 @@
     for(const c of codes){
       const k=key(c.unit_id,c.catalogue_id);
       codeById.set(Number(c.id),c);
+      if(!historicalNames.has(k))historicalNames.set(k,new Set());
+      historicalNames.get(k).add(String(c.code||''));
       const existing=rowMap.get(k),a=availMap.get(k);
       if(!existing)rowMap.set(k,{unitId:c.unit_id,catalogueId:c.catalogue_id,code:c.code||'',label:c.label||'',availableSeconds:a?.available_seconds??null,revision:a?.revision??null,pointedSeconds:0,ambiguous:false,activeInYear:true});
       else {existing.code=c.code||existing.code;existing.label=c.label||existing.label;existing.activeInYear=true;}
       const groupKey=c.unit_id+'|'+String(c.code||'').toUpperCase();
       if(!codeMap.has(groupKey))codeMap.set(groupKey,new Set());
       codeMap.get(groupKey).add(k);
+    }
+    for(const [historicalKey, names] of historicalNames){
+      if(names.size>1){
+        for(const code of names)unknownCodes.add(code);
+        if(rowMap.has(historicalKey))rowMap.get(historicalKey).ambiguous=true;
+      }
     }
     for(const a of avail){
       const k=key(a.unit_id,a.catalogue_id);
