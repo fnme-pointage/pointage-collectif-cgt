@@ -70,11 +70,12 @@
     }
     const codeById=new Map(), rowMap=new Map(), codeMap=new Map(), unknownCodes=new Set();
     const availMap=new Map(avail.map(a=>[key(a.unit_id,a.catalogue_id),a]));
+    const unitsWithYearCodes=new Set(codes.map(c=>c.unit_id));
     for(const v of versionsMap.values()){
       const k=key(v.unit_id,v.catalogue_id);
       if(!rowMap.has(k) && v.active){
         const a=availMap.get(k);
-        rowMap.set(k,{unitId:v.unit_id,catalogueId:v.catalogue_id,code:v.code||'',label:v.label||'',availableSeconds:a?.available_seconds??null,revision:a?.revision??null,pointedSeconds:0, ambiguous:false, activeInYear:false});
+        rowMap.set(k,{unitId:v.unit_id,catalogueId:v.catalogue_id,code:v.code||'',label:v.label||'',availableSeconds:a?.available_seconds??null,revision:a?.revision??null,pointedSeconds:0, ambiguous:false, activeInYear:!unitsWithYearCodes.has(v.unit_id)});
       }
     }
     for(const c of codes){
@@ -150,7 +151,6 @@
       if(result.status!=='ok')return {available:result.status,left:result.status,percent:'—'};
       return {available:hoursCsv(result.available),left:hoursCsv(result.available-pointed),percent:pct(pointed,result.available)};
     });
-    const allRows=data.rows.filter(r=>scopeIds.includes(r.unitId)&&r.activeInYear);
     const validTotals=summary.every(s=>typeof s.available==='number'||(/^[\d,.-]+$/.test(String(s.available))));
     const totalAvailability=validTotals?summary.reduce((s,r)=>s+Number(String(r.available).replace(',','.')),0):null;
     const totalPointed=Number(String(pointedRow[totalIndex]||'0').replace(',','.'));
@@ -199,9 +199,9 @@
     let html='<div class="tablewrap"><table class="availability-table"><thead><tr><th>Unité / code</th><th>Heures disponibles</th><th>Pointées</th><th>Restantes</th><th>Consommation</th></tr></thead><tbody>';
     for(const r of rows){
       const remaining=r.availableSeconds===null?'—':hours(r.availableSeconds-r.pointedSeconds);
-      const status=r.availableSeconds===null?'Non renseigné':r.ambiguous?'À vérifier':r.availableSeconds<r.pointedSeconds?'Dépassement':'';
+      const status=r.ambiguous?'À vérifier':r.availableSeconds===null?'Non renseigné':r.availableSeconds<r.pointedSeconds?'Dépassement':'';
       html+='<tr><td><strong>'+esc(r.code)+'</strong><br><span class="muted small">'+esc(r.label)+'</span><br><span class="muted small">'+esc(names.get(r.unitId)||r.unitId)+'</span></td>';
-      html+='<td>'+(editable?'<input data-avail-catalog="'+esc(r.catalogueId)+'" data-avail-unit="'+esc(r.unitId)+'" inputmode="decimal" aria-label="Heures disponibles '+esc(r.code)+'" placeholder="Non renseigné" value="'+esc(r.availableSeconds===null?'':String(Number(r.availableSeconds)/3600).replace('.',','))+'">':r.availableSeconds===null?'Non renseigné':hours(r.availableSeconds))+'</td>';
+      html+='<td>'+(editable?'<input data-avail-catalog="'+esc(r.catalogueId)+'" data-avail-unit="'+esc(r.unitId)+'" inputmode="decimal" aria-label="Heures disponibles '+esc(r.code)+'" placeholder="Non renseigné" value="'+esc(r.availableSeconds===null?'':String(Number((Number(r.availableSeconds)/3600).toFixed(6))).replace('.',','))+'">':r.availableSeconds===null?'Non renseigné':hours(r.availableSeconds))+'</td>';
       html+='<td class="num">'+esc(hours(r.pointedSeconds))+'</td><td class="num">'+esc(remaining)+'</td><td class="num">'+esc(r.availableSeconds===null?'—':pct(r.pointedSeconds,r.availableSeconds))+(status?'<br><small class="'+(status==='Dépassement'?'availability-over':'muted')+'">'+esc(status)+'</small>':'')+'</td></tr>';
     }
     html+='</tbody></table></div>';
@@ -302,7 +302,7 @@
         if(!national.has(g.code))national.set(g.code,{label:g.label,rows:[]});
         national.get(g.code).rows.push(...g.rows);
       }
-      if(new Set(groups.values().map(g=>g.division)).size>1){
+      if(new Set([...groups.values()].map(g=>g.division)).size>1){
         for(const [code,g] of national){
           const valid=g.rows.every(r=>r.availableSeconds!==null&&!r.ambiguous);
           const pointed=g.rows.reduce((s,r)=>s+r.pointedSeconds,0);
@@ -333,8 +333,14 @@
   function init(){
     const section=$('availabilitySection');
     if(!section)return;
+    let previousUnitChoice='';
+    $('availabilityUnit').addEventListener('focus',()=>{previousUnitChoice=$('availabilityUnit').value;});
     $('availabilityUnit').addEventListener('change',()=>{
-      if(draftDirty&&!confirm('Les modifications non enregistrées seront perdues. Continuer ?'))return;
+      if(draftDirty&&!confirm('Les modifications non enregistrées seront perdues. Continuer ?')){
+        $('availabilityUnit').value=previousUnitChoice;
+        return;
+      }
+      previousUnitChoice=$('availabilityUnit').value;
       refresh();
     });
     section.addEventListener('toggle',()=>{if(section.open){sync();refresh();}});
