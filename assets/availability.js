@@ -382,7 +382,24 @@
     },true);
     $('annualYear')?.addEventListener('change',()=>{setTimeout(sync,0);});
     $('adminUnit')?.addEventListener('change',()=>{setTimeout(sync,0);});
-    window.PointageAvailability = {sync,augment};
+    const open=()=>{
+      sync();
+      const {permitted}=scope();
+      if(!permitted)return;
+      section.open=true;
+      if(model && !draftDirty)renderRows();
+      section.scrollIntoView({block:'start',behavior:'smooth'});
+    };
+    window.PointageAvailability = {sync,augment,open};
+    // L'administration est chargee apres l'initialisation du module.
+    // Observer son apparition garantit la synchronisation des droits
+    // lorsque le chargement du profil ou la navigation se termine plus tard.
+    const adminArea=$('adminArea');
+    if(adminArea && typeof MutationObserver!=='undefined'){
+      new MutationObserver(()=>sync()).observe(adminArea,{attributes:true,attributeFilter:['class']});
+    }
+    // Revalider aussi a l'ouverture apres un changement de compte ou de perimetre.
+    section.addEventListener('click',()=>sync());
     sync();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
