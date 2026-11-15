@@ -1,0 +1,23 @@
+
+/* Suivi annuel des enveloppes de codes - module additif */
+#availabilitySection{margin:15px 0;border:1px solid #d9e3ee;border-radius:13px;background:#fbfdff;padding:12px}
+#availabilitySection>summary{cursor:pointer;font-weight:700;color:#274d76;padding:5px 3px}
+#availabilitySection>summary:focus-visible{outline:3px solid #9dc6ee;outline-offset:2px}
+#availabilitySection .availability-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:12px 0}
+#availabilitySection .availability-toolbar label{margin:0}
+#availabilitySection .availability-toolbar select{min-width:210px;max-width:100%}
+#availabilitySection .availability-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0}
+#availabilitySection .availability-buttons button{flex:1 1 160px}
+#availabilitySection .availability-table{min-width:690px}
+#availabilitySection .availability-table th:first-child,#availabilitySection .availability-table td:first-child{min-width:180px;max-width:300px;white-space:normal}
+#availabilitySection .availability-table td{vertical-align:middle}
+#availabilitySection .availability-table td:nth-child(2){min-width:155px}
+#availabilitySection .availability-table input{min-width:112px;max-width:170px;width:100%;text-align:right}
+#availabilitySection .availability-over{color:#b42318;font-weight:700}
+#availabilityNote{min-height:20px;margin:8px 0;color:#52697f}
+@media(max-width:620px){
+  #availabilitySection{padding:9px}
+  #availabilitySection .availability-toolbar{display:block}
+  #availabilitySection .availability-toolbar select{width:100%}
+  #availabilitySection .availability-buttons button{width:100%}
+}
