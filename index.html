@@ -1477,7 +1477,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     finally{$('signupBtn').disabled=false;}
   };
 
-  async function logout(){if(contactSending || !await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;$('contactAdminDialog').close();$('contactMessage').value='';$('contactFeedback').innerHTML='';closePdfReader();documents=[];await sb.auth.signOut();}
+  async function logout(){if(contactSending || !await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;$('contactAdminDialog').close();$('contactMessage').value='';$('contactFeedback').innerHTML='';closePdfReader();documents=[];const {error}=await sb.auth.signOut();if(!error)clearNavigation();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
@@ -2206,6 +2206,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       $('userDocumentsTab').classList.toggle('active',scope==='national');
       $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
     }
+    if(personal)rememberNavigation(scope==='unit'?'documents-unit':'documents-national');
     loadDocuments();
   }
   $('userPointageTab').onclick=()=>{
@@ -2217,6 +2218,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     if(!profile.is_admin){loadMonths();loadPersonalYearSummary();}
+    rememberNavigation('pointage');
   };
   async function loadUnitFollowup(){
     if(!managerSpace||!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
@@ -2267,6 +2269,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     await loadMonths();
     $('unitFollowupYear').value=String(new Date().getFullYear());
     await Promise.all([loadUnitManager(),loadUnitFollowup()]);
+    rememberNavigation('unit-manager',{tab:'results'});
   };
   async function renameOrganization(kind,id){
     if(!profile?.is_admin)return;
@@ -2397,6 +2400,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     await loadDivisionOverview();
     document.querySelector('[data-admin-tab="results"]').click();
     await loadMonths();
+    rememberNavigation('division-manager',{tab:'results'});
   };
   $('reloadDivisionSummary').onclick=loadDivisionOverview;
   $('divisionYear').onchange=loadDivisionOverview;
@@ -2688,6 +2692,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     document.querySelector('[data-admin-tab="unit-documents"]').classList.add('hidden');
     document.querySelectorAll('[data-admin-tab]').forEach(button=>button.classList.remove('active'));
     renderNationalAdminHome();
+    rememberNavigation('admin-home');
   }
   function openNationalAdminWorkspace(tab){
     if(!profile?.is_admin)return;
@@ -2698,6 +2703,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     const target=document.querySelector('[data-admin-tab="'+tab+'"]');
     if(target&&!target.classList.contains('hidden'))target.click();
     window.PointageAvailability?.sync();
+    rememberNavigation('admin-workspace',{unit:selectedUnit,tab});
   }
   async function selectNationalAdminScope(unitId,tab){
     if(!profile?.is_admin || !units.some(u=>u.id===unitId) || documentBusy)return;
@@ -2746,6 +2752,9 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
+    if(profile?.is_admin)rememberNavigation('admin-workspace',{unit:selectedUnit,tab:btn.dataset.adminTab});
+    else if(divisionSpace)rememberNavigation('division-manager',{tab:btn.dataset.adminTab});
+    else if(managerSpace)rememberNavigation('unit-manager',{tab:btn.dataset.adminTab});
     // Relire les données partagées lors du retour dans un onglet, sans écraser le pointage personnel.
     if(unitManagement() && !profile.is_admin){
       if(btn.dataset.adminTab==='results')loadAdminData();
