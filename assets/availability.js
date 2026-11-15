@@ -16,7 +16,7 @@
   let draftDirty = false;
   let requestCounter = 0;
   let currentIdentity = '';
-  const latestVersions = new Map();
+  let lastMainUnit = '';
 
   function scope() {
     const c = bridge.context();
@@ -252,6 +252,11 @@
       else if(ctx.profile?.is_admin && ctx.selectedUnit!=='ADMIN' && units.some(u=>u.id===ctx.selectedUnit))select.value=ctx.selectedUnit;
       else select.value=withAll?'ALL':units[0]?.id||'';
     }
+    if(ctx.selectedUnit!==lastMainUnit){
+      lastMainUnit=ctx.selectedUnit;
+      if(units.some(u=>u.id===ctx.selectedUnit))select.value=ctx.selectedUnit;
+      else if(ctx.profile?.is_admin && withAll)select.value='ALL';
+    }
     $('availabilityYear').textContent=year||'—';
     if(identity!==currentIdentity){
       currentIdentity=identity;
@@ -363,6 +368,18 @@
       if(!draftDirty||confirm('Abandonner les modifications non enregistrées ?'))refresh();
     });
     $('availabilityExport').addEventListener('click',exportSpecial);
+    $('annualYear')?.addEventListener('change',event=>{
+      if(draftDirty&&!confirm('Les modifications non enregistrées seront perdues. Continuer ?')){
+        event.stopImmediatePropagation();
+        $('annualYear').value=String(bridge.context().annualYear||'');
+      }
+    },true);
+    $('adminUnit')?.addEventListener('change',event=>{
+      if(draftDirty&&!confirm('Les modifications non enregistrées seront perdues. Continuer ?')){
+        event.stopImmediatePropagation();
+        $('adminUnit').value=bridge.context().selectedUnit;
+      }
+    },true);
     $('annualYear')?.addEventListener('change',()=>{setTimeout(sync,0);});
     $('adminUnit')?.addEventListener('change',()=>{setTimeout(sync,0);});
     window.PointageAvailability = {sync,augment};
