@@ -1622,6 +1622,26 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   }
 
   let unitManagerDirectory=[];
+  // Le menu national dépend de l'écran affiché, pas seulement de l'unité mémorisée.
+  function syncAdminNavigationTabs(){
+    const onNationalHome=!!profile?.is_admin && !$('nationalAdminHome').classList.contains('hidden');
+    const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
+    const nationalScope=!!profile?.is_admin && (onNationalHome || isAdminUnit);
+    const nationalTab=document.querySelector('[data-admin-tab="documents"]');
+    const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
+    const unitsTab=document.querySelector('[data-admin-tab="units"]');
+    const divisionsTab=document.querySelector('[data-admin-tab="divisions"]');
+    divisionsTab.classList.toggle('hidden',!nationalScope);
+    unitsTab.classList.toggle('hidden',!nationalScope);
+    nationalTab.classList.toggle('hidden',!nationalScope);
+    unitTab.classList.toggle('hidden',nationalScope);
+    // Sur l'accueil national, ne jamais ouvrir une rubrique par effet de bord.
+    if(onNationalHome)return;
+    if(!isAdminUnit && (unitsTab.classList.contains('active')||divisionsTab.classList.contains('active')))
+      document.querySelector('[data-admin-tab="results"]').click();
+    if(nationalTab.classList.contains('active')||unitTab.classList.contains('active'))
+      (nationalScope?nationalTab:unitTab).click();
+  }
   function renderAdminUnits(){
     updateUsersScopeHelp();
     updateFlashScopeHelp();
@@ -1641,20 +1661,10 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     }else{
       $('adminUnit').innerHTML=availableUnits.map(optionFor).join('');
     }
-    const isAdminUnit=units.find(u=>u.id===selectedUnit)?.name==='ADMIN';
     // Le blocage global est reserve a l'accueil national, quel que soit le perimetre selectionne.
     refreshFlashTargets();
     renderCataloguePanels();
-    const nationalTab=document.querySelector('[data-admin-tab="documents"]');
-    const unitTab=document.querySelector('[data-admin-tab="unit-documents"]');
-    const unitsTab=document.querySelector('[data-admin-tab="units"]');
-    const divisionsTab=document.querySelector('[data-admin-tab="divisions"]');
-    divisionsTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
-    unitsTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
-    if(!isAdminUnit && (unitsTab.classList.contains('active')||divisionsTab.classList.contains('active')))document.querySelector('[data-admin-tab="results"]').click();
-    nationalTab.classList.toggle('hidden',!profile.is_admin||!isAdminUnit);
-    unitTab.classList.toggle('hidden',isAdminUnit);
-    if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
+    syncAdminNavigationTabs();
     $('unitsList').innerHTML=units.filter(u=>u.name!=='ADMIN'&&(profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>{const managers=unitManagerDirectory.filter(p=>p.active&&p.unit_id===u.id&&p.is_unit_manager);return `<div class="notice"><button type="button" class="secondary" data-open-unit="${esc(u.id)}">${esc(u.name)} → Accéder à l’unité</button><p class="muted small">Responsables : ${managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner'}</p>${profile.is_admin?`<button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`;}).join('');
     document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'results'));
     document.querySelectorAll('[data-rename-unit]').forEach(button=>button.onclick=()=>renameOrganization('unit',button.dataset.renameUnit));
@@ -2697,8 +2707,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('nationalAdminHome',true);show('adminArea',false);show('adminHomeReturn',false);
     show('adminUnitField',false);show('maintenanceAdmin',true);
     show('adminGlobalNav',true);
-    ['results','codes','flash','users','units','divisions','documents'].forEach(tab=>document.querySelector('[data-admin-tab="'+tab+'"]').classList.remove('hidden'));
-    document.querySelector('[data-admin-tab="unit-documents"]').classList.add('hidden');
+    syncAdminNavigationTabs();
     document.querySelectorAll('[data-admin-tab]').forEach(button=>button.classList.remove('active'));
     renderNationalAdminHome();
     rememberNavigation('admin-home');
@@ -2709,6 +2718,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('maintenanceAdmin',false);show('adminUnitField',false);
     const chosen=units.find(u=>u.id===selectedUnit);
     $('adminCurrentScope').textContent=' · '+(chosen?.name==='ADMIN'?'Périmètre national':chosen?.name||'Unité');
+    syncAdminNavigationTabs();
     const target=document.querySelector('[data-admin-tab="'+tab+'"]');
     if(target&&!target.classList.contains('hidden'))target.click();
     window.PointageAvailability?.sync();
