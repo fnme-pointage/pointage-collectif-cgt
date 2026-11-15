@@ -1157,6 +1157,8 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
   let managerSpace=false,divisionSpace=false,divisions=[],divisionOverview=null;
+  // L'accueil national n'affiche les regroupements qu'apres lecture complete en base.
+  let adminOrganizationReady=false,adminOrganizationLoadError='';
   const divisionManagedUnits=()=>units.filter(u=>u.active&&u.name!=='ADMIN'&&u.division_id===profile?.managed_division_id);
   const divisionUnitIds=()=>divisionManagedUnits().map(u=>u.id);
   let divisionDocumentUnit='';
@@ -1423,8 +1425,10 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   async function loadUnits(){
     const {data,error}=await sb.from('units').select('id,name,active,division_id').eq('active',true).order('name');
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
-    units=(data||[]).filter(u=>u.name!=='ADMIN');
-    renderUserIdentity();
+    const signupUnits=(data||[]).filter(u=>u.name!=='ADMIN');
+    // Les options d'inscription ne doivent jamais remplacer les unites deja
+    // chargees pour un compte connecte (chargements concurrents).
+    if(!session && !profile){units=signupUnits;renderUserIdentity();}
     const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
     if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
     const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
@@ -1432,10 +1436,10 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     renderUserIdentity();
     const sortedDivisions=[...divisionNames.entries()].sort((a,b)=>a[1].localeCompare(b[1],'fr'));
     const signupOptions=sortedDivisions.map(([id,name])=>{
-      const members=units.filter(u=>u.division_id===id).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+      const members=signupUnits.filter(u=>u.division_id===id).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
       return members.length?`<optgroup label="${esc(name)}">${members.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</optgroup>`:'';
     }).join('');
-    const ungrouped=units.filter(u=>!divisionNames.has(u.division_id)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+    const ungrouped=signupUnits.filter(u=>!divisionNames.has(u.division_id)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
     $('signupUnit').innerHTML='<option value="">Choisir une unité</option>'+signupOptions+
       (ungrouped.length?`<optgroup label="Sans division">${ungrouped.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</optgroup>`:'');
     return true;
@@ -1551,6 +1555,9 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('monthButtons',false);
     show('adminMonthField',!profile.is_admin);
     if(profile.is_admin){
+      // Ne pas presenter d'unites "Sans division" avant la lecture complete.
+      adminOrganizationReady=false;
+      adminOrganizationLoadError='';
       // Une seule lecture des divisions/unites : loadDivisions les charge deja.
       suppressNavigationMemory=true;
       try{showNationalAdminHome();}finally{suppressNavigationMemory=false;}
@@ -2307,14 +2314,25 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   }
   async function loadDivisions(){
     if(!profile?.is_admin)return;
+    if(!adminOrganizationReady){
+      adminOrganizationLoadError='';
+      if(!$('nationalAdminHome').classList.contains('hidden'))renderNationalAdminHome();
+    }
     const [divisionResult,unitResult,peopleResult]=await Promise.all([
       sb.from('pointage_divisions').select('id,name,active').order('name'),
       sb.from('units').select('id,name,active,division_id').order('name'),
       sb.from('profiles').select('id,full_name,email,unit_id,is_unit_manager,is_division_manager,managed_division_id,active,is_admin').eq('active',true).order('full_name')
     ]);
     const error=divisionResult.error||unitResult.error||peopleResult.error;
-    if(error){$('divisionAdminMessage').innerHTML=msg(error.message,'warn');return;}
+    if(error){
+      adminOrganizationLoadError=error.message;
+      $('divisionAdminMessage').innerHTML=msg(error.message,'warn');
+      if(!$('nationalAdminHome').classList.contains('hidden'))renderNationalAdminHome();
+      return;
+    }
     divisions=divisionResult.data||[];units=unitResult.data||[];
+    adminOrganizationReady=true;
+    adminOrganizationLoadError='';
     identityDivisionNames=new Map(divisions.map(d=>[String(d.id),d.name]));
     renderUserIdentity();
     const selectedDivisions=new Set([...document.querySelectorAll('#multiDivisionChoices input:checked')].map(input=>input.value));
@@ -2342,6 +2360,9 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     }
     $('divisionManagerDivision').onchange=managerChoices;
     managerChoices();
+    // Rafraichir l'accueil au terme de la lecture des divisions,
+    // meme si aucun bouton n'a ete clique entre-temps.
+    if(!$('nationalAdminHome').classList.contains('hidden'))renderNationalAdminHome();
   }
   $('createDivision').onclick=async()=>{
     if(!profile?.is_admin)return;
@@ -2688,6 +2709,12 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   // Accueil d'administration : reutilise strictement les ecrans et handlers historiques.
   function renderNationalAdminHome(){
     if(!profile?.is_admin)return;
+    if(!adminOrganizationReady){
+      $('adminHomeUnits').innerHTML=adminOrganizationLoadError
+        ? msg('Impossible de charger les divisions et unités : '+adminOrganizationLoadError,'warn')
+        : '<p class="muted" role="status">Chargement des divisions et des unités…</p>';
+      return;
+    }
     const filter=$('adminHomeSearch').value.trim().toLocaleLowerCase('fr');
     const grouped=new Map();
     units.filter(u=>u.active&&u.name!=='ADMIN').forEach(u=>{
