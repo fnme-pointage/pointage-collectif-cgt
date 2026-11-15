@@ -1653,7 +1653,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
       catch(error){$('globalExportMessage').innerHTML=msg('Impossible de charger les années de toutes les unités : '+error.message,'warn');}
     }
     renderMonthlyMenus(yearMonths);
-    const years=[...new Set([...yearMonths.map(m=>String(m.month_key).slice(0,4)),...(globalView?[curMonth().slice(0,4)]:[])])].sort().reverse();
+    const years=[...new Set([...yearMonths.map(m=>String(m.month_key).slice(0,4)),curMonth().slice(0,4),String(Number(curMonth().slice(0,4))+1)])].sort().reverse();
     if(!years.includes(annualYear)) annualYear=years.includes(curMonth().slice(0,4))?curMonth().slice(0,4):(years[0]||'');
     $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
     window.PointageAvailability?.sync();
