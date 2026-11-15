@@ -913,21 +913,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
         </div>
         <p id="annualStats" class="muted small"></p>
         <div id="summaryTable"></div>
-        <details id="availabilitySection">
-          <summary>Disponibilités et consommation des heures</summary>
-          <p class="muted small">Enveloppes annuelles par unité et par code, sans modification des pointages enregistrés.</p>
-          <div class="availability-toolbar">
-            <div><label for="availabilityUnit">Périmètre</label><select id="availabilityUnit"></select></div>
-            <div><label>Année</label><strong id="availabilityYear"></strong></div>
-          </div>
-          <div id="availabilityTable" aria-live="polite"></div>
-          <div class="availability-buttons">
-            <button id="availabilitySave" type="button" disabled>Enregistrer les disponibilités</button>
-            <button id="availabilityRefresh" class="secondary" type="button">Actualiser</button>
-            <button id="availabilityExport" class="secondary" type="button">Exporter le bilan annuel CSV</button>
-          </div>
-          <p id="availabilityNote" role="status" aria-live="polite">Ouvrez ce panneau pour consulter les disponibilités.</p>
-        </details>
+
         <div id="unitExportActions" class="actions hidden">
           <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
           <button id="exportRaw" class="secondary" disabled>Exporter le détail annuel CSV</button>
@@ -943,6 +929,21 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
           </div>
         </div>
       </details>
+        <details id="availabilitySection" class="card foldable-report">
+          <summary>Disponibilités et consommation des heures</summary>
+          <p class="muted small">Enveloppes annuelles par unité et par code, sans modification des pointages enregistrés.</p>
+          <div class="availability-toolbar">
+            <div><label for="availabilityUnit">Périmètre</label><select id="availabilityUnit"></select></div>
+            <div><label>Année</label><strong id="availabilityYear"></strong></div>
+          </div>
+          <div id="availabilityTable" aria-live="polite"></div>
+          <div class="availability-buttons">
+            <button id="availabilitySave" type="button" disabled>Enregistrer les disponibilités</button>
+            <button id="availabilityRefresh" class="secondary" type="button">Actualiser</button>
+            <button id="availabilityExport" class="secondary" type="button">Exporter le bilan annuel CSV</button>
+          </div>
+          <p id="availabilityNote" role="status" aria-live="polite">Ouvrez ce panneau pour consulter les disponibilités.</p>
+        </details>
     </section>
 
     <section id="admin-codes" class="hidden">
