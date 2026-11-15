@@ -107,6 +107,10 @@
       if(adminIds.has(e.user_id))continue;
       const c=codeById.get(Number(e.code_id));
       const code=e.saved_code||c?.code||'';
+      if(c && e.saved_code && String(e.saved_code).toUpperCase() !== String(c.code).toUpperCase()){
+        unknownCodes.add(String(e.saved_code));
+        unknownCodes.add(String(c.code));
+      }
       let k=c?.catalogue_id?key(e.unit_id,c.catalogue_id):null;
       if(!k){
         const candidates=codeMap.get(e.unit_id+'|'+String(code).toUpperCase());
@@ -209,7 +213,7 @@
       const remaining=r.availableSeconds===null?'—':hours(r.availableSeconds-r.pointedSeconds);
       const status=r.ambiguous?'À vérifier':r.availableSeconds===null?'Non renseigné':r.availableSeconds<r.pointedSeconds?'Dépassement':'';
       html+='<tr><td><strong>'+esc(r.code)+'</strong><br><span class="muted small">'+esc(r.label)+'</span><br><span class="muted small">'+esc(names.get(r.unitId)||r.unitId)+'</span></td>';
-      html+='<td>'+(editable?'<input data-avail-catalog="'+esc(r.catalogueId)+'" data-avail-unit="'+esc(r.unitId)+'" inputmode="decimal" aria-label="Heures disponibles '+esc(r.code)+'" placeholder="Non renseigné" value="'+esc(r.availableSeconds===null?'':String(Number((Number(r.availableSeconds)/3600).toFixed(6))).replace('.',','))+'">':r.availableSeconds===null?'Non renseigné':hours(r.availableSeconds))+'</td>';
+      html+='<td>'+(editable?'<input data-avail-catalog="'+esc(r.catalogueId)+'" data-avail-unit="'+esc(r.unitId)+'" inputmode="decimal" aria-label="Heures disponibles '+esc(r.code)+'" placeholder="Non renseigné" value="'+esc(r.availableSeconds===null?'':String(Number((Number(r.availableSeconds)/3600).toFixed(6))).replace('.',','))+'" '+(r.ambiguous?'disabled title="Code historique à vérifier"':'')+'>':r.availableSeconds===null?'Non renseigné':hours(r.availableSeconds))+'</td>';
       html+='<td class="num">'+esc(hours(r.pointedSeconds))+'</td><td class="num">'+esc(remaining)+'</td><td class="num">'+esc(r.availableSeconds===null?'—':pct(r.pointedSeconds,r.availableSeconds))+(status?'<br><small class="'+(status==='Dépassement'?'availability-over':'muted')+'">'+esc(status)+'</small>':'')+'</td></tr>';
     }
     html+='</tbody></table></div>';
@@ -290,7 +294,9 @@
     const body=[headings],groups=new Map();
     const output=(name,div,unit,code,label,available,pointed,ambig)=>{
       const state=ambig?'À vérifier':available===null?'Non renseigné':available<pointed?'Dépassement':'Disponible';
-      return [year,div,unit,code,label,available===null?'Non renseigné':hoursCsv(available),hoursCsv(pointed),available===null?'Non renseigné':hoursCsv(available-pointed),available===null?'—':pct(pointed,available),state];
+      const value=ambig?'À vérifier':available===null?'Non renseigné':hoursCsv(available);
+      const remaining=ambig?'À vérifier':available===null?'Non renseigné':hoursCsv(available-pointed);
+      return [year,div,unit,code,label,value,hoursCsv(pointed),remaining,ambig||available===null?'—':pct(pointed,available),state];
     };
     for(const row of data.rows){
       if(!data.ids.includes(row.unitId)||(!row.activeInYear&&row.availableSeconds===null))continue;
@@ -303,19 +309,19 @@
     if(units.length>1){
       const national=new Map();
       for(const g of groups.values()){
-        const valid=g.rows.every(r=>r.availableSeconds!==null&&!r.ambiguous);
+        const valid=g.rows.every(r=>r.availableSeconds!==null&&!r.ambiguous&&!data.unknownCodes.has(r.code));
         const pointed=g.rows.reduce((s,r)=>s+r.pointedSeconds,0);
         const available=valid?g.rows.reduce((s,r)=>s+Number(r.availableSeconds),0):null;
-        body.push(output('division',g.division,'TOTAL DIVISION',g.code,g.label,available,pointed,!valid && g.rows.some(r=>r.ambiguous)));
+        body.push(output('division',g.division,'TOTAL DIVISION',g.code,g.label,available,pointed,!valid && g.rows.some(r=>r.ambiguous||data.unknownCodes.has(r.code))));
         if(!national.has(g.code))national.set(g.code,{label:g.label,rows:[]});
         national.get(g.code).rows.push(...g.rows);
       }
       if(new Set([...groups.values()].map(g=>g.division)).size>1){
         for(const [code,g] of national){
-          const valid=g.rows.every(r=>r.availableSeconds!==null&&!r.ambiguous);
+          const valid=g.rows.every(r=>r.availableSeconds!==null&&!r.ambiguous&&!data.unknownCodes.has(r.code));
           const pointed=g.rows.reduce((s,r)=>s+r.pointedSeconds,0);
           const available=valid?g.rows.reduce((s,r)=>s+Number(r.availableSeconds),0):null;
-          body.push(output('national','TOTAL','TOTAL UNITÉS',code,g.label,available,pointed,!valid && g.rows.some(r=>r.ambiguous)));
+          body.push(output('national','TOTAL','TOTAL UNITÉS',code,g.label,available,pointed,!valid && g.rows.some(r=>r.ambiguous||data.unknownCodes.has(r.code))));
         }
       }
     }
