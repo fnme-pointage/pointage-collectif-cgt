@@ -122,14 +122,14 @@ Colonnes recommandees :
 - Pour une division, ajouter un sous-total de division par code; pour l'admin national, sous-totaux par division et total national par code.
 - Si plusieurs divisions sont selectionnees, uniquement celles-ci.
 - Colonnes en heures decimales comme dans le CSV existant, separateur `;` et BOM UTF-8.
-- Etats : "Disponible", "Non renseigne", "Depassement", "Code historique a verifier", "Incomplete consolidations" selon les cas.
+- Etats : "Disponible", "Non renseigne", "Depassement", "Code historique a verifier", "Consolidation incomplete" selon les cas.
 - Eviter l'export de noms ou d'identifiants d'agents dans ce bilan dedie, puisque le besoin est collectif.
 - Recalculer les pointages et disponibilites au moment du clic (pas de snapshot ancien).
 
 ## 7. Cas de test obligatoires avant publication
 
 1. Aucune enveloppe en base : tous les anciens exports restent identiques (hors 3 nouvelles lignes uniquement dans les annuels), tous les nouveaux soldes "Non renseigne".
-2. 300 h disponibles, 215 h pointe es => 85 h restantes, 71,666... %.
+2. 300 h disponibles, 215 h pointees => 85 h restantes, 71,666... %.
 3. 0 h disponibles, 5 h pointees => solde -5 h et depassement, pourcentage non calcule.
 4. Pas de pointage, 120 h disponibles => solde 120 h.
 5. Mutation entre 2 unites : les heures sont rattachees uniquement a `entries.unit_id`.
@@ -140,7 +140,7 @@ Colonnes recommandees :
 10. Division DTEAM, DPN, perimetre national et selection de plusieurs divisions : consolidation exacte.
 11. Tentative ecriture par utilisateur ordinaire / acces hors division : refus SQL/RLS.
 12. Saisie concurrente de 2 responsables : refus de la revision obsolete, pas d'ecrasement silencieux.
-13. Montants en heures/minutes, decimales FR, valeurs neg atives ou mal formatees : validation correcte.
+13. Montants en heures/minutes, decimales FR, valeurs negatives ou mal formatees : validation correcte.
 14. Page sur mobile et PC : formulaires adaptes, pas de debordement horizontal bloquant.
 15. Regression : exports CSV details / recap / mensuels, creation et gestion de comptes, codes, messages flash, saisie pointages, fermeture mois, maintenances inalteres.
 16. Une annee sans mois de pointage doit etre utilisable pour saisir une disponibilite sans creer 12 mois.
