@@ -622,6 +622,12 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 .admin-home-unit{margin:0 8px 8px 0;min-height:44px}
 #adminHomeSearch{width:100%;max-width:500px}
 @media(max-width:600px){.admin-home-actions{grid-template-columns:1fr}.admin-home-unit{width:100%;text-align:left}}
+/* Visibilite du mot de passe sur la fenetre de connexion. */
+.password-field{position:relative}
+.password-field input{padding-right:52px}
+button.password-visibility{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;min-height:40px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--muted);box-shadow:none}
+button.password-visibility:hover{background:#edf3fa;box-shadow:none}
+button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
 <body>
@@ -646,7 +652,17 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     <div id="loginForm">
       <label>Adresse e-mail</label><input id="loginEmail" type="email" autocomplete="email">
       <div style="height:9px"></div>
-      <label>Mot de passe</label><input id="loginPassword" type="password" autocomplete="current-password">
+      <label for="loginPassword">Mot de passe</label>
+      <div class="password-field">
+        <input id="loginPassword" type="password" autocomplete="current-password">
+        <button id="loginPasswordToggle" class="password-visibility" type="button" aria-label="Afficher le mot de passe" aria-pressed="false" title="Afficher le mot de passe">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path class="password-eye-slash hidden" d="M3 3l18 18"></path>
+          </svg>
+        </button>
+      </div>
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
       <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
     </div>
@@ -1360,6 +1376,19 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
     return true;
   }
   loadUnits();
+
+  $('loginPasswordToggle').onclick=()=>{
+    const input=$('loginPassword');
+    const button=$('loginPasswordToggle');
+    const visible=input.type==='password';
+    input.type=visible?'text':'password';
+    button.setAttribute('aria-pressed',String(visible));
+    const label=visible?'Masquer le mot de passe':'Afficher le mot de passe';
+    button.setAttribute('aria-label',label);
+    button.title=label;
+    button.querySelector('.password-eye-slash').classList.toggle('hidden',!visible);
+    input.focus({preventScroll:true});
+  };
 
   $('loginBtn').onclick=async()=>{
     $('authMsg').innerHTML='';
