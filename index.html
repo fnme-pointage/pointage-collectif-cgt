@@ -1162,6 +1162,45 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
   const divisionCanManageUnit=id=>!!profile?.active&&!!profile.is_division_manager&&!profile.is_admin&&divisionManagedUnits().some(u=>u.id===id);
   const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active) || (divisionSpace && divisionCanManageUnit(selectedUnit));
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
+  // Conserver uniquement la vue choisie dans cet onglet, jamais les saisies.
+  const NAVIGATION_KEY='pointage-collectif:vue-active:v1';
+  let suppressNavigationMemory=false;
+  function readNavigation(){
+    try{
+      const item=JSON.parse(sessionStorage.getItem(NAVIGATION_KEY)||'null');
+      return item?.user===profile?.id && typeof item.view==='string'?item:null;
+    }catch(_){return null;}
+  }
+  function rememberNavigation(view,extras={}){
+    if(suppressNavigationMemory||!profile?.id)return;
+    try{sessionStorage.setItem(NAVIGATION_KEY,JSON.stringify({user:profile.id,view,...extras}));}
+    catch(_){} // Si le stockage est restreint, le reste de l'application fonctionne.
+  }
+  function clearNavigation(){
+    try{sessionStorage.removeItem(NAVIGATION_KEY);}catch(_){}
+  }
+  async function restoreNavigation(saved){
+    if(!saved)return;
+    if(profile?.is_admin){
+      if(saved.view!=='admin-workspace')return;
+      const unit=units.find(u=>u.id===saved.unit && u.active);
+      if(!unit)return;
+      const allowedTabs=['results','codes','flash','users','units','divisions','documents','unit-documents'];
+      await selectNationalAdminScope(unit.id,allowedTabs.includes(saved.tab)?saved.tab:'results');
+    }else if(saved.view==='unit-manager' && profile?.active && profile.is_unit_manager){
+      await $('unitManagerTab').onclick();
+      if(['results','codes','flash','users','unit-documents'].includes(saved.tab))
+        document.querySelector('[data-admin-tab="'+saved.tab+'"]')?.click();
+    }else if(saved.view==='division-manager' && profile?.active && profile.is_division_manager){
+      await $('divisionManagerTab').onclick();
+      if(['results','codes','flash','users','unit-documents'].includes(saved.tab))
+        document.querySelector('[data-admin-tab="'+saved.tab+'"]')?.click();
+    }else if(saved.view==='documents-national'){
+      $('userDocumentsTab').click();
+    }else if(saved.view==='documents-unit'){
+      $('userUnitDocumentsTab').click();
+    }
+  }
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
   let templateRows=[],templateOriginal=[],templateRevision=null,templateLoaded=false,templateBusy=false;
@@ -1451,10 +1490,13 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
 
   sb.auth.onAuthStateChange((event,newSession)=>{
     session=newSession;
-    if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event) && entriesDirty && profile?.id===newSession?.user?.id) return;
-    if(event==='PASSWORD_RECOVERY') recovering=true;
-    // Les appels Supabase doivent attendre la fin du callback d'authentification.
-    if(!recoveryVerifying && !signupVerifying) setTimeout(()=>{route();},0);
+    if(event==='INITIAL_SESSION')return; // L'initialisation initiale est geree par getSession.
+    if(event==='PASSWORD_RECOVERY')recovering=true;
+    // Supabase signale aussi SIGNED_IN lors d'un simple retour sur un onglet.
+    // Ne jamais relancer toute l'interface pour une session deja ouverte.
+    if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event)
+        && profile?.id===newSession?.user?.id && !recovering)return;
+    if(!recoveryVerifying && !signupVerifying)setTimeout(()=>{route();},0);
   });
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
@@ -1471,10 +1513,11 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       else if($('recoveryForm').classList.contains('hidden')===false) $('recoveryMsg').innerHTML='';
       return;
     }
-    if(!session){if(maintenanceTimer)clearInterval(maintenanceTimer);maintenanceTimer=null;maintenanceKnown=false;return;}
+    if(!session){profile=null;if(maintenanceTimer)clearInterval(maintenanceTimer);maintenanceTimer=null;maintenanceKnown=false;return;}
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
+    const savedNavigation=readNavigation();
     if($('carryCodesPreference'))$('carryCodesPreference').checked=profile.carry_codes_next_month!==false;
     if($('carryCodesPreferenceStatus'))$('carryCodesPreferenceStatus').textContent='';
     if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
@@ -1504,7 +1547,8 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('adminMonthField',!profile.is_admin);
     if(profile.is_admin){
       // Une seule lecture des divisions/unites : loadDivisions les charge deja.
-      showNationalAdminHome();
+      suppressNavigationMemory=true;
+      try{showNationalAdminHome();}finally{suppressNavigationMemory=false;}
       show('mainView',true);
       await loadDivisions();
       if(!units.some(u=>u.id===selectedUnit)) selectedUnit=profile.unit_id;
@@ -1517,6 +1561,12 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     await loadMonths();
     if(!profile.is_admin)show('mainView',true);
     window.PointageAvailability?.sync();
+    if(savedNavigation){
+      suppressNavigationMemory=true;
+      try{await restoreNavigation(savedNavigation);}
+      catch(error){console.warn('Reprise de la navigation impossible',error);}
+      finally{suppressNavigationMemory=false;}
+    }
   }
 
   $('saveNewPassword').onclick=async()=>{
