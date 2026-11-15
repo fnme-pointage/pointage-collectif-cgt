@@ -629,6 +629,7 @@ button.password-visibility{position:absolute;top:50%;right:4px;transform:transla
 button.password-visibility:hover{background:#edf3fa;box-shadow:none}
 button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 </style>
+  <link rel="stylesheet" href="assets/availability.css">
 </head>
 <body>
 
@@ -907,6 +908,21 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
         </div>
         <p id="annualStats" class="muted small"></p>
         <div id="summaryTable"></div>
+        <details id="availabilitySection" class="hidden">
+          <summary>Disponibilités et consommation des heures</summary>
+          <p class="muted small">Enveloppes annuelles par unité et par code, sans modification des pointages enregistrés.</p>
+          <div class="availability-toolbar">
+            <div><label for="availabilityUnit">Périmètre</label><select id="availabilityUnit"></select></div>
+            <div><label>Année</label><strong id="availabilityYear"></strong></div>
+          </div>
+          <div id="availabilityTable" aria-live="polite"></div>
+          <div class="availability-buttons">
+            <button id="availabilitySave" type="button" disabled>Enregistrer les disponibilités</button>
+            <button id="availabilityRefresh" class="secondary" type="button">Actualiser</button>
+            <button id="availabilityExport" class="secondary" type="button">Exporter le bilan annuel CSV</button>
+          </div>
+          <p id="availabilityNote" role="status" aria-live="polite"></p>
+        </details>
         <div id="unitExportActions" class="actions hidden">
           <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
           <button id="exportRaw" class="secondary" disabled>Exporter le détail annuel CSV</button>
@@ -1640,6 +1656,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     const years=[...new Set([...yearMonths.map(m=>String(m.month_key).slice(0,4)),...(globalView?[curMonth().slice(0,4)]:[])])].sort().reverse();
     if(!years.includes(annualYear)) annualYear=years.includes(curMonth().slice(0,4))?curMonth().slice(0,4):(years[0]||'');
     $('annualYear').innerHTML=years.map(y=>`<option value="${esc(y)}"${y===annualYear?' selected':''}>${esc(y)}</option>`).join('');
+    window.PointageAvailability?.sync();
   }
   $('annualYear').onchange=async()=>{annualYear=$('annualYear').value;await loadAnnualData();};
 
@@ -3359,6 +3376,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
       ]);
       const scoped=people.filter(p=>unitIds.includes(p.unit_id)||entries.some(e=>e.user_id===p.id));
       const rows=globalSummaryRows(year,scoped,codes,entries,new Set(unitIds));
+      if(window.PointageAvailability){try{await window.PointageAvailability.augment({rows,year,unitIds,codes,entries});}catch(error){console.warn('Bilan disponibilités non ajouté',error);}}
       csvDownload('pointage-divisions-agregees-'+year+'.csv',rows);
       $('multiDivisionMessage').innerHTML=msg('Export réalisé pour '+chosen.length+' division(s), '+unitIds.length+' unité(s).','ok');
     }catch(error){$('multiDivisionMessage').innerHTML=msg('Export impossible : '+error.message,'warn');}
@@ -3379,8 +3397,10 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
       ]);
       // Recalcul intégral : profils, catalogues et saisies les plus récents de toutes les unités.
       const rows=globalSummaryRows(year,people,codes,globalEntries);
+      const userCount=rows.length-2;
+      if(window.PointageAvailability){try{await window.PointageAvailability.augment({rows,year,unitIds:units.filter(u=>u.active&&u.name!=='ADMIN').map(u=>u.id),codes,entries:globalEntries});}catch(error){console.warn('Bilan disponibilités non ajouté',error);}}
       csvDownload('pointage-recap-toutes-unites-'+year+'.csv',rows);
-      $('globalExportMessage').innerHTML=msg('Export '+year+' terminé : '+(rows.length-2)+' utilisateurs, toutes unités réunies.','ok');
+      $('globalExportMessage').innerHTML=msg('Export '+year+' terminé : '+userCount+' utilisateurs, toutes unités réunies.','ok');
     }catch(error){
       $('globalExportMessage').innerHTML=msg('Impossible de réaliser l’export global : '+error.message,'warn');
     }finally{
@@ -3479,6 +3499,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
         rows.push([period,'Total division','','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(total)]);
       }
       const divisionName=String(divisionOverview?.division||'division').replace(/[^a-zA-Z0-9_-]/g,'-');
+      if(!detail && period.length===4 && window.PointageAvailability){try{await window.PointageAvailability.augment({rows,year:period,unitIds:ids,codes,entries:normal});}catch(error){console.warn('Bilan disponibilités non ajouté',error);}}
       csvDownload('pointage-'+(detail?'detail':'recap')+'-division-'+divisionName+'-'+period+'.csv',rows);
     }catch(error){
       alert('Export division impossible : '+error.message);
@@ -3513,6 +3534,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     });
     const grandTotal=[...codeTotals.values()].reduce((sum,n)=>sum+n,0);
     rows.push([annualYear,'Total par code','',...codeNames.map(code=>decimalCsv(codeTotals.get(code)||0)),decimalCsv(grandTotal)]);
+    if(window.PointageAvailability){try{await window.PointageAvailability.augment({rows,year:annualYear,unitIds:[selectedUnit],codes:annualCodes,entries:annualEntries});}catch(error){console.warn('Bilan disponibilités non ajouté',error);}}
     csvDownload(`pointage-recap-${(divisionSpace?'division-'+(divisionOverview?.division||'division'):(units.find(u=>u.id===selectedUnit)?.name||'unite'))}-${annualYear}.csv`,rows);
   };
 
@@ -3573,8 +3595,16 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   new MutationObserver(syncPremiumMonthPosition).observe($('unitManagerArea'),{attributes:true,attributeFilter:['class']});
   new MutationObserver(syncPremiumMonthPosition).observe($('divisionArea'),{attributes:true,attributeFilter:['class']});
   syncPremiumMonthPosition();
+  window.PointageAvailabilityBridge={
+    sb,
+    context:()=>({profile,selectedUnit,annualYear,divisionSpace,managerSpace,units,divisions}),
+    fetchAll,
+    decimalCsv,
+    csvDownload
+  };
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
+<script src="assets/availability.js"></script>
 </body>
 </html>
