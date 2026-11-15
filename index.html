@@ -629,7 +629,7 @@ button.password-visibility{position:absolute;top:50%;right:4px;transform:transla
 button.password-visibility:hover{background:#edf3fa;box-shadow:none}
 button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 </style>
-  <link rel="stylesheet" href="assets/availability.css">
+  <link rel="stylesheet" href="assets/availability.css?v=20261115-2">
 </head>
 <body>
 
@@ -855,6 +855,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   <section id="nationalAdminHome" class="card hidden">
     <div class="sectiontitle"><h2>Administration nationale</h2></div>
     <p class="muted">Accédez aux fonctions nationales ou choisissez une unité pour consulter et modifier ses données.</p>
+    <div class="actions"><button id="adminAvailabilityShortcut" class="secondary" type="button">Heures disponibles par code →</button></div>
     <div class="sectiontitle"><h2>Accéder à une unité</h2></div>
     <p class="muted small">Chaque unité conserve son propre catalogue de codes modifiable, ses suivis et ses fonctions de gestion.</p>
     <label for="adminHomeSearch">Rechercher une unité</label><input id="adminHomeSearch" type="search" placeholder="Nom de l’unité ou de la division">
@@ -908,7 +909,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
         </div>
         <p id="annualStats" class="muted small"></p>
         <div id="summaryTable"></div>
-        <details id="availabilitySection" class="hidden">
+        <details id="availabilitySection">
           <summary>Disponibilités et consommation des heures</summary>
           <p class="muted small">Enveloppes annuelles par unité et par code, sans modification des pointages enregistrés.</p>
           <div class="availability-toolbar">
@@ -921,7 +922,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
             <button id="availabilityRefresh" class="secondary" type="button">Actualiser</button>
             <button id="availabilityExport" class="secondary" type="button">Exporter le bilan annuel CSV</button>
           </div>
-          <p id="availabilityNote" role="status" aria-live="polite"></p>
+          <p id="availabilityNote" role="status" aria-live="polite">Ouvrez ce panneau pour consulter les disponibilités.</p>
         </details>
         <div id="unitExportActions" class="actions hidden">
           <button id="exportSummary" class="secondary" disabled>Exporter le récapitulatif annuel CSV</button>
@@ -1511,6 +1512,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     if(!maintenanceTimer)maintenanceTimer=setInterval(()=>{if(session&&profile?.active)refreshMaintenance();},15000);
     await loadMonths();
     if(!profile.is_admin)show('mainView',true);
+    window.PointageAvailability?.sync();
   }
 
   $('saveNewPassword').onclick=async()=>{
@@ -2641,6 +2643,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     $('adminCurrentScope').textContent=' · '+(chosen?.name==='ADMIN'?'Périmètre national':chosen?.name||'Unité');
     const target=document.querySelector('[data-admin-tab="'+tab+'"]');
     if(target&&!target.classList.contains('hidden'))target.click();
+    window.PointageAvailability?.sync();
   }
   async function selectNationalAdminScope(unitId,tab){
     if(!profile?.is_admin || !units.some(u=>u.id===unitId) || documentBusy)return;
@@ -2666,6 +2669,12 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   }
     function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
   $('adminHomeSearch').oninput=renderNationalAdminHome;
+  $('adminAvailabilityShortcut').onclick=async()=>{
+    const national=units.find(u=>u.name==='ADMIN');
+    if(!national)return;
+    await selectNationalAdminScope(national.id,'results');
+    if(!$('adminArea').classList.contains('hidden'))window.PointageAvailability?.open();
+  };
   $('returnNationalHome').onclick=showNationalAdminHome;
   document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
     const admin=units.find(u=>u.name==='ADMIN');
@@ -3605,6 +3614,6 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
-<script src="assets/availability.js"></script>
+<script src="assets/availability.js?v=20261115-2"></script>
 </body>
 </html>
