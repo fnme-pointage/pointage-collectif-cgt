@@ -628,6 +628,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 button.password-visibility{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;min-height:40px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--muted);box-shadow:none}
 button.password-visibility:hover{background:#edf3fa;box-shadow:none}
 button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+/* Suivis mensuels et annuels : panneaux repliables. */
+details.foldable-report > summary{display:list-item;cursor:pointer;padding:4px 0 8px;margin:0 0 2px;font-size:1.1rem;font-weight:750}
+details.foldable-report > summary::marker{color:var(--accent)}
+details.foldable-report > summary:focus-visible{outline:3px solid #9dc6ee;outline-offset:3px;border-radius:6px}
+details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 </style>
   <link rel="stylesheet" href="assets/availability.css?v=20261115-2">
 </head>
@@ -884,8 +889,8 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
         </div>
         <div id="userExportMessage" aria-live="polite"></div>
       </div>
-      <div id="monthlyFollowup" class="card hidden">
-        <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
+      <details id="monthlyFollowup" class="card foldable-report hidden">
+        <summary>Suivi mensuel</summary>
         <div class="row">
           <div class="monthfield"><label for="monthlyMonth">Mois</label><select id="monthlyMonth"></select></div>
           <div class="smallfield"><label for="monthlyYear">Année</label><select id="monthlyYear"></select></div>
@@ -900,9 +905,9 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
           <div class="actions"><button id="exportMonthlyGlobal" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
           <div id="monthlyGlobalExportMessage" aria-live="polite"></div>
         </div>
-      </div>
-      <div class="card">
-        <div class="sectiontitle"><h2>Suivi annuel</h2></div>
+      </details>
+      <details id="annualFollowup" class="card foldable-report">
+        <summary>Suivi annuel</summary>
         <div class="row">
           <div class="smallfield"><label for="annualYear">Année</label><select id="annualYear"></select></div>
         </div>
@@ -937,7 +942,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
             <div id="multiDivisionMessage" aria-live="polite"></div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
 
     <section id="admin-codes" class="hidden">
@@ -1157,6 +1162,49 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   const divisionCanManageUnit=id=>!!profile?.active&&!!profile.is_division_manager&&!profile.is_admin&&divisionManagedUnits().some(u=>u.id===id);
   const unitManagement=()=>!!profile?.is_admin || (!!profile?.is_unit_manager && managerSpace && profile.active) || (divisionSpace && divisionCanManageUnit(selectedUnit));
   let session=null, profile=null, months=[], selectedMonth='', monthCodes=[], entries=[];
+  // Conserver uniquement la vue choisie dans cet onglet, jamais les saisies.
+  const NAVIGATION_KEY='pointage-collectif:vue-active:v1';
+  let suppressNavigationMemory=false;
+  function readNavigation(){
+    try{
+      const item=JSON.parse(sessionStorage.getItem(NAVIGATION_KEY)||'null');
+      return item?.user===profile?.id && typeof item.view==='string'?item:null;
+    }catch(_){return null;}
+  }
+  function rememberNavigation(view,extras={}){
+    if(suppressNavigationMemory||!profile?.id)return;
+    try{sessionStorage.setItem(NAVIGATION_KEY,JSON.stringify({user:profile.id,view,...extras}));}
+    catch(_){} // Si le stockage est restreint, le reste de l'application fonctionne.
+  }
+  function clearNavigation(){
+    try{sessionStorage.removeItem(NAVIGATION_KEY);}catch(_){}
+  }
+  async function restoreNavigation(saved){
+    if(!saved)return;
+    if(profile?.is_admin){
+      if(saved.view!=='admin-workspace')return;
+      const unit=units.find(u=>u.id===saved.unit && u.active);
+      if(!unit)return;
+      const allowedTabs=['results','codes','flash','users','units','divisions','documents','unit-documents'];
+      await selectNationalAdminScope(unit.id,allowedTabs.includes(saved.tab)?saved.tab:'results');
+    }else if(saved.view==='unit-manager' && profile?.active && profile.is_unit_manager){
+      await $('unitManagerTab').onclick();
+      if(['results','codes','flash','users','unit-documents'].includes(saved.tab))
+        document.querySelector('[data-admin-tab="'+saved.tab+'"]')?.click();
+    }else if(saved.view==='division-manager' && profile?.active && profile.is_division_manager){
+      await $('divisionManagerTab').onclick();
+      if(saved.unit && saved.unit!==selectedUnit && divisionCanManageUnit(saved.unit)){
+        $('adminUnit').value=saved.unit;
+        await $('adminUnit').onchange();
+      }
+      if(['results','codes','flash','users','unit-documents'].includes(saved.tab))
+        document.querySelector('[data-admin-tab="'+saved.tab+'"]')?.click();
+    }else if(saved.view==='documents-national'){
+      $('userDocumentsTab').click();
+    }else if(saved.view==='documents-unit'){
+      $('userUnitDocumentsTab').click();
+    }
+  }
   let allProfiles=[], adminUserProfiles=[], adminEntries=[];
   let annualYear='', annualEntries=[], annualCodes=[], annualReady=false, annualRequest=0;
   let templateRows=[],templateOriginal=[],templateRevision=null,templateLoaded=false,templateBusy=false;
@@ -1433,7 +1481,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     finally{$('signupBtn').disabled=false;}
   };
 
-  async function logout(){if(contactSending || !await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;$('contactAdminDialog').close();$('contactMessage').value='';$('contactFeedback').innerHTML='';closePdfReader();documents=[];await sb.auth.signOut();}
+  async function logout(){if(contactSending || !await allowLeavePointage() || (profile?.is_admin && !await allowLeaveCatalogue())) return;$('contactAdminDialog').close();$('contactMessage').value='';$('contactFeedback').innerHTML='';closePdfReader();documents=[];const {error}=await sb.auth.signOut();if(!error)clearNavigation();}
   $('pendingLogout').onclick=logout; $('logoutLink').onclick=e=>{e.preventDefault();logout();};
   $('changePasswordLink').onclick=async e=>{
     e.preventDefault();
@@ -1446,10 +1494,13 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
 
   sb.auth.onAuthStateChange((event,newSession)=>{
     session=newSession;
-    if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event) && entriesDirty && profile?.id===newSession?.user?.id) return;
-    if(event==='PASSWORD_RECOVERY') recovering=true;
-    // Les appels Supabase doivent attendre la fin du callback d'authentification.
-    if(!recoveryVerifying && !signupVerifying) setTimeout(()=>{route();},0);
+    if(event==='INITIAL_SESSION')return; // L'initialisation initiale est geree par getSession.
+    if(event==='PASSWORD_RECOVERY')recovering=true;
+    // Supabase signale aussi SIGNED_IN lors d'un simple retour sur un onglet.
+    // Ne jamais relancer toute l'interface pour une session deja ouverte.
+    if(['TOKEN_REFRESHED','SIGNED_IN','USER_UPDATED'].includes(event)
+        && profile?.id===newSession?.user?.id && !recovering)return;
+    if(!recoveryVerifying && !signupVerifying)setTimeout(()=>{route();},0);
   });
   (async()=>{const {data}=await sb.auth.getSession(); session=data.session; await route();})();
 
@@ -1466,10 +1517,11 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
       else if($('recoveryForm').classList.contains('hidden')===false) $('recoveryMsg').innerHTML='';
       return;
     }
-    if(!session){if(maintenanceTimer)clearInterval(maintenanceTimer);maintenanceTimer=null;maintenanceKnown=false;return;}
+    if(!session){profile=null;if(maintenanceTimer)clearInterval(maintenanceTimer);maintenanceTimer=null;maintenanceKnown=false;return;}
     const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(error){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Profil indisponible. Vérifie la configuration de la base.';return;}
     profile=data;
+    const savedNavigation=readNavigation();
     if($('carryCodesPreference'))$('carryCodesPreference').checked=profile.carry_codes_next_month!==false;
     if($('carryCodesPreferenceStatus'))$('carryCodesPreferenceStatus').textContent='';
     if(!profile.unit_id){show('authView',false);show('pendingView',true);$('pendingIdentity').textContent='Aucune unité rattachée à ce profil. Contacte l’administrateur.';return;}
@@ -1499,7 +1551,8 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     show('adminMonthField',!profile.is_admin);
     if(profile.is_admin){
       // Une seule lecture des divisions/unites : loadDivisions les charge deja.
-      showNationalAdminHome();
+      suppressNavigationMemory=true;
+      try{showNationalAdminHome();}finally{suppressNavigationMemory=false;}
       show('mainView',true);
       await loadDivisions();
       if(!units.some(u=>u.id===selectedUnit)) selectedUnit=profile.unit_id;
@@ -1512,6 +1565,12 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     await loadMonths();
     if(!profile.is_admin)show('mainView',true);
     window.PointageAvailability?.sync();
+    if(savedNavigation){
+      suppressNavigationMemory=true;
+      try{await restoreNavigation(savedNavigation);}
+      catch(error){console.warn('Reprise de la navigation impossible',error);}
+      finally{suppressNavigationMemory=false;}
+    }
   }
 
   $('saveNewPassword').onclick=async()=>{
@@ -1596,10 +1655,14 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
     $('unitsList').innerHTML=units.filter(u=>u.name!=='ADMIN'&&(profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>{const managers=unitManagerDirectory.filter(p=>p.active&&p.unit_id===u.id&&p.is_unit_manager);return `<div class="notice"><button type="button" class="secondary" data-open-unit="${esc(u.id)}">${esc(u.name)} → Accéder à l’unité</button><p class="muted small">Responsables : ${managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner'}</p>${profile.is_admin?`<button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`;}).join('');
-    document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'codes'));
+    document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'results'));
     document.querySelectorAll('[data-rename-unit]').forEach(button=>button.onclick=()=>renameOrganization('unit',button.dataset.renameUnit));
   }
-  $('adminUnit').onchange=async()=>{if(!profile.is_admin && !(divisionSpace&&divisionCanManageUnit($('adminUnit').value))){$('adminUnit').value=selectedUnit;return;}if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && !divisionSpace && !managerSpace && selectedUnit===profile.unit_id);await loadMonths();};
+  $('adminUnit').onchange=async()=>{if(!profile.is_admin && !(divisionSpace&&divisionCanManageUnit($('adminUnit').value))){$('adminUnit').value=selectedUnit;return;}if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && !divisionSpace && !managerSpace && selectedUnit===profile.unit_id);await loadMonths();
+    const activeTab=document.querySelector('[data-admin-tab].active')?.dataset.adminTab||'results';
+    if(profile?.is_admin && !$('adminArea').classList.contains('hidden'))rememberNavigation('admin-workspace',{unit:selectedUnit,tab:activeTab});
+    else if(divisionSpace)rememberNavigation('division-manager',{unit:selectedUnit,tab:activeTab});
+  };
   $('createUnit').onclick=async()=>{
     if(!profile?.is_admin || units.find(u=>u.id===selectedUnit)?.name!=='ADMIN')return;
     if(!await allowLeaveCatalogue())return;
@@ -2151,6 +2214,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
       $('userDocumentsTab').classList.toggle('active',scope==='national');
       $('userUnitDocumentsTab').classList.toggle('active',scope==='unit');
     }
+    if(personal)rememberNavigation(scope==='unit'?'documents-unit':'documents-national');
     loadDocuments();
   }
   $('userPointageTab').onclick=()=>{
@@ -2162,6 +2226,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     $('unitManagerTab').classList.remove('active');$('divisionManagerTab').classList.remove('active');
     $('userPointageTab').classList.add('active');$('userDocumentsTab').classList.remove('active');$('userUnitDocumentsTab').classList.remove('active');
     if(!profile.is_admin){loadMonths();loadPersonalYearSummary();}
+    rememberNavigation('pointage');
   };
   async function loadUnitFollowup(){
     if(!managerSpace||!profile?.active||!profile?.is_unit_manager||profile.is_admin)return;
@@ -2212,6 +2277,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     await loadMonths();
     $('unitFollowupYear').value=String(new Date().getFullYear());
     await Promise.all([loadUnitManager(),loadUnitFollowup()]);
+    rememberNavigation('unit-manager',{tab:'results'});
   };
   async function renameOrganization(kind,id){
     if(!profile?.is_admin)return;
@@ -2342,6 +2408,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     await loadDivisionOverview();
     document.querySelector('[data-admin-tab="results"]').click();
     await loadMonths();
+    rememberNavigation('division-manager',{tab:'results',unit:selectedUnit});
   };
   $('reloadDivisionSummary').onclick=loadDivisionOverview;
   $('divisionYear').onchange=loadDivisionOverview;
@@ -2633,6 +2700,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     document.querySelector('[data-admin-tab="unit-documents"]').classList.add('hidden');
     document.querySelectorAll('[data-admin-tab]').forEach(button=>button.classList.remove('active'));
     renderNationalAdminHome();
+    rememberNavigation('admin-home');
   }
   function openNationalAdminWorkspace(tab){
     if(!profile?.is_admin)return;
@@ -2643,6 +2711,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     const target=document.querySelector('[data-admin-tab="'+tab+'"]');
     if(target&&!target.classList.contains('hidden'))target.click();
     window.PointageAvailability?.sync();
+    rememberNavigation('admin-workspace',{unit:selectedUnit,tab});
   }
   async function selectNationalAdminScope(unitId,tab){
     if(!profile?.is_admin || !units.some(u=>u.id===unitId) || documentBusy)return;
@@ -2663,10 +2732,10 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     detail.classList.remove('hidden');
     detail.innerHTML='<h3>Division '+esc(division.name)+'</h3><p class="muted small">Sélectionner une unité pour accéder à ses fonctions de gestion.</p>'+
       (members.length?members.map(u=>'<button type="button" class="secondary admin-home-unit" data-division-unit="'+esc(u.id)+'">'+esc(u.name)+' →</button>').join(''):'<p>Aucune unité rattachée.</p>');
-    detail.querySelectorAll('[data-division-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.divisionUnit,'codes'));
+    detail.querySelectorAll('[data-division-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.divisionUnit,'results'));
     detail.scrollIntoView({block:'nearest',behavior:'smooth'});
   }
-    function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
+    function openNationalAdminUnit(id){return selectNationalAdminScope(id,'results');}
   $('adminHomeSearch').oninput=renderNationalAdminHome;
   $('returnNationalHome').onclick=showNationalAdminHome;
   document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
@@ -2691,6 +2760,9 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     documentRequest++;closePdfReader();show('documentsArea',docsTab);
     if(btn.dataset.adminTab==='flash')loadFlashHistory();
     if(docsTab) openDocumentBase(btn.dataset.adminTab==='unit-documents'?'unit':'national',false);
+    if(profile?.is_admin)rememberNavigation('admin-workspace',{unit:selectedUnit,tab:btn.dataset.adminTab});
+    else if(divisionSpace)rememberNavigation('division-manager',{tab:btn.dataset.adminTab,unit:selectedUnit});
+    else if(managerSpace)rememberNavigation('unit-manager',{tab:btn.dataset.adminTab});
     // Relire les données partagées lors du retour dans un onglet, sans écraser le pointage personnel.
     if(unitManagement() && !profile.is_admin){
       if(btn.dataset.adminTab==='results')loadAdminData();
