@@ -855,7 +855,6 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   <section id="nationalAdminHome" class="card hidden">
     <div class="sectiontitle"><h2>Administration nationale</h2></div>
     <p class="muted">Accédez aux fonctions nationales ou choisissez une unité pour consulter et modifier ses données.</p>
-    <div class="actions"><button id="adminAvailabilityShortcut" class="secondary" type="button">Heures disponibles par code →</button></div>
     <div class="sectiontitle"><h2>Accéder à une unité</h2></div>
     <p class="muted small">Chaque unité conserve son propre catalogue de codes modifiable, ses suivis et ses fonctions de gestion.</p>
     <label for="adminHomeSearch">Rechercher une unité</label><input id="adminHomeSearch" type="search" placeholder="Nom de l’unité ou de la division">
@@ -2669,12 +2668,6 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
   }
     function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
   $('adminHomeSearch').oninput=renderNationalAdminHome;
-  $('adminAvailabilityShortcut').onclick=async()=>{
-    const national=units.find(u=>u.name==='ADMIN');
-    if(!national)return;
-    await selectNationalAdminScope(national.id,'results');
-    if(!$('adminArea').classList.contains('hidden'))window.PointageAvailability?.open();
-  };
   $('returnNationalHome').onclick=showNationalAdminHome;
   document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
     const admin=units.find(u=>u.name==='ADMIN');
