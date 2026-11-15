@@ -91,18 +91,28 @@ $fn$;
 create or replace function pointage_private.availability_audit_change()
 returns trigger language plpgsql security definer set search_path = ''
 as $fn$
+declare
+  row_unit uuid;
+  row_year integer;
+  row_catalogue uuid;
+  before_seconds bigint;
+  after_seconds bigint;
 begin
+  if tg_op = 'INSERT' then
+    row_unit := new.unit_id; row_year := new.year; row_catalogue := new.catalogue_id;
+    before_seconds := null; after_seconds := new.available_seconds;
+  elsif tg_op = 'DELETE' then
+    row_unit := old.unit_id; row_year := old.year; row_catalogue := old.catalogue_id;
+    before_seconds := old.available_seconds; after_seconds := null;
+  else
+    row_unit := new.unit_id; row_year := new.year; row_catalogue := new.catalogue_id;
+    before_seconds := old.available_seconds; after_seconds := new.available_seconds;
+  end if;
   insert into public.pointage_annual_code_availability_audit
     (unit_id, year, catalogue_id, old_seconds, new_seconds, changed_by, operation)
-  values (
-    coalesce(new.unit_id, old.unit_id),
-    coalesce(new.year, old.year),
-    coalesce(new.catalogue_id, old.catalogue_id),
-    case when tg_op = 'INSERT' then null else old.available_seconds end,
-    case when tg_op = 'DELETE' then null else new.available_seconds end,
-    (select auth.uid()), tg_op
-  );
-  return coalesce(new, old);
+  values (row_unit,row_year,row_catalogue,before_seconds,after_seconds,(select auth.uid()),tg_op);
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
 end;
 $fn$;
 revoke all on function pointage_private.availability_stamp() from public;
