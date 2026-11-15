@@ -628,6 +628,11 @@ body{background:#f3f6fa;color:var(--text);font-family:Inter,ui-sans-serif,system
 button.password-visibility{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;min-height:40px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--muted);box-shadow:none}
 button.password-visibility:hover{background:#edf3fa;box-shadow:none}
 button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+/* Suivis mensuels et annuels : panneaux repliables. */
+details.foldable-report > summary{display:list-item;cursor:pointer;padding:4px 0 8px;margin:0 0 2px;font-size:1.1rem;font-weight:750}
+details.foldable-report > summary::marker{color:var(--accent)}
+details.foldable-report > summary:focus-visible{outline:3px solid #9dc6ee;outline-offset:3px;border-radius:6px}
+details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 </style>
   <link rel="stylesheet" href="assets/availability.css?v=20261115-2">
 </head>
@@ -884,8 +889,8 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
         </div>
         <div id="userExportMessage" aria-live="polite"></div>
       </div>
-      <div id="monthlyFollowup" class="card hidden">
-        <div class="sectiontitle"><h2>Suivi mensuel</h2></div>
+      <details id="monthlyFollowup" class="card foldable-report hidden">
+        <summary>Suivi mensuel</summary>
         <div class="row">
           <div class="monthfield"><label for="monthlyMonth">Mois</label><select id="monthlyMonth"></select></div>
           <div class="smallfield"><label for="monthlyYear">Année</label><select id="monthlyYear"></select></div>
@@ -900,9 +905,9 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
           <div class="actions"><button id="exportMonthlyGlobal" class="secondary" type="button">Exporter tous les utilisateurs de toutes les unités CSV</button></div>
           <div id="monthlyGlobalExportMessage" aria-live="polite"></div>
         </div>
-      </div>
-      <div class="card">
-        <div class="sectiontitle"><h2>Suivi annuel</h2></div>
+      </details>
+      <details id="annualFollowup" class="card foldable-report">
+        <summary>Suivi annuel</summary>
         <div class="row">
           <div class="smallfield"><label for="annualYear">Année</label><select id="annualYear"></select></div>
         </div>
@@ -937,7 +942,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
             <div id="multiDivisionMessage" aria-live="polite"></div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
 
     <section id="admin-codes" class="hidden">
@@ -1596,7 +1601,7 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     unitTab.classList.toggle('hidden',isAdminUnit);
     if(nationalTab.classList.contains('active') || unitTab.classList.contains('active')) (isAdminUnit?nationalTab:unitTab).click();
     $('unitsList').innerHTML=units.filter(u=>u.name!=='ADMIN'&&(profile.is_admin||(divisionSpace?divisionCanManageUnit(u.id):u.id===profile.unit_id))).map(u=>{const managers=unitManagerDirectory.filter(p=>p.active&&p.unit_id===u.id&&p.is_unit_manager);return `<div class="notice"><button type="button" class="secondary" data-open-unit="${esc(u.id)}">${esc(u.name)} → Accéder à l’unité</button><p class="muted small">Responsables : ${managers.map(p=>esc(p.full_name||p.email)).join(', ')||'À désigner'}</p>${profile.is_admin?`<button type="button" class="secondary" data-rename-unit="${esc(u.id)}">Modifier le nom</button>`:''}</div>`;}).join('');
-    document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'codes'));
+    document.querySelectorAll('[data-open-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.openUnit,'results'));
     document.querySelectorAll('[data-rename-unit]').forEach(button=>button.onclick=()=>renameOrganization('unit',button.dataset.renameUnit));
   }
   $('adminUnit').onchange=async()=>{if(!profile.is_admin && !(divisionSpace&&divisionCanManageUnit($('adminUnit').value))){$('adminUnit').value=selectedUnit;return;}if(documentBusy){$('adminUnit').value=selectedUnit;return;}if(!await allowLeaveCatalogue()){$('adminUnit').value=selectedUnit;return;}catalogueUnit=$('adminUnit').value;selectedUnit=$('adminUnit').value;monthlyReady=false;monthlyRequest++;$('exportMonthlySummary').disabled=$('exportMonthlyRaw').disabled=true;selectedMonth='';annualYear='';renderAdminUnits();flashHistoryRequest++;if(!document.querySelector('#admin-flash').classList.contains('hidden'))loadFlashHistory();show('userArea',!profile.is_admin && !divisionSpace && !managerSpace && selectedUnit===profile.unit_id);await loadMonths();};
@@ -2663,10 +2668,10 @@ button.password-visibility svg{width:21px;height:21px;fill:none;stroke:currentCo
     detail.classList.remove('hidden');
     detail.innerHTML='<h3>Division '+esc(division.name)+'</h3><p class="muted small">Sélectionner une unité pour accéder à ses fonctions de gestion.</p>'+
       (members.length?members.map(u=>'<button type="button" class="secondary admin-home-unit" data-division-unit="'+esc(u.id)+'">'+esc(u.name)+' →</button>').join(''):'<p>Aucune unité rattachée.</p>');
-    detail.querySelectorAll('[data-division-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.divisionUnit,'codes'));
+    detail.querySelectorAll('[data-division-unit]').forEach(button=>button.onclick=()=>selectNationalAdminScope(button.dataset.divisionUnit,'results'));
     detail.scrollIntoView({block:'nearest',behavior:'smooth'});
   }
-    function openNationalAdminUnit(id){return selectNationalAdminScope(id,'codes');}
+    function openNationalAdminUnit(id){return selectNationalAdminScope(id,'results');}
   $('adminHomeSearch').oninput=renderNationalAdminHome;
   $('returnNationalHome').onclick=showNationalAdminHome;
   document.querySelectorAll('[data-home-tab]').forEach(b=>b.onclick=()=>{
