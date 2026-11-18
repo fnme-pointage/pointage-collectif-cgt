@@ -1481,7 +1481,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       try{return (await fetch(url,{...options,cache:'no-store',signal:AbortSignal.timeout(10000)})).status;}catch{return 0;}
     };
     try{
-      const base=cfg.supabaseUrl.replace(/\\/$/,'');
+      const base=cfg.supabaseUrl.endsWith('/')?cfg.supabaseUrl.slice(0,-1):cfg.supabaseUrl;
       const [authStatus,apiStatus]=await Promise.all([
         probe(base+'/auth/v1/health'),
         probe(base+'/rest/v1/units?select=id&limit=1',{headers:{apikey:cfg.supabaseAnonKey}})
