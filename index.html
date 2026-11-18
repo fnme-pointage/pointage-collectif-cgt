@@ -654,6 +654,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       <button id="loginTab">Connexion</button>
       <button id="signupTab" class="secondary">Créer mon compte</button>
     </div>
+    <div class="notice warn" role="status"><strong>Information accès EDF :</strong> les connexions depuis les PC professionnels EDF sont actuellement indisponibles. Vous pouvez continuer à utiliser l’application depuis un PC personnel ou un téléphone professionnel ou personnel disposant d’un accès réseau fonctionnel.</div>
     <div id="authMsg"></div>
     <div id="loginForm">
       <label>Adresse e-mail</label><input id="loginEmail" type="email" autocomplete="email">
@@ -671,6 +672,8 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       </div>
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
       <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
+      <div class="actions"><button id="diagnoseConnectionBtn" class="secondary" type="button">Tester la connexion</button></div>
+      <p id="diagnoseConnectionResult" class="notice hidden" role="status"></p>
     </div>
     <div id="forgotForm" class="hidden">
       <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
@@ -1422,14 +1425,25 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('userDivision',!profile.is_admin && !!divisionName);
     show('userUnit',!profile.is_admin && !!unit);
   }
+  async function loadSignupReference(query){
+    let result;
+    for(let attempt=0;attempt<3;attempt++){
+      try{result=await query();}catch(error){result={data:null,error};}
+      const message=String(result?.error?.message||'');
+      const transient=/failed to fetch|network|timeout|timed out|load failed|connection|502|503|504/i.test(message);
+      if(!result?.error || !transient || attempt===2)return result;
+      await new Promise(resolve=>setTimeout(resolve,450*Math.pow(2,attempt)));
+    }
+    return result;
+  }
   async function loadUnits(){
-    const {data,error}=await sb.from('units').select('id,name,active,division_id').eq('active',true).order('name');
+    const {data,error}=await loadSignupReference(()=>sb.from('units').select('id,name,active,division_id').eq('active',true).order('name'));
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
     const signupUnits=(data||[]).filter(u=>u.name!=='ADMIN');
     // Les options d'inscription ne doivent jamais remplacer les unites deja
     // chargees pour un compte connecte (chargements concurrents).
     if(!session && !profile){units=signupUnits;renderUserIdentity();}
-    const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
+    const {data:signupDivisions,error:divisionError}=await loadSignupReference(()=>sb.from('pointage_divisions').select('id,name').eq('active',true).order('name'));
     if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
     const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
     identityDivisionNames=new Map((signupDivisions||[]).map(d=>[String(d.id),d.name]));
@@ -1457,6 +1471,24 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     button.title=label;
     button.querySelector('.password-eye-slash').classList.toggle('hidden',!visible);
     input.focus({preventScroll:true});
+  };
+
+  // Test non authentifie, sans mot de passe ni donnees personnelles.
+  $('diagnoseConnectionBtn').onclick=async()=>{
+    const button=$('diagnoseConnectionBtn'),output=$('diagnoseConnectionResult');
+    button.disabled=true;button.textContent='Test en cours…';output.classList.remove('hidden');output.textContent='Vérification des connexions…';
+    const probe=async(url,options={})=>{
+      try{return (await fetch(url,{...options,cache:'no-store',signal:AbortSignal.timeout(10000)})).status;}catch{return 0;}
+    };
+    try{
+      const base=cfg.supabaseUrl.replace(/\\/$/,'');
+      const [authStatus,apiStatus]=await Promise.all([
+        probe(base+'/auth/v1/health'),
+        probe(base+'/rest/v1/units?select=id&limit=1',{headers:{apikey:cfg.supabaseAnonKey}})
+      ]);
+      const format=status=>status===0?'INJOIGNABLE':status<500?'accessible (HTTP '+status+')':'erreur HTTP '+status;
+      output.textContent='Identification Supabase : '+format(authStatus)+' · API Pointage : '+format(apiStatus)+'. '+(authStatus===0||apiStatus===0?'Connexion réseau bloquée ou indisponible sur cet appareil (proxy, pare-feu ou navigateur).':authStatus>=500||apiStatus>=500?'Le serveur répond avec une erreur temporaire.':'Les deux services répondent.');
+    }finally{button.disabled=false;button.textContent='Tester la connexion';}
   };
 
   $('loginBtn').onclick=async()=>{
