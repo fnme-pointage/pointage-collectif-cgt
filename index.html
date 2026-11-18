@@ -654,6 +654,7 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       <button id="loginTab">Connexion</button>
       <button id="signupTab" class="secondary">Créer mon compte</button>
     </div>
+    <p class="notice warn" role="status"><strong>Information accès EDF :</strong> les accès depuis les PC professionnels EDF sont actuellement indisponibles. L'application reste utilisable depuis un PC personnel, un téléphone professionnel ou personnel disposant d'un accès réseau fonctionnel.</p>
     <div id="authMsg"></div>
     <div id="loginForm">
       <label>Adresse e-mail</label><input id="loginEmail" type="email" autocomplete="email">
@@ -671,6 +672,8 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
       </div>
       <div class="actions"><button id="loginBtn">Se connecter</button></div>
       <div class="actions"><button id="forgotPassword" class="secondary" type="button">Mot de passe oublié ?</button></div>
+      <div class="actions"><button id="diagnoseConnectionBtn" class="secondary" type="button">Tester la connexion</button></div>
+      <p id="diagnoseConnectionResult" class="notice hidden" role="status"></p>
     </div>
     <div id="forgotForm" class="hidden">
       <label for="forgotEmail">Adresse e-mail du compte</label><input id="forgotEmail" type="email" autocomplete="email">
@@ -1422,14 +1425,27 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('userDivision',!profile.is_admin && !!divisionName);
     show('userUnit',!profile.is_admin && !!unit);
   }
+  // Retries uniquement pour les erreurs réseau temporaires (pas les refus de droits).
+  async function fetchReferenceWithRetry(makeRequest){
+    let result;
+    for(let attempt=0;attempt<3;attempt++){
+      try { result=await makeRequest(); }
+      catch(error){ result={data:null,error}; }
+      const message=String(result?.error?.message || '');
+      const temporary=['failed to fetch','network','timeout','timed out','load failed','connection','502','503','504'].some(word=>message.toLowerCase().includes(word));
+      if(!result?.error || !temporary || attempt===2)return result;
+      await new Promise(resolve=>setTimeout(resolve,450*(attempt+1)));
+    }
+    return result;
+  }
   async function loadUnits(){
-    const {data,error}=await sb.from('units').select('id,name,active,division_id').eq('active',true).order('name');
+    const {data,error}=await fetchReferenceWithRetry(()=>sb.from('units').select('id,name,active,division_id').eq('active',true).order('name'));
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
     const signupUnits=(data||[]).filter(u=>u.name!=='ADMIN');
     // Les options d'inscription ne doivent jamais remplacer les unites deja
     // chargees pour un compte connecte (chargements concurrents).
     if(!session && !profile){units=signupUnits;renderUserIdentity();}
-    const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
+    const {data:signupDivisions,error:divisionError}=await fetchReferenceWithRetry(()=>sb.from('pointage_divisions').select('id,name').eq('active',true).order('name'));
     if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
     const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
     identityDivisionNames=new Map((signupDivisions||[]).map(d=>[String(d.id),d.name]));
@@ -1457,6 +1473,36 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     button.title=label;
     button.querySelector('.password-eye-slash').classList.toggle('hidden',!visible);
     input.focus({preventScroll:true});
+  };
+
+  // Diagnostic en lecture seule : ne transmet ni identifiant, ni mot de passe.
+  $('diagnoseConnectionBtn').onclick=async()=>{
+    const button=$('diagnoseConnectionBtn');
+    const output=$('diagnoseConnectionResult');
+    button.disabled=true;
+    button.textContent='Test en cours…';
+    output.classList.remove('hidden');
+    output.textContent='Vérification des connexions…';
+    const check=async(url,headers)=>{
+      try {
+        const response=await fetch(url,{method:'GET',headers,cache:'no-store',signal:AbortSignal.timeout(10000)});
+        return response.status;
+      }catch{return 0;}
+    };
+    try {
+      const base=cfg.supabaseUrl.endsWith('/')?cfg.supabaseUrl.slice(0,-1):cfg.supabaseUrl;
+      const [authStatus,apiStatus]=await Promise.all([
+        check(base+'/auth/v1/health',{}),
+        check(base+'/rest/v1/units?select=id&limit=1',{apikey:cfg.supabaseAnonKey})
+      ]);
+      const format=(code)=>code===0?'INJOIGNABLE':code>=500?'erreur HTTP '+code:'accessible (HTTP '+code+')';
+      output.textContent='Identification Supabase : '+format(authStatus)+' · API Pointage : '+format(apiStatus)+'. '+(authStatus===0||apiStatus===0?'Un accès réseau est bloqué ou indisponible (proxy, pare-feu ou navigateur).':'Les serveurs répondent. Un code HTTP 401 ou 403 peut être normal sans connexion.');
+    }catch(error){
+      output.textContent='Test réseau impossible : '+String(error?.message||error);
+    }finally{
+      button.disabled=false;
+      button.textContent='Tester la connexion';
+    }
   };
 
   $('loginBtn').onclick=async()=>{
