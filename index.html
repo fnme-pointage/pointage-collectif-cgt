@@ -1422,14 +1422,25 @@ details.foldable-report[open] > summary{margin-bottom:14px;padding-bottom:14px;b
     show('userDivision',!profile.is_admin && !!divisionName);
     show('userUnit',!profile.is_admin && !!unit);
   }
+  async function loadSignupReference(query){
+    let result;
+    for(let attempt=0;attempt<3;attempt++){
+      try{result=await query();}catch(error){result={data:null,error};}
+      const message=String(result?.error?.message||'');
+      const transient=/failed to fetch|network|timeout|timed out|load failed|connection|502|503|504/i.test(message);
+      if(!result?.error || !transient || attempt===2)return result;
+      await new Promise(resolve=>setTimeout(resolve,450*Math.pow(2,attempt)));
+    }
+    return result;
+  }
   async function loadUnits(){
-    const {data,error}=await sb.from('units').select('id,name,active,division_id').eq('active',true).order('name');
+    const {data,error}=await loadSignupReference(()=>sb.from('units').select('id,name,active,division_id').eq('active',true).order('name'));
     if(error){$('authMsg').innerHTML=msg('Impossible de charger les unités : '+error.message,'warn');return false;}
     const signupUnits=(data||[]).filter(u=>u.name!=='ADMIN');
     // Les options d'inscription ne doivent jamais remplacer les unites deja
     // chargees pour un compte connecte (chargements concurrents).
     if(!session && !profile){units=signupUnits;renderUserIdentity();}
-    const {data:signupDivisions,error:divisionError}=await sb.from('pointage_divisions').select('id,name').eq('active',true).order('name');
+    const {data:signupDivisions,error:divisionError}=await loadSignupReference(()=>sb.from('pointage_divisions').select('id,name').eq('active',true).order('name'));
     if(divisionError){$('authMsg').innerHTML=msg('Impossible de charger les divisions : '+divisionError.message,'warn');return false;}
     const divisionNames=new Map((signupDivisions||[]).map(d=>[d.id,d.name]));
     identityDivisionNames=new Map((signupDivisions||[]).map(d=>[String(d.id),d.name]));
